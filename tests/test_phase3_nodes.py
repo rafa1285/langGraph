@@ -1,5 +1,6 @@
 """Unit tests for Phase 3: LLM gateway, payload construction, and FactoryNodes."""
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -257,3 +258,59 @@ async def test_gemini_llm_gateway_retry_on_429() -> None:
             assert "OK" in result
             assert mock_chat.ainvoke.call_count == 3
             assert mock_sleep.call_count >= 2
+
+
+@pytest.mark.asyncio
+async def test_gemini_llm_gateway_retry_on_503_unavailable() -> None:
+    """Test that GeminiLLMGateway retries upon capturing 503 UNAVAILABLE server errors."""
+    gateway = GeminiLLMGateway(api_key="mock-key")
+
+    mock_chat = AsyncMock()
+    mock_chat.ainvoke.side_effect = [
+        Exception("503 UNAVAILABLE: The model is overloaded"),
+        Exception("GoogleAPIError: Server error 500"),
+        AsyncMock(content="--- \n origen: 'agente_03_laravel' \n --- \n RECOVERED"),
+    ]
+
+    with patch("app.services.llm_gateway.ChatGoogleGenerativeAI", return_value=mock_chat):
+        with patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            result = await gateway.invoke_agent(
+                agent_id=AgentID.AGENTE_03_LARAVEL,
+                system_prompt="sys prompt",
+                user_payload="payload",
+            )
+            assert "RECOVERED" in result
+            assert mock_chat.ainvoke.call_count == 3
+            # Checked backoff delays 10s and 20s
+            mock_sleep.assert_any_call(10.0)
+            mock_sleep.assert_any_call(20.0)
+
+
+@pytest.mark.asyncio
+async def test_gemini_llm_gateway_semaphore_serializes_parallel_calls() -> None:
+    """Test that the instance semaphore serializes concurrent calls to invoke_agent."""
+    gateway = GeminiLLMGateway(api_key="mock-key")
+
+    concurrent_runs = 0
+    max_concurrent = 0
+
+    async def fake_ainvoke(_messages: list[object]) -> AsyncMock:
+        nonlocal concurrent_runs, max_concurrent
+        concurrent_runs += 1
+        max_concurrent = max(max_concurrent, concurrent_runs)
+        await asyncio.sleep(0.01)
+        concurrent_runs -= 1
+        return AsyncMock(content="--- \n origen: 'agente_04_fastapi' \n --- \n PARALLEL_OK")
+
+    mock_chat = AsyncMock()
+    mock_chat.ainvoke.side_effect = fake_ainvoke
+
+    with patch("app.services.llm_gateway.ChatGoogleGenerativeAI", return_value=mock_chat):
+        task1 = gateway.invoke_agent(AgentID.AGENTE_03_LARAVEL, "sys", "payload")
+        task2 = gateway.invoke_agent(AgentID.AGENTE_04_FASTAPI, "sys", "payload")
+        res1, res2 = await asyncio.gather(task1, task2)
+
+        assert "PARALLEL_OK" in res1
+        assert "PARALLEL_OK" in res2
+        # Semaphore ensures only 1 task at a time is inside invoke_agent
+        assert max_concurrent == 1

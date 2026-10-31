@@ -84,17 +84,55 @@ async def status_command(project_id: str) -> None:
         await orchestrator.close()
 
 
-async def resume_command(project_id: str) -> None:
-    """Resume execution of an interrupted project from its last checkpoint."""
-    print(f"\n[CLI] Reanudando proyecto: {project_id}...")
-    orchestrator = OrchestratorService(db_path=settings.CHECKPOINT_DB_PATH)
+async def resume_command(project_id: str, mock: bool = False) -> None:
+    """Resume execution of an interrupted project from its last checkpoint, streaming steps."""
+    print(f"\n[CLI] Reanudando proyecto: {project_id}...\n")
+
+    # Ensure directories exist
+    Path(settings.PROMPTS_DIR).mkdir(parents=True, exist_ok=True)
+    Path(settings.WORKSPACES_DIR).mkdir(parents=True, exist_ok=True)
+
+    prompt_loader = PromptLoader(prompts_dir=settings.PROMPTS_DIR)
+    prompt_loader.ensure_prompt_files_exist()
+    workspace_writer = WorkspaceWriter(base_dir=settings.WORKSPACES_DIR)
+
+    use_mock = mock or settings.USE_MOCK_LLM
+    gateway = MockLLMGateway() if use_mock else GeminiLLMGateway()
+
+    orchestrator = OrchestratorService(
+        db_path=settings.CHECKPOINT_DB_PATH,
+        llm_gateway=gateway,
+        prompt_loader=prompt_loader,
+        workspace_writer=workspace_writer,
+    )
     await orchestrator.initialize()
 
     try:
-        final_state = await orchestrator.resume_project(project_id)
+        steps_executed = 0
+        async for chunk in orchestrator.stream_resume_project(project_id):
+            for _node_name, output in chunk.items():
+                if isinstance(output, dict):
+                    records = output.get("execution_history", [])
+                    if isinstance(records, list) and records:
+                        rec = records[-1]
+                        if isinstance(rec, StepExecutionRecord):
+                            steps_executed += 1
+                            print(
+                                f"[Paso {rec.step_number:02d}] "
+                                f"{rec.agent_id.value} -> "
+                                f"{rec.status.value} -> "
+                                f"Archivo guardado en {rec.artifact_path}"
+                            )
+
+        final_state = await orchestrator.get_project_state(project_id)
+        if final_state is None:
+            print(f"[CLI] Error: Proyecto '{project_id}' no encontrado.")
+            return
+
         history = final_state.get("execution_history", [])
         ultimo = history[-1].agent_id.value if history else "Ninguno"
-        print(f"[CLI] Proyecto completado tras reanudación. Último nodo: {ultimo}\n")
+        print(f"\n[CLI] Proyecto {project_id} finalizado tras reanudación. Último nodo: {ultimo}")
+        print(f"[CLI] Pasos completados en esta reanudación: {steps_executed}\n")
     finally:
         await orchestrator.close()
 
@@ -128,6 +166,11 @@ def main() -> None:
     # resume command
     resume_parser = subparsers.add_parser("resume", help="Resume an interrupted project")
     resume_parser.add_argument("--project-id", required=True, type=str, help="Project ID")
+    resume_parser.add_argument(
+        "--mock",
+        action="store_true",
+        help="Use MockLLMGateway for fast offline simulation",
+    )
 
     args = parser.parse_args()
 
@@ -137,7 +180,7 @@ def main() -> None:
         case "status":
             asyncio.run(status_command(args.project_id))
         case "resume":
-            asyncio.run(resume_command(args.project_id))
+            asyncio.run(resume_command(args.project_id, args.mock))
         case _:
             parser.print_help()
 

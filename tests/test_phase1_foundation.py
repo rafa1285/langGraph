@@ -62,11 +62,12 @@ def test_agent_temperatures() -> None:
 
 def test_agent_model_selection_and_override() -> None:
     """Verify default model fallback and override mechanisms."""
-    cfg_default = Settings(GEMINI_API_KEY="test-key")
+    cfg_default = Settings(GEMINI_API_KEY="test-key", DEFAULT_LLM_MODEL="gemini-2.5-flash")
     assert cfg_default.get_agent_model(AgentID.AGENTE_01_PM) == "gemini-2.5-flash"
 
     cfg_overridden = Settings(
         GEMINI_API_KEY="test-key",
+        DEFAULT_LLM_MODEL="gemini-2.5-flash",
         AGENT_MODEL_OVERRIDES={"agente_01_pm": "gemini-1.5-pro"},
     )
     assert cfg_overridden.get_agent_model(AgentID.AGENTE_01_PM) == "gemini-1.5-pro"

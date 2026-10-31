@@ -150,3 +150,19 @@ class OrchestratorService:
         config: RunnableConfig = {"configurable": {"thread_id": project_id}}
         result = await self.graph.ainvoke(None, config=config)
         return cast(SoftwareFactoryState, result)
+
+    async def stream_resume_project(
+        self,
+        project_id: str,
+    ) -> AsyncIterator[dict[str, Any]]:
+        """Stream graph node transitions in real-time when resuming an interrupted project."""
+        if self.graph is None:
+            await self.initialize()
+
+        config: RunnableConfig = {"configurable": {"thread_id": project_id}}
+        async for chunk in self.graph.astream(
+            None,
+            config=config,
+            stream_mode="updates",
+        ):
+            yield chunk

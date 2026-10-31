@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
@@ -10,6 +11,7 @@ from app.core.config import settings
 from app.main import app, lifespan
 from app.schemas.routing import DeliverableStatus
 from app.services.orchestrator_service import OrchestratorService
+from cli import resume_command, run_command
 
 
 @pytest.fixture
@@ -124,3 +126,25 @@ async def test_resume_project_endpoint(api_client: AsyncClient) -> None:
     resume_res = await api_client.post(f"/api/v1/projects/{project_id}/resume")
     assert resume_res.status_code == 202
     assert resume_res.json()["status"] == "RESUMED"
+
+
+@pytest.mark.asyncio
+async def test_cli_resume_command_streaming(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Test CLI resume command execution and step-by-step console reporting."""
+    pid = "proj_cli_stream_test"
+    db_file = str(tmp_path / "cli_checkpoints.db")
+    ws_dir = str(tmp_path / "workspaces")
+
+    with patch("app.core.config.settings.CHECKPOINT_DB_PATH", db_file):
+        with patch("app.core.config.settings.WORKSPACES_DIR", ws_dir):
+            await run_command("Idea para prueba CLI resume", mock=True, project_id=pid)
+            captured_run = capsys.readouterr()
+            assert f"Proyecto {pid} finalizado con éxito" in captured_run.out
+
+            await resume_command(pid, mock=True)
+            captured_resume = capsys.readouterr()
+            assert f"Reanudando proyecto: {pid}" in captured_resume.out
+            assert "finalizado tras reanudación" in captured_resume.out

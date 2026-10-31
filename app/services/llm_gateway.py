@@ -29,6 +29,7 @@ class GeminiLLMGateway:
     def __init__(self, api_key: str | None = None) -> None:
         """Initialize the Gemini client with an optional custom API key."""
         self.api_key = api_key or settings.GEMINI_API_KEY
+        self._semaphore = asyncio.Semaphore(1)
 
     async def invoke_agent(
         self,
@@ -36,61 +37,77 @@ class GeminiLLMGateway:
         system_prompt: str,
         user_payload: str,
     ) -> str:
-        """Invoke Gemini with rate limiting, per-agent config, and exponential retry on quota."""
-        if settings.RATE_LIMIT_DELAY_SECONDS > 0:
-            await asyncio.sleep(settings.RATE_LIMIT_DELAY_SECONDS)
+        """Invoke Gemini with rate limiting, semaphore serialization, and transient error retry."""
+        async with self._semaphore:
+            if settings.RATE_LIMIT_DELAY_SECONDS > 0:
+                await asyncio.sleep(settings.RATE_LIMIT_DELAY_SECONDS)
 
-        model_name = settings.get_agent_model(agent_id)
-        temperature = settings.get_agent_temperature(agent_id)
+            model_name = settings.get_agent_model(agent_id)
+            temperature = settings.get_agent_temperature(agent_id)
 
-        llm = ChatGoogleGenerativeAI(
-            model=model_name,
-            google_api_key=self.api_key,
-            temperature=temperature,
-        )
+            llm = ChatGoogleGenerativeAI(
+                model=model_name,
+                google_api_key=self.api_key,
+                temperature=temperature,
+            )
 
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_payload),
-        ]
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_payload),
+            ]
 
-        max_retries = 3
-        last_error: Exception | None = None
+            max_retries = 5
+            backoff_delays = [10.0, 20.0, 40.0, 60.0]
+            last_error: Exception | None = None
 
-        for attempt in range(max_retries):
-            try:
-                response = await llm.ainvoke(messages)
-                if isinstance(response.content, str):
-                    return response.content
-                if isinstance(response.content, list):
-                    parts: list[str] = []
-                    for part in response.content:
-                        if isinstance(part, str):
-                            parts.append(part)
-                        elif isinstance(part, dict) and "text" in part:
-                            parts.append(str(part["text"]))
-                        else:
-                            parts.append(str(part))
-                    return "".join(parts)
-                return str(response.content)
-            except Exception as e:
-                err_str = str(e).lower()
-                is_quota = (
-                    "429" in err_str
-                    or "resourceexhausted" in err_str
-                    or "quota" in err_str
-                    or "rate limit" in err_str
-                )
-                if is_quota and attempt < max_retries - 1:
-                    backoff = 2 ** (attempt + 1)
-                    await asyncio.sleep(backoff)
-                    last_error = e
-                else:
-                    raise e
+            for attempt in range(max_retries):
+                try:
+                    response = await llm.ainvoke(messages)
+                    if isinstance(response.content, str):
+                        return response.content
+                    if isinstance(response.content, list):
+                        parts: list[str] = []
+                        for part in response.content:
+                            if isinstance(part, str):
+                                parts.append(part)
+                            elif isinstance(part, dict) and "text" in part:
+                                parts.append(str(part["text"]))
+                            else:
+                                parts.append(str(part))
+                        return "".join(parts)
+                    return str(response.content)
+                except Exception as e:
+                    err_str = str(e).lower()
+                    exc_name = type(e).__name__.lower()
+                    is_transient = (
+                        "429" in err_str
+                        or "resourceexhausted" in err_str
+                        or "quota" in err_str
+                        or "rate limit" in err_str
+                        or "503" in err_str
+                        or "500" in err_str
+                        or "unavailable" in err_str
+                        or "servererror" in err_str
+                        or "googleapierror" in err_str
+                        or "service unavailable" in err_str
+                        or "server error" in err_str
+                        or "servererror" in exc_name
+                        or "googleapierror" in exc_name
+                    )
+                    if is_transient and attempt < max_retries - 1:
+                        backoff = backoff_delays[min(attempt, len(backoff_delays) - 1)]
+                        print(
+                            f"\n[Gemini Gateway] Aviso: Error transitorio en {agent_id.value}: "
+                            f"{e}. Reintentando ({attempt + 2}/{max_retries}) en {backoff:.0f}s..."
+                        )
+                        await asyncio.sleep(backoff)
+                        last_error = e
+                    else:
+                        raise e
 
-        if last_error:
-            raise last_error
-        raise RuntimeError("Unexpected failure during Gemini invocation.")
+            if last_error:
+                raise last_error
+            raise RuntimeError("Unexpected failure during Gemini invocation.")
 
 
 class MockLLMGateway:
