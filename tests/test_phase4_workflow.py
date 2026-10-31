@@ -173,3 +173,32 @@ async def test_workflow_circuit_breaker_halts(tmp_path: Path) -> None:
     assert AgentID.AGENTE_10_CISO not in executed_agents
     assert AgentID.AGENTE_08_DOCS not in executed_agents
     assert AgentID.AGENTE_09_GROWTH not in executed_agents
+
+
+def test_route_after_ciso_circuit_breaker_branching() -> None:
+    """Verify route_after_ciso cuts to END for short history, but advances to Docs if >= 15."""
+    from app.graph.router import route_after_ciso
+    from app.schemas.routing import StepExecutionRecord
+
+    dummy_record = StepExecutionRecord(
+        step_number=1,
+        agent_id=AgentID.AGENTE_01_PM,
+        status=DeliverableStatus.PRE_SDD_LISTO,
+        target_next="agente_02_architect",
+        artifact_path="dummy.md",
+        timestamp_iso="2026-10-31T00:00:00Z",
+    )
+
+    # Case A: CISO blocked, retries >= 3, short history (< 15) -> END
+    state_short = create_initial_state("short_proj", "Idea")
+    state_short["status_ciso"] = DeliverableStatus.BLOQUEADO_POR_CIBERSEGURIDAD
+    state_short["retry_counts"] = {"ciso": 3}
+    state_short["execution_history"] = [dummy_record] * 12
+    assert route_after_ciso(state_short) == "__end__"
+
+    # Case B: CISO blocked, retries >= 3, extensive history (>= 15) -> agente_08_docs
+    state_long = create_initial_state("long_proj", "Idea")
+    state_long["status_ciso"] = DeliverableStatus.BLOQUEADO_POR_CIBERSEGURIDAD
+    state_long["retry_counts"] = {"ciso": 3}
+    state_long["execution_history"] = [dummy_record] * 16
+    assert route_after_ciso(state_long) == AgentID.AGENTE_08_DOCS.value

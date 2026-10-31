@@ -148,3 +148,43 @@ async def test_cli_resume_command_streaming(
             captured_resume = capsys.readouterr()
             assert f"Reanudando proyecto: {pid}" in captured_resume.out
             assert "finalizado tras reanudación" in captured_resume.out
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_auto_reopen_on_resume(tmp_path: Path) -> None:
+    """Test automatic reopening of circuit-breaker halted CISO projects upon resume."""
+    from app.schemas.routing import AgentID
+    from app.services.llm_gateway import MockLLMGateway
+    from app.services.prompt_loader import PromptLoader
+    from app.services.workspace_writer import WorkspaceWriter
+
+    gateway = MockLLMGateway(ciso_failures_sequence=[AgentID.AGENTE_07_DEVOPS] * 5)
+    loader = PromptLoader(prompts_dir=tmp_path / "prompts")
+    loader.ensure_prompt_files_exist()
+    writer = WorkspaceWriter(base_dir=tmp_path / "workspaces")
+
+    db_path = str(tmp_path / "reopen_checkpoints.db")
+    orchestrator = OrchestratorService(
+        db_path=db_path,
+        llm_gateway=gateway,
+        prompt_loader=loader,
+        workspace_writer=writer,
+    )
+    await orchestrator.initialize()
+
+    pid = "proj_ciso_halted_reopen"
+    try:
+        # 1. Initial run halts at CISO circuit breaker
+        state_halted = await orchestrator.run_project_to_completion(pid, "App vulnerable")
+        assert state_halted["retry_counts"]["ciso"] == 3
+        assert state_halted["status_ciso"] == DeliverableStatus.BLOQUEADO_POR_CIBERSEGURIDAD
+
+        # 2. Resuming automatically reopens as BLINDADO and finishes pipeline
+        state_resumed = await orchestrator.resume_project(pid)
+        history = state_resumed["execution_history"]
+        assert len(history) > len(state_halted["execution_history"])
+        assert history[-1].agent_id == AgentID.AGENTE_09_GROWTH
+        assert history[-1].status == DeliverableStatus.CICLO_DE_SOFTWARE_COMPLETADO_100
+        assert state_resumed["status_ciso"] == DeliverableStatus.BLINDADO_APTO_PRODUCCION
+    finally:
+        await orchestrator.close()

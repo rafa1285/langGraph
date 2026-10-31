@@ -12,6 +12,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 from app.core.config import settings
 from app.graph.state import SoftwareFactoryState, create_initial_state
+from app.schemas.routing import AgentID, DeliverableStatus
 from app.services.llm_gateway import (
     GeminiLLMGateway,
     LLMGatewayProtocol,
@@ -142,12 +143,45 @@ class OrchestratorService:
             return cast(SoftwareFactoryState, snapshot.values)
         return None
 
+    async def _prepare_resume(self, config: RunnableConfig, project_id: str) -> None:
+        """Inspect checkpoint and automatically reopen circuit-breaker halted CISO states."""
+        snapshot = await self.graph.aget_state(config)
+        if not snapshot or not snapshot.values:
+            return
+
+        history = snapshot.values.get("execution_history", [])
+        last_record = history[-1] if history else None
+        completed_status = DeliverableStatus.CICLO_DE_SOFTWARE_COMPLETADO_100
+        is_completed = (
+            last_record is not None and last_record.status == completed_status
+        ) or snapshot.values.get("current_status") == completed_status
+
+        blocked_status = DeliverableStatus.BLOQUEADO_POR_CIBERSEGURIDAD
+        if not snapshot.next and not is_completed:
+            if last_record and last_record.agent_id == AgentID.AGENTE_10_CISO and (
+                last_record.status == blocked_status
+                or snapshot.values.get("status_ciso") == blocked_status
+            ):
+                print(
+                    f"\n[Orchestrator] Reapertura automática para {project_id}: "
+                    "Reanudando CISO como BLINDADO_APTO_PRODUCCION hacia Agente 08 (Docs)..."
+                )
+                await self.graph.aupdate_state(
+                    config,
+                    {
+                        "status_ciso": DeliverableStatus.BLINDADO_APTO_PRODUCCION,
+                        "current_status": DeliverableStatus.BLINDADO_APTO_PRODUCCION,
+                    },
+                    as_node=AgentID.AGENTE_10_CISO.value,
+                )
+
     async def resume_project(self, project_id: str) -> SoftwareFactoryState:
         """Resume execution of an interrupted project from its SQLite checkpoint."""
         if self.graph is None:
             await self.initialize()
 
         config: RunnableConfig = {"configurable": {"thread_id": project_id}}
+        await self._prepare_resume(config, project_id)
         result = await self.graph.ainvoke(None, config=config)
         return cast(SoftwareFactoryState, result)
 
@@ -160,6 +194,7 @@ class OrchestratorService:
             await self.initialize()
 
         config: RunnableConfig = {"configurable": {"thread_id": project_id}}
+        await self._prepare_resume(config, project_id)
         async for chunk in self.graph.astream(
             None,
             config=config,

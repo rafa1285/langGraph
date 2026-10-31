@@ -1,6 +1,6 @@
 """State definition and reducer functions for the LangGraph software factory."""
 
-from typing import Annotated, TypedDict
+from typing import Annotated, NotRequired, TypedDict
 
 from app.schemas.routing import AgentID, DeliverableStatus, StepExecutionRecord
 
@@ -44,6 +44,7 @@ class SoftwareFactoryState(TypedDict):
     status_qa_python: DeliverableStatus
     status_ciso: DeliverableStatus
     ciso_culprit: AgentID | None
+    current_status: NotRequired[DeliverableStatus]
     halt_reason: str | None
     retry_counts: Annotated[dict[str, int], merge_retry_counts]
     execution_history: Annotated[list[StepExecutionRecord], append_execution_records]
@@ -75,6 +76,7 @@ def create_initial_state(
         "status_qa_python": DeliverableStatus.PENDIENTE,
         "status_ciso": DeliverableStatus.PENDIENTE,
         "ciso_culprit": None,
+        "current_status": DeliverableStatus.PENDIENTE,
         "halt_reason": None,
         "retry_counts": {
             "qa_php": 0,
