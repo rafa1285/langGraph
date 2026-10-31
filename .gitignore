@@ -38,3 +38,7 @@ venv.bak/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Workspaces artifacts and SQLite checkpoints
+workspaces/*
+!workspaces/.gitkeep

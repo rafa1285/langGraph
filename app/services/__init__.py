@@ -1,10 +1,11 @@
-"""Service layer implementations for prompts, parsing, workspaces, and LLMs."""
+"""Service layer implementations for prompts, parsing, workspaces, LLMs, and orchestration."""
 
 from app.services.llm_gateway import (
     GeminiLLMGateway,
     LLMGatewayProtocol,
     MockLLMGateway,
 )
+from app.services.orchestrator_service import OrchestratorService
 from app.services.output_parser import AgentOutputParser
 from app.services.prompt_loader import AGENT_PROMPT_MAP, PromptLoader
 from app.services.workspace_writer import WorkspaceWriter
@@ -15,6 +16,7 @@ __all__ = [
     "GeminiLLMGateway",
     "LLMGatewayProtocol",
     "MockLLMGateway",
+    "OrchestratorService",
     "PromptLoader",
     "WorkspaceWriter",
 ]
