@@ -8,6 +8,8 @@ from app.core.config import settings
 from app.graph.state import SoftwareFactoryState
 from app.schemas.office import AgentConversationRecord
 from app.schemas.routing import AgentID, DeliverableStatus, StepExecutionRecord
+from app.services.event_bus import ConnectionManager
+from app.services.event_bus import event_bus as _default_event_bus
 from app.services.llm_gateway import LLMGatewayProtocol
 from app.services.mail_service import MailService
 from app.services.notion_mcp_service import (
@@ -144,6 +146,7 @@ class FactoryNodes:
         office_store: OfficeStore | None = None,
         mail_service: MailService | None = None,
         knowledge_sync: KnowledgeSyncPort | None = None,
+        event_bus: ConnectionManager | None = None,
     ) -> None:
         """Initialize FactoryNodes with gateway, prompt loader, writer, and office mail store."""
         self.llm_gateway = llm_gateway
@@ -151,6 +154,7 @@ class FactoryNodes:
         self.workspace_writer = workspace_writer
         self.office_store = office_store or OfficeStore()
         self.mail_service = mail_service or MailService(self.office_store)
+        self.event_bus = event_bus if event_bus is not None else _default_event_bus
         if knowledge_sync is not None:
             self.knowledge_sync: KnowledgeSyncPort | None = knowledge_sync
         elif settings.NOTION_MCP_ENABLED:
@@ -168,13 +172,35 @@ class FactoryNodes:
         system_prompt = await self.prompt_loader.load_prompt(agent_id)
         payload = _build_user_payload(agent_id, state)
 
+        # Broadcast agent started
+        await self.event_bus.broadcast(
+            project_id=state["project_id"],
+            event_type="AGENT_STARTED",
+            data={
+                "agent_id": agent_id.value,
+                "step_number": step_number,
+            },
+        )
+
         # 1. Fetch unread emails and inject inbox prefix if available
-        inbox_prefix, _ = await self.mail_service.fetch_unread_inbox(
+        inbox_prefix, unread_emails = await self.mail_service.fetch_unread_inbox(
             state["project_id"],
             agent_id,
         )
         if inbox_prefix:
             payload = f"{inbox_prefix}\n\n{payload}"
+
+        for unread_email in unread_emails:
+            await self.event_bus.broadcast(
+                project_id=state["project_id"],
+                event_type="EMAIL_READ",
+                data={
+                    "agent_id": agent_id.value,
+                    "email_id": str(unread_email.id),
+                    "sender": unread_email.sender,
+                    "subject": unread_email.subject,
+                },
+            )
 
         # 2. Invoke LLM and record duration
         start_time = time.perf_counter()
@@ -227,6 +253,25 @@ class FactoryNodes:
             raw_output=raw_output,
         )
 
+        for sent_em in sent_emails:
+            await self.event_bus.broadcast(
+                project_id=state["project_id"],
+                event_type="EMAIL_SENT",
+                data=sent_em.model_dump(mode="json"),
+            )
+
+        if header.veredicto in ("RECHAZADO", "BLOQUEADO"):
+            await self.event_bus.broadcast(
+                project_id=state["project_id"],
+                event_type="GATE_REJECTED",
+                data={
+                    "agent_id": agent_id.value,
+                    "verdict": header.veredicto,
+                    "status": header.estado_entregable.value,
+                    "culprit": culprit_str,
+                },
+            )
+
         # 6. Synchronize deliverable, status, and emails with Notion MCP if enabled
         if self.knowledge_sync is not None:
             try:
@@ -265,6 +310,17 @@ class FactoryNodes:
             target_next=header.destino_siguiente,
             artifact_path=artifact_path,
             timestamp_iso=datetime.now(UTC).isoformat(),
+        )
+
+        await self.event_bus.broadcast(
+            project_id=state["project_id"],
+            event_type="STEP_COMPLETED",
+            data={
+                "agent_id": agent_id.value,
+                "step_number": step_number,
+                "status": header.estado_entregable.value,
+                "verdict": header.veredicto,
+            },
         )
 
         return raw_output, header.estado_entregable, header.destino_siguiente, record

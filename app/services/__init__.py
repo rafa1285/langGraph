@@ -1,6 +1,7 @@
 """Service layer implementations for prompts, parsing, workspaces, LLMs, and orchestration."""
 
 from app.services.code_materializer import CodeMaterializerService
+from app.services.event_bus import ConnectionManager, event_bus
 from app.services.llm_gateway import (
     GeminiLLMGateway,
     LLMGatewayProtocol,
@@ -24,6 +25,7 @@ __all__ = [
     "AGENT_PROMPT_MAP",
     "AgentOutputParser",
     "CodeMaterializerService",
+    "ConnectionManager",
     "GeminiLLMGateway",
     "KnowledgeSyncPort",
     "LLMGatewayProtocol",
@@ -36,5 +38,6 @@ __all__ = [
     "OrchestratorService",
     "PromptLoader",
     "WorkspaceWriter",
+    "event_bus",
     "get_knowledge_sync_adapter",
 ]

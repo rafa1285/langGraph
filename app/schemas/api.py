@@ -1,7 +1,10 @@
 """API request and response schemas using Pydantic v2."""
 
+from typing import Any
+
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.office import EmailPriority
 from app.schemas.routing import DeliverableStatus, StepExecutionRecord
 
 
@@ -56,3 +59,54 @@ class ProjectDeliverablesResponse(BaseModel):
     dictamen_ciso: str
     documentacion_rag: str
     estrategia_growth: str
+
+
+class ProjectSummaryResponse(BaseModel):
+    """Aggregated metrics and operational state of a factory project."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    current_status: str
+    steps_completed: int
+    total_tokens_in: int
+    total_tokens_out: int
+    total_duration_ms: int
+    updated_at: str
+
+
+class ProjectsListResponse(BaseModel):
+    """Paginated or listed projects registry response."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    total: int
+    projects: list[ProjectSummaryResponse]
+
+
+class SendEmailRequest(BaseModel):
+    """Payload for CEO direct instruction or agent message dispatch."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    recipient: str = Field(
+        min_length=3,
+        description="Destinatario del correo (ej. agente_01_pm o agente_04_fastapi)",
+    )
+    subject: str = Field(min_length=3, description="Asunto del correo")
+    body: str = Field(min_length=5, description="Instrucciones directas o contenido del mensaje")
+    priority: EmailPriority = "HIGH"
+
+
+class MaterializeResponse(BaseModel):
+    """Response returned upon completing source code materialization."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    project_id: str
+    build_path: str
+    total_files: int
+    manifest: dict[str, Any]
+    compose_file: str | None = None
+    compose_valid: bool = False
+    scripts: list[str] = Field(default_factory=list)

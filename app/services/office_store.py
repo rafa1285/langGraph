@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 from uuid import UUID
 
 import aiosqlite
@@ -186,9 +186,12 @@ class OfficeStore:
         self,
         project_id: str,
         agent_id: AgentID | None = None,
+        recipient: str | None = None,
+        sender: str | None = None,
+        priority: EmailPriority | None = None,
         unread_only: bool = False,
     ) -> list[AgentEmailRecord]:
-        """Query emails for a project with optional agent and unread filters."""
+        """Query emails for a project with optional filters for recipient, sender, and priority."""
         await self.init_db()
         query = (
             "SELECT id, project_id, step_number, sender, recipient, cc, "
@@ -201,6 +204,18 @@ class OfficeStore:
             agent_addr = f"%{agent_id.value}%"
             query += " AND (recipient LIKE ? OR sender LIKE ?)"
             params.extend([agent_addr, agent_addr])
+
+        if recipient is not None:
+            query += " AND recipient LIKE ?"
+            params.append(f"%{recipient}%")
+
+        if sender is not None:
+            query += " AND sender LIKE ?"
+            params.append(f"%{sender}%")
+
+        if priority is not None:
+            query += " AND priority = ?"
+            params.append(priority)
 
         if unread_only:
             query += " AND is_read = 0"
@@ -270,3 +285,49 @@ class OfficeStore:
         async with aiosqlite.connect(str(self.db_path)) as db:
             await db.execute(query, str_ids)
             await db.commit()
+
+    async def get_all_projects_summary(self) -> dict[str, dict[str, Any]]:
+        """Retrieve aggregated telemetry and latest status per project from SQLite."""
+        await self.init_db()
+        telemetry_query = (
+            "SELECT project_id, COUNT(id), COALESCE(SUM(duration_ms), 0), "
+            "COALESCE(SUM(estimated_tokens_in), 0), COALESCE(SUM(estimated_tokens_out), 0), "
+            "MAX(created_at) FROM agent_conversations GROUP BY project_id"
+        )
+        status_query = (
+            "SELECT project_id, status FROM agent_conversations "
+            "ORDER BY step_number ASC, created_at ASC"
+        )
+        email_projects_query = "SELECT DISTINCT project_id FROM agent_emails"
+
+        summaries: dict[str, dict[str, Any]] = {}
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            async with db.execute(telemetry_query) as cursor:
+                for row in await cursor.fetchall():
+                    summaries[row[0]] = {
+                        "project_id": row[0],
+                        "steps_completed": row[1],
+                        "total_duration_ms": row[2],
+                        "total_tokens_in": row[3],
+                        "total_tokens_out": row[4],
+                        "updated_at": row[5] or "",
+                        "current_status": "COMPLETED",
+                    }
+            async with db.execute(status_query) as cursor:
+                for row in await cursor.fetchall():
+                    if row[0] in summaries:
+                        summaries[row[0]]["current_status"] = row[1]
+            async with db.execute(email_projects_query) as cursor:
+                for row in await cursor.fetchall():
+                    pid = row[0]
+                    if pid not in summaries:
+                        summaries[pid] = {
+                            "project_id": pid,
+                            "steps_completed": 0,
+                            "total_duration_ms": 0,
+                            "total_tokens_in": 0,
+                            "total_tokens_out": 0,
+                            "updated_at": "",
+                            "current_status": "PENDIENTE",
+                        }
+        return summaries

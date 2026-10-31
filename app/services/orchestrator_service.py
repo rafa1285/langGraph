@@ -14,6 +14,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from app.core.config import settings
 from app.graph.state import SoftwareFactoryState, create_initial_state
 from app.schemas.routing import AgentID, DeliverableStatus
+from app.services.event_bus import ConnectionManager
 from app.services.llm_gateway import (
     GeminiLLMGateway,
     LLMGatewayProtocol,
@@ -47,6 +48,7 @@ class OrchestratorService:
         mail_service: MailService | None = None,
         checkpointer: BaseCheckpointSaver[Any] | None = None,
         knowledge_sync: KnowledgeSyncPort | None = None,
+        event_bus: ConnectionManager | None = None,
     ) -> None:
         """Initialize the Orchestrator with storage and service dependencies."""
         from app.graph.nodes import FactoryNodes
@@ -61,6 +63,7 @@ class OrchestratorService:
         self.workspace_writer = workspace_writer or WorkspaceWriter()
         self.office_store = office_store or OfficeStore()
         self.mail_service = mail_service or MailService(self.office_store)
+        self.event_bus = event_bus
 
         if knowledge_sync is not None:
             self.knowledge_sync: KnowledgeSyncPort | None = knowledge_sync
@@ -76,6 +79,7 @@ class OrchestratorService:
             office_store=self.office_store,
             mail_service=self.mail_service,
             knowledge_sync=self.knowledge_sync,
+            event_bus=self.event_bus,
         )
 
         self.checkpointer = checkpointer
