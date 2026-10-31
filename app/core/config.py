@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     RATE_LIMIT_DELAY_SECONDS: float = 4.0
     MAX_RETRIES_PER_GATE: int = 3
     CHECKPOINT_DB_PATH: str = "workspaces/checkpoints.sqlite"
+    OFFICE_DB_PATH: str = "workspaces/office_data.sqlite"
     WORKSPACES_DIR: str = "workspaces"
     PROMPTS_DIR: str = "prompts"
 

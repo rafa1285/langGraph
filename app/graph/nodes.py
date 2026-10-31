@@ -1,10 +1,14 @@
 """Node implementations for the LangGraph software factory."""
 
+import time
 from datetime import UTC, datetime
 
 from app.graph.state import SoftwareFactoryState
+from app.schemas.office import AgentConversationRecord
 from app.schemas.routing import AgentID, DeliverableStatus, StepExecutionRecord
 from app.services.llm_gateway import LLMGatewayProtocol
+from app.services.mail_service import MailService
+from app.services.office_store import OfficeStore
 from app.services.output_parser import AgentOutputParser
 from app.services.prompt_loader import PromptLoader
 from app.services.workspace_writer import WorkspaceWriter
@@ -129,11 +133,15 @@ class FactoryNodes:
         llm_gateway: LLMGatewayProtocol,
         prompt_loader: PromptLoader,
         workspace_writer: WorkspaceWriter,
+        office_store: OfficeStore | None = None,
+        mail_service: MailService | None = None,
     ) -> None:
-        """Initialize FactoryNodes with required gateway, prompt loader, and workspace writer."""
+        """Initialize FactoryNodes with gateway, prompt loader, writer, and office mail store."""
         self.llm_gateway = llm_gateway
         self.prompt_loader = prompt_loader
         self.workspace_writer = workspace_writer
+        self.office_store = office_store or OfficeStore()
+        self.mail_service = mail_service or MailService(self.office_store)
 
     async def _execute_agent_step(
         self,
@@ -145,14 +153,63 @@ class FactoryNodes:
         system_prompt = await self.prompt_loader.load_prompt(agent_id)
         payload = _build_user_payload(agent_id, state)
 
+        # 1. Fetch unread emails and inject inbox prefix if available
+        inbox_prefix, _ = await self.mail_service.fetch_unread_inbox(
+            state["project_id"],
+            agent_id,
+        )
+        if inbox_prefix:
+            payload = f"{inbox_prefix}\n\n{payload}"
+
+        # 2. Invoke LLM and record duration
+        start_time = time.perf_counter()
         raw_output = await self.llm_gateway.invoke_agent(agent_id, system_prompt, payload)
+        duration_ms = int((time.perf_counter() - start_time) * 1000)
+
         header = AgentOutputParser.parse_routing_header(agent_id, raw_output)
 
+        # 3. Save physical file deliverable
         artifact_path = await self.workspace_writer.save_deliverable(
             project_id=state["project_id"],
             step_number=step_number,
             agent_id=agent_id,
             content=raw_output,
+        )
+
+        # 4. Save conversation record & telemetry in OfficeStore
+        tokens_in = max(1, (len(system_prompt) + len(payload)) // 4)
+        tokens_out = max(1, len(raw_output) // 4)
+        culprit_str = (
+            header.culpable_detectado.value
+            if isinstance(header.culpable_detectado, AgentID)
+            else (str(header.culpable_detectado) if header.culpable_detectado else None)
+        )
+        conv_record = AgentConversationRecord(
+            project_id=state["project_id"],
+            step_number=step_number,
+            agent_id=agent_id,
+            system_prompt=system_prompt,
+            user_payload=payload,
+            raw_response=raw_output,
+            status=header.estado_entregable,
+            verdict=header.veredicto,
+            score=header.puntuacion,
+            culprit=culprit_str,
+            duration_ms=duration_ms,
+            estimated_tokens_in=tokens_in,
+            estimated_tokens_out=tokens_out,
+        )
+        await self.office_store.save_conversation(conv_record)
+
+        # 5. Send handoff email(s) to next target(s) or culprit
+        await self.mail_service.send_handoff_email(
+            project_id=state["project_id"],
+            step_number=step_number,
+            sender_id=agent_id,
+            target_next=header.destino_siguiente,
+            header=header,
+            artifact_path=artifact_path,
+            raw_output=raw_output,
         )
 
         record = StepExecutionRecord(

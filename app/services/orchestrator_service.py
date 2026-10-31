@@ -18,6 +18,8 @@ from app.services.llm_gateway import (
     LLMGatewayProtocol,
     MockLLMGateway,
 )
+from app.services.mail_service import MailService
+from app.services.office_store import OfficeStore
 from app.services.prompt_loader import PromptLoader
 from app.services.workspace_writer import WorkspaceWriter
 
@@ -34,6 +36,8 @@ class OrchestratorService:
         llm_gateway: LLMGatewayProtocol | None = None,
         prompt_loader: PromptLoader | None = None,
         workspace_writer: WorkspaceWriter | None = None,
+        office_store: OfficeStore | None = None,
+        mail_service: MailService | None = None,
         checkpointer: BaseCheckpointSaver[Any] | None = None,
     ) -> None:
         """Initialize the Orchestrator with storage and service dependencies."""
@@ -47,11 +51,15 @@ class OrchestratorService:
         )
         self.prompt_loader = prompt_loader or PromptLoader()
         self.workspace_writer = workspace_writer or WorkspaceWriter()
+        self.office_store = office_store or OfficeStore()
+        self.mail_service = mail_service or MailService(self.office_store)
 
         self.nodes: FactoryNodes = FactoryNodes(
             llm_gateway=self.llm_gateway,
             prompt_loader=self.prompt_loader,
             workspace_writer=self.workspace_writer,
+            office_store=self.office_store,
+            mail_service=self.mail_service,
         )
 
         self.checkpointer = checkpointer

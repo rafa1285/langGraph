@@ -7,8 +7,9 @@ import uuid
 from pathlib import Path
 
 from app.core.config import settings
-from app.schemas.routing import StepExecutionRecord
+from app.schemas.routing import AgentID, StepExecutionRecord
 from app.services.llm_gateway import GeminiLLMGateway, MockLLMGateway
+from app.services.office_store import OfficeStore
 from app.services.orchestrator_service import OrchestratorService
 from app.services.prompt_loader import PromptLoader
 from app.services.workspace_writer import WorkspaceWriter
@@ -137,6 +138,133 @@ async def resume_command(project_id: str, mock: bool = False) -> None:
         await orchestrator.close()
 
 
+def _resolve_agent_id(agent_str: str | None) -> AgentID | None:
+    """Resolve user-supplied agent string to an AgentID enum value."""
+    if not agent_str:
+        return None
+    val = agent_str.strip().lower()
+    for agent in AgentID:
+        if agent.value == val or val in agent.value:
+            return agent
+    return None
+
+
+async def inbox_command(project_id: str, agent: str | None = None) -> None:
+    """Display internal email inbox and sent messages for a project."""
+    store = OfficeStore()
+    agent_id = _resolve_agent_id(agent)
+    emails = await store.get_emails(project_id=project_id, agent_id=agent_id)
+
+    if not emails:
+        filter_msg = f" para el agente '{agent}'" if agent else ""
+        print(f"\n[CLI] No se encontraron correos para '{project_id}'{filter_msg}.\n")
+        return
+
+    print(f"\n--- Bandeja de Correo del Proyecto: {project_id} ({len(emails)} mensajes) ---")
+    header = (
+        f"{'ID':<36} | {'De':<28} | {'Para':<28} | {'Prioridad':<8} | "
+        f"{'Leído':<5} | {'Fecha':<16} | Asunto"
+    )
+    sep = "-" * len(header)
+    print(sep)
+    print(header)
+    print(sep)
+
+    for em in emails:
+        read_mark = "SÍ" if em.is_read else "NO"
+        date_str = em.created_at.strftime("%Y-%m-%d %H:%M")
+        subj = em.subject if len(em.subject) <= 35 else em.subject[:32] + "..."
+        print(
+            f"{str(em.id):<36} | {em.sender:<28} | {em.recipient:<28} | "
+            f"{em.priority:<8} | {read_mark:<5} | {date_str:<16} | {subj}"
+        )
+    print(sep + "\n")
+
+
+async def read_email_command(email_id: str) -> None:
+    """Display the full content and attached deliverable of an internal email."""
+    store = OfficeStore()
+    email = await store.get_email_by_id(email_id)
+
+    if email is None:
+        print(f"\n[CLI] Error: Correo con ID '{email_id}' no encontrado.\n")
+        return
+
+    read_status = "Leído" if email.is_read else "No leído (marcado como leído ahora)"
+    if not email.is_read:
+        await store.mark_emails_as_read([email.id])
+
+    date_str = email.created_at.strftime("%Y-%m-%d %H:%M:%S UTC")
+    print("\n" + "=" * 80)
+    print(" 📧 CORREO INTERNO DE LA SOFTWARE FACTORY")
+    print("=" * 80)
+    print(f"ID        : {email.id}")
+    print(f"Proyecto  : {email.project_id} (Paso {email.step_number:02d})")
+    print(f"De        : {email.sender}")
+    print(f"Para      : {email.recipient}")
+    if email.cc:
+        print(f"CC        : {', '.join(email.cc)}")
+    print(f"Prioridad : {email.priority}")
+    print(f"Estado    : {read_status}")
+    print(f"Fecha     : {date_str}")
+    print(f"Asunto    : {email.subject}")
+    print(f"Adjunto   : {email.attached_deliverable_path}")
+    print("-" * 80)
+    print("CUERPO DEL MENSAJE:")
+    print(email.body_summary)
+    print("=" * 80 + "\n")
+
+
+async def conversations_command(project_id: str, agent: str | None = None) -> None:
+    """List conversation turns, execution duration, and estimated tokens by agent."""
+    store = OfficeStore()
+    agent_id = _resolve_agent_id(agent)
+    conversations = await store.get_conversations(project_id=project_id, agent_id=agent_id)
+
+    if not conversations:
+        filter_msg = f" para el agente '{agent}'" if agent else ""
+        print(
+            f"\n[CLI] No se encontraron conversaciones para '{project_id}'{filter_msg}.\n"
+        )
+        return
+
+    print(f"\n--- Historial de Conversaciones y Telemetría: {project_id} ---")
+    header = (
+        f"{'Paso':<6} | {'Agente':<21} | {'Estado':<35} | {'Veredicto':<12} | "
+        f"{'Score':<5} | {'Dur (ms)':<8} | {'Tok In':<8} | {'Tok Out':<8} | Culpable"
+    )
+    sep = "-" * len(header)
+    print(sep)
+    print(header)
+    print(sep)
+
+    total_duration = 0
+    total_tokens_in = 0
+    total_tokens_out = 0
+
+    for conv in conversations:
+        total_duration += conv.duration_ms
+        total_tokens_in += conv.estimated_tokens_in
+        total_tokens_out += conv.estimated_tokens_out
+        score_str = str(conv.score) if conv.score is not None else "-"
+        culprit_str = conv.culprit or "-"
+
+        print(
+            f"[{conv.step_number:02d}]  | {conv.agent_id.value:<21} | "
+            f"{conv.status.value:<35} | {conv.verdict:<12} | "
+            f"{score_str:<5} | {conv.duration_ms:<8} | "
+            f"{conv.estimated_tokens_in:<8} | {conv.estimated_tokens_out:<8} | "
+            f"{culprit_str}"
+        )
+
+    print(sep)
+    print(f"Total Turnos        : {len(conversations)}")
+    print(f"Duración Acumulada  : {total_duration} ms ({total_duration / 1000:.2f} s)")
+    print(f"Tokens Estimados In : {total_tokens_in:,}")
+    print(f"Tokens Estimados Out: {total_tokens_out:,}")
+    print(f"Tokens Totales      : {total_tokens_in + total_tokens_out:,}\n")
+
+
 def main() -> None:
     """Parse command line arguments and execute corresponding async commands."""
     parser = argparse.ArgumentParser(
@@ -172,6 +300,33 @@ def main() -> None:
         help="Use MockLLMGateway for fast offline simulation",
     )
 
+    # inbox command
+    inbox_parser = subparsers.add_parser("inbox", help="Display internal email messages")
+    inbox_parser.add_argument("--project-id", required=True, type=str, help="Project ID")
+    inbox_parser.add_argument(
+        "--agent",
+        type=str,
+        default=None,
+        help="Optional agent filter (e.g. agente_03_laravel)",
+    )
+
+    # read-email command
+    read_parser = subparsers.add_parser("read-email", help="Read full content of an email")
+    read_parser.add_argument("--email-id", required=True, type=str, help="Email UUID")
+
+    # conversations command
+    conv_parser = subparsers.add_parser(
+        "conversations",
+        help="Display conversation turns and telemetry",
+    )
+    conv_parser.add_argument("--project-id", required=True, type=str, help="Project ID")
+    conv_parser.add_argument(
+        "--agent",
+        type=str,
+        default=None,
+        help="Optional agent filter (e.g. agente_10_ciso)",
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -181,6 +336,12 @@ def main() -> None:
             asyncio.run(status_command(args.project_id))
         case "resume":
             asyncio.run(resume_command(args.project_id, args.mock))
+        case "inbox":
+            asyncio.run(inbox_command(args.project_id, args.agent))
+        case "read-email":
+            asyncio.run(read_email_command(args.email_id))
+        case "conversations":
+            asyncio.run(conversations_command(args.project_id, args.agent))
         case _:
             parser.print_help()
 
