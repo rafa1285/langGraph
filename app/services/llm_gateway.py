@@ -106,6 +106,9 @@ class MockLLMGateway:
         fail_ciso_once: bool = False,
         sdd_requires_php: bool = True,
         sdd_requires_python: bool = True,
+        qa_php_failures_before_pass: int = 0,
+        qa_python_failures_before_pass: int = 0,
+        ciso_failures_sequence: list[AgentID] | None = None,
     ) -> None:
         """Initialize mock gateway with scenario control flags."""
         self.fail_qa_php_once = fail_qa_php_once
@@ -116,11 +119,17 @@ class MockLLMGateway:
         self.fail_ciso_once = fail_ciso_once
         self.sdd_requires_php = sdd_requires_php
         self.sdd_requires_python = sdd_requires_python
+        self.qa_php_failures_before_pass = qa_php_failures_before_pass
+        self.qa_python_failures_before_pass = qa_python_failures_before_pass
+        self.ciso_failures_sequence: list[AgentID] = (
+            list(ciso_failures_sequence) if ciso_failures_sequence is not None else []
+        )
 
         self.qa_php_calls: int = 0
         self.qa_python_calls: int = 0
         self.ciso_calls: int = 0
         self.invocations: list[tuple[AgentID, str, str]] = []
+        self.invocation_counts: dict[AgentID, int] = dict.fromkeys(AgentID, 0)
 
     async def invoke_agent(
         self,
@@ -130,6 +139,7 @@ class MockLLMGateway:
     ) -> str:
         """Return simulated realistic response matching agent contract and test conditions."""
         self.invocations.append((agent_id, system_prompt, user_payload))
+        self.invocation_counts[agent_id] = self.invocation_counts.get(agent_id, 0) + 1
 
         match agent_id:
             case AgentID.AGENTE_01_PM:
@@ -204,9 +214,15 @@ app = FastAPI()
 """
             case AgentID.AGENTE_05_QA_PHP:
                 self.qa_php_calls += 1
-                should_fail = self.always_fail_qa_php or (
-                    self.fail_qa_php_once and self.qa_php_calls == 1
-                )
+                if self.always_fail_qa_php:
+                    should_fail = True
+                elif self.qa_php_failures_before_pass > 0:
+                    should_fail = self.qa_php_calls <= self.qa_php_failures_before_pass
+                elif self.fail_qa_php_once:
+                    should_fail = self.qa_php_calls == 1
+                else:
+                    should_fail = False
+
                 if should_fail:
                     return """---
 origen: "agente_05_qa_php"
@@ -234,9 +250,15 @@ APROBADO: Cobertura de pruebas completa y cumplimiento estricto de PSR-12.
 """
             case AgentID.AGENTE_06_QA_PYTHON:
                 self.qa_python_calls += 1
-                should_fail = self.always_fail_qa_python or (
-                    self.fail_qa_python_once and self.qa_python_calls == 1
-                )
+                if self.always_fail_qa_python:
+                    should_fail = True
+                elif self.qa_python_failures_before_pass > 0:
+                    should_fail = self.qa_python_calls <= self.qa_python_failures_before_pass
+                elif self.fail_qa_python_once:
+                    should_fail = self.qa_python_calls == 1
+                else:
+                    should_fail = False
+
                 if should_fail:
                     return """---
 origen: "agente_06_qa_python"
@@ -277,12 +299,19 @@ Dockerfiles multi-stage y docker-compose.yml configurados.
 """
             case AgentID.AGENTE_10_CISO:
                 self.ciso_calls += 1
-                should_fail = bool(
-                    self.fail_ciso_target
-                    and (not self.fail_ciso_once or self.ciso_calls == 1)
-                )
-                if should_fail and self.fail_ciso_target:
-                    target = self.fail_ciso_target
+                target: AgentID | None = None
+                should_fail = False
+
+                if self.ciso_failures_sequence:
+                    if self.ciso_calls <= len(self.ciso_failures_sequence):
+                        should_fail = True
+                        target = self.ciso_failures_sequence[self.ciso_calls - 1]
+                elif self.fail_ciso_target:
+                    should_fail = not self.fail_ciso_once or self.ciso_calls == 1
+                    if should_fail:
+                        target = self.fail_ciso_target
+
+                if should_fail and target is not None:
                     return f"""---
 origen: "agente_10_ciso"
 destino_siguiente: "{target.value}"
