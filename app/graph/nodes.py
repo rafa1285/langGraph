@@ -1,17 +1,25 @@
 """Node implementations for the LangGraph software factory."""
 
+import logging
 import time
 from datetime import UTC, datetime
 
+from app.core.config import settings
 from app.graph.state import SoftwareFactoryState
 from app.schemas.office import AgentConversationRecord
 from app.schemas.routing import AgentID, DeliverableStatus, StepExecutionRecord
 from app.services.llm_gateway import LLMGatewayProtocol
 from app.services.mail_service import MailService
+from app.services.notion_mcp_service import (
+    KnowledgeSyncPort,
+    get_knowledge_sync_adapter,
+)
 from app.services.office_store import OfficeStore
 from app.services.output_parser import AgentOutputParser
 from app.services.prompt_loader import PromptLoader
 from app.services.workspace_writer import WorkspaceWriter
+
+logger = logging.getLogger(__name__)
 
 
 def _build_user_payload(agent_id: AgentID, state: SoftwareFactoryState) -> str:
@@ -135,6 +143,7 @@ class FactoryNodes:
         workspace_writer: WorkspaceWriter,
         office_store: OfficeStore | None = None,
         mail_service: MailService | None = None,
+        knowledge_sync: KnowledgeSyncPort | None = None,
     ) -> None:
         """Initialize FactoryNodes with gateway, prompt loader, writer, and office mail store."""
         self.llm_gateway = llm_gateway
@@ -142,6 +151,12 @@ class FactoryNodes:
         self.workspace_writer = workspace_writer
         self.office_store = office_store or OfficeStore()
         self.mail_service = mail_service or MailService(self.office_store)
+        if knowledge_sync is not None:
+            self.knowledge_sync: KnowledgeSyncPort | None = knowledge_sync
+        elif settings.NOTION_MCP_ENABLED:
+            self.knowledge_sync = get_knowledge_sync_adapter()
+        else:
+            self.knowledge_sync = None
 
     async def _execute_agent_step(
         self,
@@ -202,7 +217,7 @@ class FactoryNodes:
         await self.office_store.save_conversation(conv_record)
 
         # 5. Send handoff email(s) to next target(s) or culprit
-        await self.mail_service.send_handoff_email(
+        sent_emails = await self.mail_service.send_handoff_email(
             project_id=state["project_id"],
             step_number=step_number,
             sender_id=agent_id,
@@ -211,6 +226,37 @@ class FactoryNodes:
             artifact_path=artifact_path,
             raw_output=raw_output,
         )
+
+        # 6. Synchronize deliverable, status, and emails with Notion MCP if enabled
+        if self.knowledge_sync is not None:
+            try:
+                await self.knowledge_sync.append_deliverable_page(
+                    project_id=state["project_id"],
+                    step_number=step_number,
+                    agent_id=agent_id.value,
+                    deliverable_title=header.estado_entregable.value,
+                    markdown_content=raw_output,
+                )
+                await self.knowledge_sync.update_project_status(
+                    project_id=state["project_id"],
+                    status_data={
+                        "current_status": header.estado_entregable.value,
+                        "last_agent": agent_id.value,
+                        "steps_completed": step_number,
+                        "verdict": header.veredicto,
+                    },
+                )
+                for sent_em in sent_emails:
+                    await self.knowledge_sync.log_agent_email(
+                        project_id=state["project_id"],
+                        email_data=sent_em.model_dump(mode="json"),
+                    )
+            except Exception as exc:
+                logger.warning(
+                    "Fallo en sincronización automática con Notion MCP para %s: %s",
+                    state["project_id"],
+                    exc,
+                )
 
         record = StepExecutionRecord(
             step_number=step_number,

@@ -1,6 +1,7 @@
 """Orchestrator service managing LangGraph lifecycle and SQLite checkpoints."""
 
 import asyncio
+import logging
 import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -19,9 +20,15 @@ from app.services.llm_gateway import (
     MockLLMGateway,
 )
 from app.services.mail_service import MailService
+from app.services.notion_mcp_service import (
+    KnowledgeSyncPort,
+    get_knowledge_sync_adapter,
+)
 from app.services.office_store import OfficeStore
 from app.services.prompt_loader import PromptLoader
 from app.services.workspace_writer import WorkspaceWriter
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.graph.workflow import FactoryGraph
@@ -39,6 +46,7 @@ class OrchestratorService:
         office_store: OfficeStore | None = None,
         mail_service: MailService | None = None,
         checkpointer: BaseCheckpointSaver[Any] | None = None,
+        knowledge_sync: KnowledgeSyncPort | None = None,
     ) -> None:
         """Initialize the Orchestrator with storage and service dependencies."""
         from app.graph.nodes import FactoryNodes
@@ -54,12 +62,20 @@ class OrchestratorService:
         self.office_store = office_store or OfficeStore()
         self.mail_service = mail_service or MailService(self.office_store)
 
+        if knowledge_sync is not None:
+            self.knowledge_sync: KnowledgeSyncPort | None = knowledge_sync
+        elif settings.NOTION_MCP_ENABLED:
+            self.knowledge_sync = get_knowledge_sync_adapter()
+        else:
+            self.knowledge_sync = None
+
         self.nodes: FactoryNodes = FactoryNodes(
             llm_gateway=self.llm_gateway,
             prompt_loader=self.prompt_loader,
             workspace_writer=self.workspace_writer,
             office_store=self.office_store,
             mail_service=self.mail_service,
+            knowledge_sync=self.knowledge_sync,
         )
 
         self.checkpointer = checkpointer
@@ -104,6 +120,16 @@ class OrchestratorService:
         initial_state = create_initial_state(project_id=pid, idea_inicial=idea_inicial)
         config: RunnableConfig = {"configurable": {"thread_id": pid}}
 
+        if self.knowledge_sync is not None:
+            try:
+                await self.knowledge_sync.create_project_hub(
+                    project_id=pid,
+                    title=f"Proyecto {pid}",
+                    summary=f"Idea Inicial: {idea_inicial}",
+                )
+            except Exception as exc:
+                logger.warning("Fallo al crear Hub en Notion MCP para %s: %s", pid, exc)
+
         task = asyncio.create_task(self.graph.ainvoke(initial_state, config=config))
         self._background_tasks[pid] = task
         return pid
@@ -119,6 +145,17 @@ class OrchestratorService:
 
         initial_state = create_initial_state(project_id=project_id, idea_inicial=idea_inicial)
         config: RunnableConfig = {"configurable": {"thread_id": project_id}}
+
+        if self.knowledge_sync is not None:
+            try:
+                await self.knowledge_sync.create_project_hub(
+                    project_id=project_id,
+                    title=f"Proyecto {project_id}",
+                    summary=f"Idea Inicial: {idea_inicial}",
+                )
+            except Exception as exc:
+                logger.warning("Fallo al crear Hub en Notion MCP para %s: %s", project_id, exc)
+
         result = await self.graph.ainvoke(initial_state, config=config)
         return cast(SoftwareFactoryState, result)
 
@@ -133,6 +170,17 @@ class OrchestratorService:
 
         initial_state = create_initial_state(project_id=project_id, idea_inicial=idea_inicial)
         config: RunnableConfig = {"configurable": {"thread_id": project_id}}
+
+        if self.knowledge_sync is not None:
+            try:
+                await self.knowledge_sync.create_project_hub(
+                    project_id=project_id,
+                    title=f"Proyecto {project_id}",
+                    summary=f"Idea Inicial: {idea_inicial}",
+                )
+            except Exception as exc:
+                logger.warning("Fallo al crear Hub en Notion MCP para %s: %s", project_id, exc)
+
         async for chunk in self.graph.astream(
             initial_state,
             config=config,

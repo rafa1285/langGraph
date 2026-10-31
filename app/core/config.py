@@ -27,6 +27,9 @@ class Settings(BaseSettings):
     OFFICE_DB_PATH: str = "workspaces/office_data.sqlite"
     WORKSPACES_DIR: str = "workspaces"
     PROMPTS_DIR: str = "prompts"
+    NOTION_API_KEY: str | None = None
+    NOTION_PARENT_PAGE_ID: str | None = None
+    NOTION_MCP_ENABLED: bool = False
 
     @field_validator("AGENT_MODEL_OVERRIDES", mode="before")
     @classmethod

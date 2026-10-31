@@ -8,6 +8,12 @@ from app.services.llm_gateway import (
 )
 from app.services.local_deployer import LocalSandboxDeployer
 from app.services.mail_service import MailService
+from app.services.notion_mcp_service import (
+    KnowledgeSyncPort,
+    LocalNotionMirrorAdapter,
+    NotionMCPAdapter,
+    get_knowledge_sync_adapter,
+)
 from app.services.office_store import OfficeStore
 from app.services.orchestrator_service import OrchestratorService
 from app.services.output_parser import AgentOutputParser
@@ -19,12 +25,16 @@ __all__ = [
     "AgentOutputParser",
     "CodeMaterializerService",
     "GeminiLLMGateway",
+    "KnowledgeSyncPort",
     "LLMGatewayProtocol",
+    "LocalNotionMirrorAdapter",
     "LocalSandboxDeployer",
     "MailService",
     "MockLLMGateway",
+    "NotionMCPAdapter",
     "OfficeStore",
     "OrchestratorService",
     "PromptLoader",
     "WorkspaceWriter",
+    "get_knowledge_sync_adapter",
 ]

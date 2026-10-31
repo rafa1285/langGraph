@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -12,6 +13,11 @@ from app.services.code_materializer import CodeMaterializerService
 from app.services.llm_gateway import GeminiLLMGateway, MockLLMGateway
 from app.services.local_deployer import LocalSandboxDeployer
 from app.services.mail_service import MailService
+from app.services.notion_mcp_service import (
+    KnowledgeSyncPort,
+    LocalNotionMirrorAdapter,
+    NotionMCPAdapter,
+)
 from app.services.office_store import OfficeStore
 from app.services.orchestrator_service import OrchestratorService
 from app.services.prompt_loader import PromptLoader
@@ -329,6 +335,98 @@ async def materialize_command(project_id: str, skip_deployer: bool = False) -> N
         print("\n[CLI] Despliegue y validación local omitidos (--skip-deployer).\n")
 
 
+async def sync_notion_command(project_id: str, local_mirror: bool = False) -> None:
+    """Synchronize completed project deliverables and internal email logs to Notion MCP."""
+    proj_dir = Path(settings.WORKSPACES_DIR) / project_id
+    if not proj_dir.exists() or not proj_dir.is_dir():
+        print(f"\n[CLI] Error: El directorio '{project_id}' no existe en {proj_dir}.\n")
+        sys.exit(1)
+
+    use_local = local_mirror or not settings.NOTION_API_KEY
+    mode_name = "Espejo Local (Zero-Config)" if use_local else "Notion Cloud REST API"
+
+    print(f"\n[CLI] Sincronizando con Notion MCP para el proyecto: {project_id}")
+    print(f"[CLI] Modo de Sincronización : {mode_name}")
+
+    adapter: KnowledgeSyncPort
+    if use_local:
+        adapter = LocalNotionMirrorAdapter(workspaces_dir=settings.WORKSPACES_DIR)
+    else:
+        adapter = NotionMCPAdapter(
+            api_key=settings.NOTION_API_KEY or "",
+            parent_page_id=settings.NOTION_PARENT_PAGE_ID,
+            workspaces_dir=settings.WORKSPACES_DIR,
+        )
+
+    # 1. Create or connect project hub
+    hub_id = await adapter.create_project_hub(
+        project_id=project_id,
+        title=f"Proyecto {project_id}",
+        summary="Sincronización a posteriori de entregables y telemetría de AgentOffice",
+    )
+    print(f"[CLI] Project Hub inicializado : {hub_id}")
+
+    # 2. Iterate and sync deliverables
+    md_files = sorted(
+        [p for p in proj_dir.glob("*.md") if p.is_file() and p.name != "README.md"],
+        key=lambda p: (
+            int(p.stem.split("_")[0]) if p.stem.split("_")[0].isdigit() else 999,
+            p.name,
+        ),
+    )
+
+    print(f"\n[CLI] Sincronizando {len(md_files)} entregables Markdown...")
+    synced_deliverables = 0
+    for md_path in md_files:
+        stem_parts = md_path.stem.split("_", 1)
+        step_num = int(stem_parts[0]) if stem_parts[0].isdigit() else 0
+        agent_name = stem_parts[1] if len(stem_parts) > 1 else "unknown"
+        content = md_path.read_text(encoding="utf-8")
+
+        m_state = re.search(r'estado_entregable:\s*"([^"]+)"', content)
+        deliv_title = m_state.group(1) if m_state else f"Entregable {md_path.stem}"
+
+        subpage_id = await adapter.append_deliverable_page(
+            project_id=project_id,
+            step_number=step_num,
+            agent_id=agent_name,
+            deliverable_title=deliv_title,
+            markdown_content=content,
+        )
+        synced_deliverables += 1
+        print(f"  [Paso {step_num:02d}] {agent_name:<21} -> Sincronizado ({subpage_id[:32]})")
+
+    # 3. Synchronize internal agent emails
+    store = OfficeStore()
+    emails = await store.get_emails(project_id=project_id)
+    print(f"\n[CLI] Sincronizando {len(emails)} correos internos auditados...")
+    for em in emails:
+        await adapter.log_agent_email(
+            project_id=project_id,
+            email_data=em.model_dump(mode="json"),
+        )
+
+    # 4. Update overall status
+    await adapter.update_project_status(
+        project_id=project_id,
+        status_data={
+            "current_status": "SINCRONIZADO_COMPLETO",
+            "steps_completed": len(md_files),
+            "emails_logged": len(emails),
+            "mode": mode_name,
+        },
+    )
+
+    mirror_index = proj_dir / "notion_mirror" / "INDEX.html"
+    print("\n------------------------------------------------------------")
+    print("Sincronización Notion MCP completada con éxito.")
+    print(f"Total Entregables Sincronizados : {synced_deliverables}")
+    print(f"Total Correos Auditados         : {len(emails)}")
+    if mirror_index.exists():
+        print(f"Navegador Local Espejo          : {mirror_index}")
+    print("------------------------------------------------------------\n")
+
+
 def main() -> None:
     """Parse command line arguments and execute corresponding async commands."""
     parser = argparse.ArgumentParser(
@@ -403,6 +501,18 @@ def main() -> None:
         help="Skip local deployer preparation and syntax validation",
     )
 
+    # sync-notion command
+    notion_parser = subparsers.add_parser(
+        "sync-notion",
+        help="Synchronize project deliverables and audit logs with Notion MCP",
+    )
+    notion_parser.add_argument("--project-id", required=True, type=str, help="Project ID")
+    notion_parser.add_argument(
+        "--local-mirror",
+        action="store_true",
+        help="Force zero-config local mirror generation regardless of API key",
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -420,6 +530,8 @@ def main() -> None:
             asyncio.run(conversations_command(args.project_id, args.agent))
         case "materialize":
             asyncio.run(materialize_command(args.project_id, args.skip_deployer))
+        case "sync-notion":
+            asyncio.run(sync_notion_command(args.project_id, args.local_mirror))
         case _:
             parser.print_help()
 
