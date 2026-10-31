@@ -132,6 +132,34 @@ class MailService:
 
         return sent_emails
 
+    async def send_email(
+        self,
+        project_id: str,
+        sender: str,
+        recipient: str,
+        subject: str,
+        body_summary: str,
+        step_number: int = 0,
+        cc: list[str] | None = None,
+        attached_deliverable_path: str = "",
+        priority: EmailPriority = "NORMAL",
+    ) -> AgentEmailRecord:
+        """Send and persist a direct email message between any identities."""
+        email = AgentEmailRecord(
+            project_id=project_id,
+            step_number=step_number,
+            sender=sender,
+            recipient=recipient,
+            cc=cc or [],
+            subject=subject,
+            body_summary=body_summary,
+            attached_deliverable_path=attached_deliverable_path,
+            priority=priority,
+            is_read=False,
+        )
+        await self.store.save_email(email)
+        return email
+
     async def fetch_unread_inbox(
         self,
         project_id: str,

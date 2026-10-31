@@ -8,11 +8,18 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.schemas.routing import AgentID, StepExecutionRecord
+from app.services.code_materializer import CodeMaterializerService
 from app.services.llm_gateway import GeminiLLMGateway, MockLLMGateway
+from app.services.local_deployer import LocalSandboxDeployer
+from app.services.mail_service import MailService
 from app.services.office_store import OfficeStore
 from app.services.orchestrator_service import OrchestratorService
 from app.services.prompt_loader import PromptLoader
 from app.services.workspace_writer import WorkspaceWriter
+
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 
 
 async def run_command(idea: str, mock: bool, project_id: str | None) -> None:
@@ -265,6 +272,63 @@ async def conversations_command(project_id: str, agent: str | None = None) -> No
     print(f"Tokens Totales      : {total_tokens_in + total_tokens_out:,}\n")
 
 
+async def materialize_command(project_id: str, skip_deployer: bool = False) -> None:
+    """Materialize project deliverables into source code in build/ and validate environment."""
+    print(f"\n[CLI] Materializando código fuente para el proyecto: {project_id}...")
+
+    materializer = CodeMaterializerService()
+    try:
+        build_dir, manifest = materializer.materialize_project(project_id)
+    except FileNotFoundError as exc:
+        print(f"[CLI] Error: {exc}")
+        sys.exit(1)
+
+    files = manifest.get("files", [])
+    if not files:
+        print(f"[CLI] Aviso: No se extrajeron archivos para el proyecto '{project_id}'.")
+        return
+
+    print(f"\n--- Archivos Materializados en: {build_dir} ---")
+    header = f"{'Ruta de Archivo':<55} | {'Tamaño':<10} | {'SHA-256':<10} | Agente Autor"
+    sep = "-" * len(header)
+    print(sep)
+    print(header)
+    print(sep)
+
+    for item in files:
+        path_str = item["path"]
+        size_str = f"{item['size_bytes']:,} B"
+        sha_short = item["sha256"][:8]
+        author = f"{item['author_agent']} (Paso {item['step_number']:02d})"
+        print(f"{path_str:<55} | {size_str:<10} | {sha_short:<10} | {author}")
+
+    print(sep)
+    print(f"Total Archivos Extraídos : {len(files)}")
+    print(f"Directorio de Salida     : {build_dir}")
+    print(f"Archivo de Manifiesto    : {build_dir / 'MANIFEST.json'}")
+
+    if not skip_deployer:
+        print("\n[CLI] Preparando entorno local y validando orquestación...")
+        mail_service = MailService()
+        deployer = LocalSandboxDeployer(mail_service=mail_service)
+        env_result = deployer.prepare_local_environment(build_dir)
+        scripts = ", ".join(env_result.get("scripts", []))
+        compose_file = env_result.get("compose_file") or "No detectado"
+        print(f"[CLI] Archivo Compose detectado : {compose_file}")
+        print(f"[CLI] Scripts de inicio rápido : {scripts}")
+
+        is_valid = await deployer.validate_compose_syntax(
+            build_path=build_dir,
+            project_id=project_id,
+            mail_service=mail_service,
+        )
+        status_txt = "APROBADA [OK]" if is_valid else "FALLIDA [ERROR]"
+        print(f"[CLI] Validación de Sintaxis   : {status_txt}")
+        print("[CLI] Correo de entrega enviado a: ceo@agentoffice.local\n")
+    else:
+        print("\n[CLI] Despliegue y validación local omitidos (--skip-deployer).\n")
+
+
 def main() -> None:
     """Parse command line arguments and execute corresponding async commands."""
     parser = argparse.ArgumentParser(
@@ -327,6 +391,18 @@ def main() -> None:
         help="Optional agent filter (e.g. agente_10_ciso)",
     )
 
+    # materialize command
+    mat_parser = subparsers.add_parser(
+        "materialize",
+        help="Materialize project deliverables into real source code",
+    )
+    mat_parser.add_argument("--project-id", required=True, type=str, help="Project ID")
+    mat_parser.add_argument(
+        "--skip-deployer",
+        action="store_true",
+        help="Skip local deployer preparation and syntax validation",
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -342,6 +418,8 @@ def main() -> None:
             asyncio.run(read_email_command(args.email_id))
         case "conversations":
             asyncio.run(conversations_command(args.project_id, args.agent))
+        case "materialize":
+            asyncio.run(materialize_command(args.project_id, args.skip_deployer))
         case _:
             parser.print_help()
 
