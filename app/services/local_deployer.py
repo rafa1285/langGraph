@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 import shutil
 import subprocess
 from pathlib import Path
@@ -12,6 +13,7 @@ from typing import Any
 
 import yaml
 
+from app.core.config import settings
 from app.schemas.office import EmailPriority
 from app.services.mail_service import MailService
 
@@ -222,3 +224,223 @@ echo "[LocalDeployer] Despliegue local completado correctamente."
         )
 
         return is_valid
+
+    async def prepare_and_check_local_stack(
+        self,
+        project_id: str,
+        start_containers: bool = False,
+        workspaces_dir: Path | str | None = None,
+    ) -> dict[str, Any]:
+        """Apply security patches, build docker-compose.local.yml, and optionally spin up stack."""
+        ws_dir = Path(workspaces_dir or settings.WORKSPACES_DIR)
+        source_dir = ws_dir / project_id
+        build_dir = source_dir / "build"
+
+        if not build_dir.exists() or not any(build_dir.iterdir()):
+            from app.services.code_materializer import CodeMaterializerService
+
+            mat = CodeMaterializerService(ws_dir)
+            build_dir, _ = mat.materialize_project(project_id)
+
+        ciso_patch_applied = False
+        ciso_file = source_dir / "20_agente_10_ciso.md"
+        if not ciso_file.exists():
+            candidates = list(source_dir.glob("*_agente_10_ciso.md"))
+            if candidates:
+                ciso_file = candidates[-1]
+
+        if ciso_file.exists():
+            ciso_text = ciso_file.read_text(encoding="utf-8")
+            blocks = re.findall(r"```(?:python)?\s*\n(.*?)```", ciso_text, re.DOTALL)
+
+            # 1. Look for raw_socket_smtp_probe.py patch
+            probe_patch = None
+            for b in blocks:
+                if "raw_socket_smtp_probe.py" in b or "class DistributedMxSemaphore" in b:
+                    probe_patch = b
+                    break
+
+            if probe_patch:
+                target_paths = [
+                    build_dir / "app" / "infrastructure" / "adapters" / "raw_socket_smtp_probe.py",
+                    build_dir
+                    / "engine_fastapi"
+                    / "app"
+                    / "infrastructure"
+                    / "adapters"
+                    / "raw_socket_smtp_probe.py",
+                ]
+                applied = False
+                for tp in target_paths:
+                    if tp.exists() or tp.parent.exists():
+                        tp.parent.mkdir(parents=True, exist_ok=True)
+                        tp.write_text(probe_patch, encoding="utf-8")
+                        applied = True
+                if not applied:
+                    def_tp = target_paths[0]
+                    def_tp.parent.mkdir(parents=True, exist_ok=True)
+                    def_tp.write_text(probe_patch, encoding="utf-8")
+                ciso_patch_applied = True
+
+            # 2. Look for stream_consumer.py patch
+            consumer_patch = None
+            for b in blocks:
+                if "_resolve_disk_path" in b:
+                    consumer_patch = b
+                    break
+
+            if consumer_patch:
+                consumer_targets = [
+                    build_dir / "app" / "workers" / "stream_consumer.py",
+                    build_dir / "engine_fastapi" / "app" / "workers" / "stream_consumer.py",
+                ]
+                for ct in consumer_targets:
+                    if ct.exists():
+                        ct_text = ct.read_text(encoding="utf-8")
+                        pattern = (
+                            r"    def _resolve_disk_path\(self, raw_file_path: str\) -> str:"
+                            r".*?(?=\n    def |\Z)"
+                        )
+                        if re.search(pattern, ct_text, re.DOTALL):
+                            new_text = re.sub(
+                                pattern,
+                                consumer_patch.strip(),
+                                ct_text,
+                                flags=re.DOTALL,
+                            )
+                            ct.write_text(new_text, encoding="utf-8")
+                            ciso_patch_applied = True
+
+        # Generate docker-compose.local.yml with non-conflicting host ports
+        local_compose = f"""version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: agentoffice_postgres_{project_id}
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: agentoffice_db
+      POSTGRES_USER: agentoffice_user
+      POSTGRES_PASSWORD: secret_local_password
+    ports:
+      - "15432:5432"
+    volumes:
+      - pgdata_{project_id}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U agentoffice_user -d agentoffice_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: agentoffice_redis_{project_id}
+    restart: unless-stopped
+    ports:
+      - "16379:6379"
+    volumes:
+      - redisdata_{project_id}:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  engine_fastapi:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: agentoffice_engine_{project_id}
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql+asyncpg://agentoffice_user:secret_local_password@postgres:5432/agentoffice_db
+      REDIS_URL: redis://redis:6379/0
+      PROJECT_ID: {project_id}
+    ports:
+      - "18000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata_{project_id}:
+  redisdata_{project_id}:
+"""
+        compose_local_path = build_dir / "docker-compose.local.yml"
+        compose_local_path.write_text(local_compose, encoding="utf-8")
+
+        env_local = f"""# AgentOffice Local Stack Configuration - {project_id}
+PROJECT_ID={project_id}
+POSTGRES_PORT=15432
+REDIS_PORT=16379
+APP_PORT=18000
+DATABASE_URL=postgresql+asyncpg://agentoffice_user:secret_local_password@localhost:15432/agentoffice_db
+REDIS_URL=redis://localhost:16379/0
+"""
+        (build_dir / ".env.local").write_text(env_local, encoding="utf-8")
+        if not (build_dir / ".env").exists():
+            (build_dir / ".env").write_text(env_local, encoding="utf-8")
+
+        containers_started = False
+        health_status = "untested"
+
+        if start_containers:
+            if shutil.which("docker") is not None:
+                def _run_docker_up() -> bool:
+                    try:
+                        res = subprocess.run(
+                            [
+                                "docker",
+                                "compose",
+                                "-f",
+                                "docker-compose.local.yml",
+                                "up",
+                                "-d",
+                                "--build",
+                            ],
+                            cwd=build_dir,
+                            capture_output=True,
+                            text=True,
+                            timeout=60,
+                        )
+                        return res.returncode == 0
+                    except Exception as exc:
+                        logger.warning("Fallo al levantar contenedores Docker: %s", exc)
+                        return False
+
+                containers_started = await asyncio.to_thread(_run_docker_up)
+                if containers_started:
+                    import httpx
+
+                    async with httpx.AsyncClient(timeout=3.0) as http_client:
+                        for _ in range(5):
+                            try:
+                                h_res = await http_client.get("http://localhost:18000/health")
+                                if h_res.status_code == 200:
+                                    health_status = "healthy"
+                                    break
+                            except Exception:
+                                await asyncio.sleep(1.0)
+                        if health_status != "healthy":
+                            health_status = "starting"
+                else:
+                    health_status = "failed_to_start"
+            else:
+                health_status = "docker_cli_unavailable"
+
+        return {
+            "project_id": project_id,
+            "ciso_patch_applied": ciso_patch_applied,
+            "compose_file": "docker-compose.local.yml",
+            "compose_path": str(compose_local_path),
+            "ports": {
+                "postgres": 15432,
+                "redis": 16379,
+                "engine_fastapi": 18000,
+            },
+            "containers_started": containers_started,
+            "health_check": health_status,
+        }

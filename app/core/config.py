@@ -30,6 +30,15 @@ class Settings(BaseSettings):
     NOTION_API_KEY: str | None = None
     NOTION_PARENT_PAGE_ID: str | None = None
     NOTION_MCP_ENABLED: bool = False
+    REAL_MAIL_ENABLED: bool = False
+    SMTP_HOST: str = "smtp.strato.com"
+    SMTP_PORT: int = 465
+    IMAP_HOST: str = "imap.strato.com"
+    IMAP_PORT: int = 993
+    MAIL_USERNAME: str | None = None
+    MAIL_PASSWORD: str | None = None
+    GITHUB_TOKEN: str | None = None
+    GITHUB_USERNAME: str | None = None
 
     @field_validator("AGENT_MODEL_OVERRIDES", mode="before")
     @classmethod

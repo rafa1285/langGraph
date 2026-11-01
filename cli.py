@@ -9,7 +9,9 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.schemas.routing import AgentID, StepExecutionRecord
+from app.services.backfill_service import ProjectBackfillService
 from app.services.code_materializer import CodeMaterializerService
+from app.services.github_publisher import GitHubPublisherService
 from app.services.llm_gateway import GeminiLLMGateway, MockLLMGateway
 from app.services.local_deployer import LocalSandboxDeployer
 from app.services.mail_service import MailService
@@ -427,6 +429,85 @@ async def sync_notion_command(project_id: str, local_mirror: bool = False) -> No
     print("------------------------------------------------------------\n")
 
 
+async def backfill_command(project_id: str, real_mail: bool, notion: bool) -> None:
+    """Retrospectively hydrate project data into SQLite and optionally sync Strato and Notion."""
+    service = ProjectBackfillService()
+    try:
+        res = await service.backfill_project(
+            project_id=project_id,
+            sync_real_mail=real_mail,
+            sync_notion=notion,
+        )
+    except FileNotFoundError as exc:
+        print(f"\n[ERROR] {exc}\n")
+        return
+
+    print("\n------------------------------------------------------------")
+    print(f"Hidratación Retrospectiva Completada: Proyecto {project_id}")
+    print("------------------------------------------------------------")
+    print(f"Total Entregables Escaneados : {res['total_deliverables_found']}")
+    print(f"Conversaciones Agregadas     : {res['conversations_added']}")
+    print(f"Correos Internos Agregados   : {res['emails_added']}")
+    if real_mail:
+        print(f"Correos Sincronizados Strato : {res['real_mail_synced']}")
+    if notion:
+        print(f"Entregables Sincroniz. Notion: {res['notion_synced']}")
+    print("------------------------------------------------------------\n")
+
+
+async def publish_git_command(project_id: str, repo_name: str, public: bool) -> None:
+    """Create a remote repository on GitHub and push the materialized build."""
+    service = GitHubPublisherService()
+    try:
+        res = await service.publish_project_build(
+            project_id=project_id,
+            repo_name=repo_name,
+            private=not public,
+        )
+    except Exception as exc:
+        print(f"\n[ERROR] Fallo al publicar en GitHub: {exc}\n")
+        return
+
+    visibility = "Público" if public else "Privado"
+    print("\n------------------------------------------------------------")
+    print(f"Publicación en GitHub Completada: Proyecto {project_id}")
+    print("------------------------------------------------------------")
+    print(f"Repositorio     : {res['repo_url']}")
+    print(f"Visibilidad     : {visibility}")
+    print(f"Archivos Subidos: {res['total_files']}")
+    print("Rama Principal  : main")
+    print("------------------------------------------------------------\n")
+
+
+async def deploy_local_command(project_id: str, up: bool) -> None:
+    """Prepare local Docker Compose stack and optionally spin up containers."""
+    deployer = LocalSandboxDeployer()
+    try:
+        res = await deployer.prepare_and_check_local_stack(
+            project_id=project_id,
+            start_containers=up,
+        )
+    except Exception as exc:
+        print(f"\n[ERROR] Fallo en despliegue local: {exc}\n")
+        return
+
+    ciso_status = "APLICADO" if res["ciso_patch_applied"] else "No requerido/ausente"
+    containers_status = "SÍ" if res["containers_started"] else "FALLÓ / Docker ausente"
+
+    print("\n------------------------------------------------------------")
+    print(f"Preparación de Entorno Local Docker: Proyecto {project_id}")
+    print("------------------------------------------------------------")
+    print(f"Archivo Compose            : {res['compose_path']}")
+    print(f"Parche de Seguridad CISO   : {ciso_status}")
+    print(f"Puerto PostgreSQL 16       : {res['ports']['postgres']}")
+    print(f"Puerto Redis 7             : {res['ports']['redis']}")
+    print(f"Puerto FastAPI Engine      : {res['ports']['engine_fastapi']}")
+    if up:
+        print(f"Contenedores Iniciados     : {containers_status}")
+        print(f"Estado de Salud (Health)   : {res['health_check']}")
+    print("------------------------------------------------------------\n")
+
+
 def main() -> None:
     """Parse command line arguments and execute corresponding async commands."""
     parser = argparse.ArgumentParser(
@@ -513,6 +594,48 @@ def main() -> None:
         help="Force zero-config local mirror generation regardless of API key",
     )
 
+    # backfill command
+    backfill_parser = subparsers.add_parser(
+        "backfill",
+        help="Hydrate SQLite from historical deliverables and optionally sync",
+    )
+    backfill_parser.add_argument("--project-id", required=True, type=str, help="Project ID")
+    backfill_parser.add_argument(
+        "--real-mail",
+        action="store_true",
+        help="Sync all emails to real Strato IMAP/SMTP",
+    )
+    backfill_parser.add_argument(
+        "--notion",
+        action="store_true",
+        help="Sync deliverables and logs to Notion",
+    )
+
+    # publish-git command
+    pub_parser = subparsers.add_parser(
+        "publish-git",
+        help="Create a remote GitHub repository and push build code",
+    )
+    pub_parser.add_argument("--project-id", required=True, type=str, help="Project ID")
+    pub_parser.add_argument("--repo-name", required=True, type=str, help="Target repository name")
+    pub_parser.add_argument(
+        "--public",
+        action="store_true",
+        help="Make GitHub repository public instead of private",
+    )
+
+    # deploy-local command
+    deploy_parser = subparsers.add_parser(
+        "deploy-local",
+        help="Prepare local Docker Compose stack and optionally spin up containers",
+    )
+    deploy_parser.add_argument("--project-id", required=True, type=str, help="Project ID")
+    deploy_parser.add_argument(
+        "--up",
+        action="store_true",
+        help="Start docker containers with docker compose up -d",
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -532,6 +655,12 @@ def main() -> None:
             asyncio.run(materialize_command(args.project_id, args.skip_deployer))
         case "sync-notion":
             asyncio.run(sync_notion_command(args.project_id, args.local_mirror))
+        case "backfill":
+            asyncio.run(backfill_command(args.project_id, args.real_mail, args.notion))
+        case "publish-git":
+            asyncio.run(publish_git_command(args.project_id, args.repo_name, args.public))
+        case "deploy-local":
+            asyncio.run(deploy_local_command(args.project_id, args.up))
         case _:
             parser.print_help()
 

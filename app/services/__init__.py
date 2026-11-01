@@ -1,7 +1,9 @@
 """Service layer implementations for prompts, parsing, workspaces, LLMs, and orchestration."""
 
+from app.services.backfill_service import ProjectBackfillService
 from app.services.code_materializer import CodeMaterializerService
 from app.services.event_bus import ConnectionManager, event_bus
+from app.services.github_publisher import GitHubPublisherService
 from app.services.llm_gateway import (
     GeminiLLMGateway,
     LLMGatewayProtocol,
@@ -19,6 +21,7 @@ from app.services.office_store import OfficeStore
 from app.services.orchestrator_service import OrchestratorService
 from app.services.output_parser import AgentOutputParser
 from app.services.prompt_loader import AGENT_PROMPT_MAP, PromptLoader
+from app.services.real_mail_bridge import RealMailBridge
 from app.services.workspace_writer import WorkspaceWriter
 
 __all__ = [
@@ -27,6 +30,7 @@ __all__ = [
     "CodeMaterializerService",
     "ConnectionManager",
     "GeminiLLMGateway",
+    "GitHubPublisherService",
     "KnowledgeSyncPort",
     "LLMGatewayProtocol",
     "LocalNotionMirrorAdapter",
@@ -36,7 +40,9 @@ __all__ = [
     "NotionMCPAdapter",
     "OfficeStore",
     "OrchestratorService",
+    "ProjectBackfillService",
     "PromptLoader",
+    "RealMailBridge",
     "WorkspaceWriter",
     "event_bus",
     "get_knowledge_sync_adapter",
