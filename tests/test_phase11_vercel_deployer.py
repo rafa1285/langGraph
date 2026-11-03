@@ -148,7 +148,10 @@ def test_build_vercel_bundle_creates_expected_assets(phase11_env: dict[str, Any]
     vercel_cfg = bundle_path / "vercel.json"
     assert vercel_cfg.exists()
     vercel_data = json.loads(vercel_cfg.read_text(encoding="utf-8"))
-    assert vercel_data.get("builds")[0]["use"] == "@vercel/python"
+    assert "rewrites" in vercel_data
+    assert vercel_data["rewrites"][0]["source"] == "/api/(.*)"
+    assert vercel_data["rewrites"][0]["destination"] == "/api/index.py"
+    assert "builds" not in vercel_data
 
 
 # =====================================================================

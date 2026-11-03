@@ -240,15 +240,11 @@ class VercelDeployerService:
         vercel_json = json.dumps(
             {
                 "version": 2,
-                "builds": [
+                "rewrites": [
                     {
-                        "src": "api/index.py",
-                        "use": "@vercel/python",
+                        "source": "/api/(.*)",
+                        "destination": "/api/index.py",
                     }
-                ],
-                "routes": [
-                    {"src": "/api/(.*)", "dest": "api/index.py"},
-                    {"src": "/(.*)", "dest": "/$1"},
                 ],
             },
             indent=2,
