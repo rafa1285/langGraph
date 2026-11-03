@@ -296,17 +296,25 @@ echo "[LocalDeployer] Despliegue local completado correctamente."
                     build_dir / "app" / "workers" / "stream_consumer.py",
                     build_dir / "engine_fastapi" / "app" / "workers" / "stream_consumer.py",
                 ]
+                patch_lines = consumer_patch.strip().splitlines()
+                if patch_lines and not patch_lines[0].startswith("    "):
+                    indented_patch = "\n".join(
+                        "    " + line if line.strip() else "" for line in patch_lines
+                    )
+                else:
+                    indented_patch = consumer_patch.strip()
+
                 for ct in consumer_targets:
                     if ct.exists():
                         ct_text = ct.read_text(encoding="utf-8")
                         pattern = (
                             r"    def _resolve_disk_path\(self, raw_file_path: str\) -> str:"
-                            r".*?(?=\n    def |\Z)"
+                            r".*?(?=\n    async def |\n    def |\Z)"
                         )
                         if re.search(pattern, ct_text, re.DOTALL):
                             new_text = re.sub(
                                 pattern,
-                                consumer_patch.strip(),
+                                lambda _: indented_patch,
                                 ct_text,
                                 flags=re.DOTALL,
                             )
@@ -354,6 +362,27 @@ dependencies = [
         if not (build_dir / "Dockerfile").exists():
             if (build_dir / "docker" / "fastapi" / "Dockerfile").exists():
                 dockerfile_rel = "docker/fastapi/Dockerfile"
+
+        # Ensure case-insensitivity compatibility for Python on Linux containers
+        target_dockerfile = build_dir / dockerfile_rel
+        if target_dockerfile.exists():
+            df_content = target_dockerfile.read_text(encoding="utf-8")
+            if "ln -s Domain /app/app/domain" not in df_content:
+                symlink_step = (
+                    "\n# Fix case-sensitivity in Linux: Python imports expect 'app.domain', "
+                    "while Laravel uses 'app.Domain'\n"
+                    "RUN if [ -d \"/app/app/Domain\" ] && [ ! -d \"/app/app/domain\" ]; "
+                    "then ln -s Domain /app/app/domain; fi\n"
+                )
+                if "COPY app/ ./app" in df_content:
+                    df_content = df_content.replace(
+                        "COPY app/ ./app",
+                        "COPY app/ ./app" + symlink_step,
+                    )
+                    target_dockerfile.write_text(df_content, encoding="utf-8")
+                elif "COPY" in df_content:
+                    df_content += symlink_step
+                    target_dockerfile.write_text(df_content, encoding="utf-8")
 
         # Generate docker-compose.local.yml with non-conflicting host ports
         local_compose = f"""version: '3.8'
