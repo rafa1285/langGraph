@@ -251,21 +251,26 @@ class VercelDeployerService:
         )
         (dist_dir / "vercel.json").write_text(vercel_json, encoding="utf-8")
 
-        # 5. Save index.html
+        # 5. Save index.html (both root and public/ for maximum Vercel compatibility)
+        public_dir = dist_dir / "public"
+        public_dir.mkdir(parents=True, exist_ok=True)
+
         index_template = self.templates_dir / "index.html"
         if index_template.exists():
             index_html = index_template.read_text(encoding="utf-8")
         else:
             index_html = "<!DOCTYPE html><html><body><h1>ValidatorHQ Demo</h1></body></html>"
         (dist_dir / "index.html").write_text(index_html, encoding="utf-8")
+        (public_dir / "index.html").write_text(index_html, encoding="utf-8")
 
-        # 6. Save docs.html
+        # 6. Save docs.html (both root and public/ for maximum Vercel compatibility)
         docs_template = self.templates_dir / "docs.html"
         if docs_template.exists():
             docs_html = docs_template.read_text(encoding="utf-8")
         else:
             docs_html = "<!DOCTYPE html><html><body><h1>ValidatorHQ Docs</h1></body></html>"
         (dist_dir / "docs.html").write_text(docs_html, encoding="utf-8")
+        (public_dir / "docs.html").write_text(docs_html, encoding="utf-8")
 
         return dist_dir
 
@@ -345,14 +350,18 @@ class VercelDeployerService:
 
             deployment_url = f"https://{raw_url}"
 
-            # Attempt to disable preview SSO protection if applicable
+            # Attempt to disable preview SSO protection and enforce zero-config static framework
             try:
                 sso_endpoint = f"https://api.vercel.com/v9/projects/{project_name}"
                 if self.vercel_team_id:
                     sso_endpoint += f"?teamId={self.vercel_team_id}"
-                await client.patch(sso_endpoint, headers=headers, json={"ssoProtection": None})
+                await client.patch(
+                    sso_endpoint,
+                    headers=headers,
+                    json={"ssoProtection": None, "framework": None},
+                )
             except Exception as sso_err:
-                logger.debug("Aviso ignorado al actualizar protección SSO: %s", sso_err)
+                logger.debug("Aviso ignorado al actualizar configuración Vercel: %s", sso_err)
 
         finally:
             if close_client:

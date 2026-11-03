@@ -153,9 +153,11 @@ def test_build_vercel_bundle_creates_expected_assets(phase11_env: dict[str, Any]
     assert vercel_data["rewrites"][0]["destination"] == "/api/index.py"
     assert "builds" not in vercel_data
 
-    # 7. Static files placed strictly in root (sibling to api/)
+    # 7. Static files placed strictly in root and public/
     assert (bundle_path / "index.html").is_file()
     assert (bundle_path / "docs.html").is_file()
+    assert (bundle_path / "public" / "index.html").is_file()
+    assert (bundle_path / "public" / "docs.html").is_file()
     assert (bundle_path / "api").is_dir()
     assert not (bundle_path / "api" / "index.html").exists()
     assert not (bundle_path / "api" / "docs.html").exists()
@@ -385,7 +387,7 @@ async def test_deploy_to_vercel_success_and_email_notification(
     )
     mock_sso_response = httpx.Response(
         status_code=200,
-        json={"ssoProtection": None},
+        json={"ssoProtection": None, "framework": None},
         request=httpx.Request("PATCH", "https://api.vercel.com/v9/projects/validator-hq-saas"),
     )
 
