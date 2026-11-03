@@ -338,17 +338,24 @@ class VercelDeployerService:
 
             data = resp.json()
             raw_url = data.get("url")
-            if (
-                not raw_url
-                and "alias" in data
-                and isinstance(data["alias"], list)
-                and data["alias"]
-            ):
-                raw_url = data["alias"][0]
-            if not raw_url:
-                raw_url = f"{project_name}.vercel.app"
+            # If production alias exists, prioritize canonical domain over transient preview hash
+            aliases = data.get("alias")
+            canonical_url: str | None = None
+            if isinstance(aliases, list) and aliases:
+                target_alias = f"{project_name}.vercel.app"
+                for al in aliases:
+                    al_str = str(al)
+                    is_clean = al_str.endswith(".vercel.app") and "-" not in al_str
+                    if al_str == target_alias or is_clean:
+                        canonical_url = al_str
+                        break
+                if not canonical_url:
+                    canonical_url = str(aliases[0])
 
-            deployment_url = f"https://{raw_url}"
+            if not canonical_url:
+                canonical_url = raw_url or f"{project_name}.vercel.app"
+
+            deployment_url = f"https://{canonical_url}"
 
             # Attempt to disable preview SSO protection and enforce zero-config static framework
             try:
