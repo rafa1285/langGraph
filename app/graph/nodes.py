@@ -27,8 +27,36 @@ logger = logging.getLogger(__name__)
 def _build_user_payload(agent_id: AgentID, state: SoftwareFactoryState) -> str:
     """Construct exact relevant context for each agent without attention dilution."""
     match agent_id:
+        case AgentID.AGENTE_00_CEO:
+            if (
+                state.get("sales_analytics_spec")
+                or state.get("marketing_spec")
+                or state.get("dictamen_ciso")
+                or state.get("documentacion_rag")
+                or state.get("estrategia_growth")
+            ):
+                return (
+                    f"# Resumen Ejecutivo y Auditoría de Cierre (Acta)\n\n"
+                    f"# Charter Inicial de Negocio\n{state.get('ceo_charter', '')}\n\n"
+                    f"# Dictamen CISO Ciberseguridad\n{state.get('dictamen_ciso', '')}\n\n"
+                    f"# Documentación Técnica y RAG\n{state.get('documentacion_rag', '')}\n\n"
+                    f"# Estrategia de Marketing TOFU\n{state.get('marketing_spec', '')}\n\n"
+                    f"# Ventas y Analítica BI (BOFU)\n{state.get('sales_analytics_spec', '')}\n\n"
+                    f"# Estrategia Growth (Legacy)\n{state.get('estrategia_growth', '')}"
+                )
+            return (
+                f"# Idea Inicial del Proyecto\n{state.get('idea_inicial', '')}\n\n"
+                f"# Regla Inquebrantable de Negocio\n"
+                f"Definir Business Charter 100% Zero-Touch y Self-Service sin comerciales humanos."
+            )
+
         case AgentID.AGENTE_01_PM:
-            return f"# Idea Inicial del Proyecto\n{state['idea_inicial']}"
+            parts = [f"# Idea Inicial del Proyecto\n{state['idea_inicial']}"]
+            if state.get("ceo_charter"):
+                parts.append(
+                    f"# Business Charter CEO (Reglas Zero-Touch)\n{state['ceo_charter']}"
+                )
+            return "\n\n".join(parts)
 
         case AgentID.AGENTE_02_ARCHITECT:
             return f"# Documento Pre-SDD Funcional\n{state['pre_sdd_doc']}"
@@ -131,6 +159,28 @@ def _build_user_payload(agent_id: AgentID, state: SoftwareFactoryState) -> str:
                 f"# Documentación Técnica y RAG\n{state['documentacion_rag']}"
             )
 
+        case AgentID.AGENTE_11_UI_UX:
+            return (
+                f"# Pre-SDD Funcional\n{state.get('pre_sdd_doc', '')}\n\n"
+                f"# SDD Arquitectura Técnica\n{state.get('sdd_arquitectura', '')}"
+            )
+
+        case AgentID.AGENTE_12_MARKETING:
+            return (
+                f"# Business Charter CEO\n{state.get('ceo_charter', '')}\n\n"
+                f"# Pre-SDD Funcional\n{state.get('pre_sdd_doc', '')}\n\n"
+                f"# Sistema de Diseño UI/UX\n{state.get('ui_ux_spec', '')}\n\n"
+                f"# Documentación Técnica y RAG\n{state.get('documentacion_rag', '')}"
+            )
+
+        case AgentID.AGENTE_13_SALES_ANALYTICS:
+            return (
+                f"# Business Charter CEO\n{state.get('ceo_charter', '')}\n\n"
+                f"# Estrategia Marketing TOFU\n{state.get('marketing_spec', '')}\n\n"
+                f"# Sistema de Diseño UI/UX\n{state.get('ui_ux_spec', '')}\n\n"
+                f"# Documentación Técnica y RAG\n{state.get('documentacion_rag', '')}"
+            )
+
         case _:
             return state.get("idea_inicial", "")
 
@@ -166,11 +216,16 @@ class FactoryNodes:
         self,
         agent_id: AgentID,
         state: SoftwareFactoryState,
+        payload_override: str | None = None,
     ) -> tuple[str, DeliverableStatus, str, StepExecutionRecord]:
         """Execute common workflow for LLM-powered agents: prompt, call, parse, write, record."""
         step_number = len(state.get("execution_history", [])) + 1
         system_prompt = await self.prompt_loader.load_prompt(agent_id)
-        payload = _build_user_payload(agent_id, state)
+        payload = (
+            payload_override
+            if payload_override is not None
+            else _build_user_payload(agent_id, state)
+        )
 
         # Broadcast agent started
         await self.event_bus.broadcast(
@@ -495,3 +550,80 @@ class FactoryNodes:
             "estrategia_growth": raw_output,
             "execution_history": [record],
         }
+
+    async def ceo_charter_node(self, state: SoftwareFactoryState) -> dict[str, object]:
+        """Node for Agent 00 (CEO Opening): Establishes Zero-Touch business charter."""
+        raw_output, _status, _dest, record = await self._execute_agent_step(
+            AgentID.AGENTE_00_CEO,
+            state,
+        )
+        return {
+            "ceo_charter": raw_output,
+            "execution_history": [record],
+        }
+
+    node_00_ceo_charter = ceo_charter_node
+
+    async def ceo_signoff_node(self, state: SoftwareFactoryState) -> dict[str, object]:
+        """Node for Agent 00 (CEO Closing): Audits entire pipeline and authorizes launch."""
+        closing_payload = (
+            f"# Resumen Ejecutivo y Auditoría de Cierre (Acta)\n\n"
+            f"# Charter Inicial de Negocio\n{state.get('ceo_charter', '')}\n\n"
+            f"# Dictamen CISO Ciberseguridad\n{state.get('dictamen_ciso', '')}\n\n"
+            f"# Documentación Técnica y RAG\n{state.get('documentacion_rag', '')}\n\n"
+            f"# Estrategia de Marketing TOFU\n{state.get('marketing_spec', '')}\n\n"
+            f"# Ventas y Analítica BI (BOFU)\n{state.get('sales_analytics_spec', '')}\n\n"
+            f"# Estrategia Growth (Legacy)\n{state.get('estrategia_growth', '')}"
+        )
+        raw_output, status, _dest, record = await self._execute_agent_step(
+            AgentID.AGENTE_00_CEO,
+            state,
+            payload_override=closing_payload,
+        )
+        approved = status == DeliverableStatus.LANZAMIENTO_AUTORIZADO
+        return {
+            "ceo_signoff": raw_output,
+            "ceo_approved": approved,
+            "execution_history": [record],
+        }
+
+    node_00_ceo_signoff = ceo_signoff_node
+
+    async def ui_ux_node(self, state: SoftwareFactoryState) -> dict[str, object]:
+        """Node for Agent 11 (UI/UX): Designs TailwindCSS design system and 3-click flows."""
+        raw_output, _status, _dest, record = await self._execute_agent_step(
+            AgentID.AGENTE_11_UI_UX,
+            state,
+        )
+        return {
+            "ui_ux_spec": raw_output,
+            "execution_history": [record],
+        }
+
+    node_11_ui_ux = ui_ux_node
+
+    async def marketing_node(self, state: SoftwareFactoryState) -> dict[str, object]:
+        """Node for Agent 12 (Marketing): Formulates TOFU SEO, sitemap, robots, and copy."""
+        raw_output, _status, _dest, record = await self._execute_agent_step(
+            AgentID.AGENTE_12_MARKETING,
+            state,
+        )
+        return {
+            "marketing_spec": raw_output,
+            "execution_history": [record],
+        }
+
+    node_12_marketing = marketing_node
+
+    async def sales_analytics_node(self, state: SoftwareFactoryState) -> dict[str, object]:
+        """Node for Agent 13 (Sales & BI): Pricing, bot playbook, and SQL schema."""
+        raw_output, _status, _dest, record = await self._execute_agent_step(
+            AgentID.AGENTE_13_SALES_ANALYTICS,
+            state,
+        )
+        return {
+            "sales_analytics_spec": raw_output,
+            "execution_history": [record],
+        }
+
+    node_13_sales_analytics = sales_analytics_node

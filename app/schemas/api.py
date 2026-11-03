@@ -59,6 +59,11 @@ class ProjectDeliverablesResponse(BaseModel):
     dictamen_ciso: str
     documentacion_rag: str
     estrategia_growth: str
+    ceo_charter: str = ""
+    ui_ux_spec: str = ""
+    marketing_spec: str = ""
+    sales_analytics_spec: str = ""
+    ceo_signoff: str = ""
 
 
 class ProjectSummaryResponse(BaseModel):

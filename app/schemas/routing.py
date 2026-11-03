@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict
 class AgentID(StrEnum):
     """Unique identifiers for agents and barrier nodes in the pipeline."""
 
+    AGENTE_00_CEO = "agente_00_ceo"
     AGENTE_01_PM = "agente_01_pm"
     AGENTE_02_ARCHITECT = "agente_02_architect"
     AGENTE_03_LARAVEL = "agente_03_laravel"
@@ -19,6 +20,9 @@ class AgentID(StrEnum):
     AGENTE_10_CISO = "agente_10_ciso"
     AGENTE_08_DOCS = "agente_08_docs"
     AGENTE_09_GROWTH = "agente_09_growth"
+    AGENTE_11_UI_UX = "agente_11_ui_ux"
+    AGENTE_12_MARKETING = "agente_12_marketing"
+    AGENTE_13_SALES_ANALYTICS = "agente_13_sales_analytics"
     END_PIPELINE = "end_pipeline"
 
 
@@ -26,8 +30,10 @@ class DeliverableStatus(StrEnum):
     """Lifecycle status states for deliverables across the factory pipeline."""
 
     PENDIENTE = "PENDIENTE"
+    CHARTER_NEGOCIO_LISTO = "CHARTER_NEGOCIO_LISTO"
     PRE_SDD_LISTO = "PRE_SDD_LISTO"
     APROBADO_PARA_DESARROLLO = "APROBADO_PARA_DESARROLLO"
+    SISTEMA_DISENO_UI_LISTO = "SISTEMA_DISENO_UI_LISTO"
     IMPLEMENTADO_PARA_REVISION = "IMPLEMENTADO_PARA_REVISION"
     RECHAZADO_PARA_REFACTOR = "RECHAZADO_PARA_REFACTOR"
     APROBADO_PARA_DESPLIEGUE = "APROBADO_PARA_DESPLIEGUE"
@@ -35,6 +41,9 @@ class DeliverableStatus(StrEnum):
     BLOQUEADO_POR_CIBERSEGURIDAD = "BLOQUEADO_POR_CIBERSEGURIDAD"
     BLINDADO_APTO_PRODUCCION = "BLINDADO_APTO_PRODUCCION"
     DOCUMENTACION_Y_RAG_LISTOS = "DOCUMENTACION_Y_RAG_LISTOS"
+    ESTRATEGIA_CAPTACION_LISTA = "ESTRATEGIA_CAPTACION_LISTA"
+    EMBUDO_Y_METRICAS_LISTOS = "EMBUDO_Y_METRICAS_LISTOS"
+    LANZAMIENTO_AUTORIZADO = "LANZAMIENTO_AUTORIZADO"
     CICLO_DE_SOFTWARE_COMPLETADO_100 = "CICLO_DE_SOFTWARE_COMPLETADO_100"
     CIRCUIT_BREAKER_HALT = "CIRCUIT_BREAKER_HALT"
 

@@ -34,7 +34,10 @@ class MailService:
         raw_output: str,
     ) -> list[AgentEmailRecord]:
         """Generate and persist handoff email(s) for the next step or detected culprit."""
-        sender_addr = f"{sender_id.value}@agentoffice.local"
+        if sender_id == AgentID.AGENTE_00_CEO:
+            sender_addr = "ceo@agentoffice.local"
+        else:
+            sender_addr = f"{sender_id.value}@agentoffice.local"
         snippet = self._extract_body_snippet(raw_output)
 
         is_critical = header.veredicto in ("RECHAZADO", "BLOQUEADO")
@@ -72,7 +75,7 @@ class MailService:
                 f"Revisar y corregir el código según el reporte adjunto ({artifact_path})."
             )
         else:
-            if sender_id in (AgentID.AGENTE_01_PM, AgentID.AGENTE_10_CISO):
+            if sender_id in (AgentID.AGENTE_00_CEO, AgentID.AGENTE_01_PM, AgentID.AGENTE_10_CISO):
                 priority = "HIGH"
             else:
                 priority = "NORMAL"
@@ -168,8 +171,17 @@ class MailService:
         """Retrieve unread emails for an agent, build Markdown prefix, and mark as read."""
         all_unread = await self.store.get_emails(project_id, unread_only=True)
         # Filter for this agent
+        def matches_agent(recipient: str, a_id: AgentID) -> bool:
+            if a_id == AgentID.AGENTE_00_CEO:
+                return (
+                    "agente_00_ceo" in recipient
+                    or "ceo@" in recipient
+                    or recipient.startswith("ceo@")
+                )
+            return a_id.value in recipient
+
         agent_unread = [
-            email for email in all_unread if agent_id.value in email.recipient
+            email for email in all_unread if matches_agent(email.recipient, agent_id)
         ]
 
         if not agent_unread:

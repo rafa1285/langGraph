@@ -215,6 +215,11 @@ async def get_project_deliverables(
         dictamen_ciso=state.get("dictamen_ciso", ""),
         documentacion_rag=state.get("documentacion_rag", ""),
         estrategia_growth=state.get("estrategia_growth", ""),
+        ceo_charter=state.get("ceo_charter", ""),
+        ui_ux_spec=state.get("ui_ux_spec", ""),
+        marketing_spec=state.get("marketing_spec", ""),
+        sales_analytics_spec=state.get("sales_analytics_spec", ""),
+        ceo_signoff=state.get("ceo_signoff", ""),
     )
 
 

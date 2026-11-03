@@ -379,6 +379,156 @@ culpable_detectado: null
 # Estrategia Growth
 Plan de lanzamiento, métricas operativas y checklist de producción.
 """
+            case AgentID.AGENTE_00_CEO:
+                if any(
+                    k in user_payload
+                    for k in ("Resumen Ejecutivo", "Charter Inicial", "Dictamen CISO", "Acta")
+                ):
+                    return """---
+origen: "agente_00_ceo"
+destino_siguiente: "end_pipeline"
+estado_entregable: "LANZAMIENTO_AUTORIZADO"
+veredicto: "APROBADO"
+puntuacion: 100
+culpable_detectado: null
+---
+
+# Acta de Cierre Ejecutivo y Lanzamiento a Producción
+Auditoría completada para Ingeniería, CISO, Documentación, Marketing y Ventas/BI.
+- Circuit Breaker: INACTIVO (0 fallos críticos).
+- Modelo de Negocio: 100% Zero-Touch validado.
+- Veredicto: Lanzamiento comercial y productivo formalmente autorizado.
+"""
+                return """---
+origen: "agente_00_ceo"
+destino_siguiente: "agente_01_pm"
+estado_entregable: "CHARTER_NEGOCIO_LISTO"
+veredicto: "APROBADO"
+puntuacion: 100
+culpable_detectado: null
+---
+
+# Business Charter y Reglas de Negocio Zero-Touch
+## 1. Visión y Propuesta de Valor
+Plataforma SaaS moderna de verificación y saneamiento de datos con arquitectura cloud.
+## 2. Regla Inquebrantable de Negocio
+Operación 100% Zero-Touch / Self-Service. Queda prohibido depender de comerciales
+humanos o agendas manuales de demos.
+## 3. Economía Unitaria
+CAC proyectado < $25, LTV proyectado > $200. Margen bruto objetivo 85%.
+"""
+            case AgentID.AGENTE_11_UI_UX:
+                return """---
+origen: "agente_11_ui_ux"
+destino_siguiente: "agente_03_laravel, agente_04_fastapi"
+estado_entregable: "SISTEMA_DISENO_UI_LISTO"
+veredicto: "APROBADO"
+puntuacion: 100
+culpable_detectado: null
+---
+
+# Especificación de Diseño UI/UX y Sistema de Diseño
+## 1. Tokens de Diseño y Paleta Semántica
+- Fondo: `bg-slate-950`
+- Primario: `indigo-600`
+- Éxito: `emerald-500`
+
+## 2. Configuración TailwindCSS
+```javascript
+// tailwind.config.js
+module.exports = {
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: {
+        brand: '#4f46e5',
+      }
+    }
+  }
+}
+```
+
+## 3. Flujo de Conversión en 3 Clics
+1. Subida interactiva de lista de correos.
+2. Deduplicación y verificación visual en tiempo real.
+3. Pago directo y descarga sin fricción.
+"""
+            case AgentID.AGENTE_12_MARKETING:
+                return """---
+origen: "agente_12_marketing"
+destino_siguiente: "agente_13_sales_analytics"
+estado_entregable: "ESTRATEGIA_CAPTACION_LISTA"
+veredicto: "APROBADO"
+puntuacion: 100
+culpable_detectado: null
+---
+
+# Estrategia de Marketing Digital y Captación TOFU
+## 1. Configuración de Rastreo Web
+```text
+# robots.txt
+User-agent: *
+Allow: /
+Disallow: /api/
+Sitemap: https://validator-hq-saas.vercel.app/sitemap.xml
+```
+
+## 2. Mapa del Sitio Canónico
+```xml
+<!-- sitemap.xml -->
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://validator-hq-saas.vercel.app/</loc>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>https://validator-hq-saas.vercel.app/docs.html</loc>
+    <priority>0.8</priority>
+  </url>
+</urlset>
+```
+
+## 3. Copywriting Persuasivo y Campañas
+"Verifica millones de correos con deduplicación automática y blindaje anti-SSRF."
+"""
+            case AgentID.AGENTE_13_SALES_ANALYTICS:
+                return """---
+origen: "agente_13_sales_analytics"
+destino_siguiente: "agente_00_ceo"
+estado_entregable: "EMBUDO_Y_METRICAS_LISTOS"
+veredicto: "APROBADO"
+puntuacion: 100
+culpable_detectado: null
+---
+
+# Embudo de Ventas Zero-Touch y Analítica de Negocio (BOFU & BI)
+## 1. Matriz de Precios Stripe
+```json
+// config/stripe_plans.json
+{
+  "currency": "usd",
+  "plans": [
+    {"id": "starter_19", "name": "Starter", "price": 19, "credits": 2500},
+    {"id": "growth_69", "name": "Growth", "price": 69, "credits": 10000},
+    {"id": "scale_199", "name": "Scale Pro", "price": 199, "credits": 50000}
+  ]
+}
+```
+
+## 2. Esquema SQL de Telemetría SaaS
+```sql
+-- database/analytics_schema.sql
+CREATE TABLE IF NOT EXISTS saas_subscriptions (
+    id VARCHAR(64) PRIMARY KEY,
+    tenant_id VARCHAR(64) NOT NULL,
+    plan_id VARCHAR(32) NOT NULL,
+    mrr_cents INTEGER NOT NULL,
+    status VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+```
+"""
             case _:
                 return """---
 origen: "unknown"

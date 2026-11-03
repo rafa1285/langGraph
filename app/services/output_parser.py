@@ -52,10 +52,16 @@ class AgentOutputParser:
 
         if "APROBADO" in clean_upper:
             match agent_id:
+                case AgentID.AGENTE_00_CEO:
+                    if any(k in clean_upper for k in ("LANZAMIENTO", "ACTA", "CIERRE", "SIGNOFF")):
+                        return DeliverableStatus.LANZAMIENTO_AUTORIZADO
+                    return DeliverableStatus.CHARTER_NEGOCIO_LISTO
                 case AgentID.AGENTE_01_PM:
                     return DeliverableStatus.PRE_SDD_LISTO
                 case AgentID.AGENTE_02_ARCHITECT:
                     return DeliverableStatus.APROBADO_PARA_DESARROLLO
+                case AgentID.AGENTE_11_UI_UX:
+                    return DeliverableStatus.SISTEMA_DISENO_UI_LISTO
                 case AgentID.AGENTE_05_QA_PHP | AgentID.AGENTE_06_QA_PYTHON:
                     return DeliverableStatus.APROBADO_PARA_DESPLIEGUE
                 case AgentID.AGENTE_07_DEVOPS:
@@ -66,15 +72,23 @@ class AgentOutputParser:
                     return DeliverableStatus.DOCUMENTACION_Y_RAG_LISTOS
                 case AgentID.AGENTE_09_GROWTH:
                     return DeliverableStatus.CICLO_DE_SOFTWARE_COMPLETADO_100
+                case AgentID.AGENTE_12_MARKETING:
+                    return DeliverableStatus.ESTRATEGIA_CAPTACION_LISTA
+                case AgentID.AGENTE_13_SALES_ANALYTICS:
+                    return DeliverableStatus.EMBUDO_Y_METRICAS_LISTOS
                 case _:
                     return DeliverableStatus.APROBADO_PARA_DESPLIEGUE
 
         # Default fallback per agent role
         match agent_id:
+            case AgentID.AGENTE_00_CEO:
+                return DeliverableStatus.CHARTER_NEGOCIO_LISTO
             case AgentID.AGENTE_01_PM:
                 return DeliverableStatus.PRE_SDD_LISTO
             case AgentID.AGENTE_02_ARCHITECT:
                 return DeliverableStatus.APROBADO_PARA_DESARROLLO
+            case AgentID.AGENTE_11_UI_UX:
+                return DeliverableStatus.SISTEMA_DISENO_UI_LISTO
             case AgentID.AGENTE_03_LARAVEL | AgentID.AGENTE_04_FASTAPI:
                 return DeliverableStatus.IMPLEMENTADO_PARA_REVISION
             case AgentID.AGENTE_05_QA_PHP | AgentID.AGENTE_06_QA_PYTHON:
@@ -87,6 +101,10 @@ class AgentOutputParser:
                 return DeliverableStatus.DOCUMENTACION_Y_RAG_LISTOS
             case AgentID.AGENTE_09_GROWTH:
                 return DeliverableStatus.CICLO_DE_SOFTWARE_COMPLETADO_100
+            case AgentID.AGENTE_12_MARKETING:
+                return DeliverableStatus.ESTRATEGIA_CAPTACION_LISTA
+            case AgentID.AGENTE_13_SALES_ANALYTICS:
+                return DeliverableStatus.EMBUDO_Y_METRICAS_LISTOS
             case _:
                 return DeliverableStatus.CICLO_DE_SOFTWARE_COMPLETADO_100
 
@@ -96,6 +114,27 @@ class AgentOutputParser:
         text_upper = raw_output.upper()
 
         match agent_id:
+            case AgentID.AGENTE_00_CEO:
+                if any(
+                    k in text_upper
+                    for k in ("LANZAMIENTO", "ACTA", "CIERRE", "CISO", "SIGNOFF", "AUTORIZADO")
+                ):
+                    return RoutingHeader(
+                        origen=agent_id.value,
+                        destino_siguiente=AgentID.END_PIPELINE.value,
+                        estado_entregable=DeliverableStatus.LANZAMIENTO_AUTORIZADO,
+                        veredicto="APROBADO",
+                        puntuacion=100,
+                        culpable_detectado=None,
+                    )
+                return RoutingHeader(
+                    origen=agent_id.value,
+                    destino_siguiente=AgentID.AGENTE_01_PM.value,
+                    estado_entregable=DeliverableStatus.CHARTER_NEGOCIO_LISTO,
+                    veredicto="APROBADO",
+                    puntuacion=100,
+                    culpable_detectado=None,
+                )
             case AgentID.AGENTE_01_PM:
                 return RoutingHeader(
                     origen=agent_id.value,
@@ -218,6 +257,36 @@ class AgentOutputParser:
                     origen=agent_id.value,
                     destino_siguiente=AgentID.END_PIPELINE.value,
                     estado_entregable=DeliverableStatus.CICLO_DE_SOFTWARE_COMPLETADO_100,
+                    veredicto="APROBADO",
+                    puntuacion=100,
+                    culpable_detectado=None,
+                )
+            case AgentID.AGENTE_11_UI_UX:
+                next_dest = (
+                    f"{AgentID.AGENTE_03_LARAVEL.value}, {AgentID.AGENTE_04_FASTAPI.value}"
+                )
+                return RoutingHeader(
+                    origen=agent_id.value,
+                    destino_siguiente=next_dest,
+                    estado_entregable=DeliverableStatus.SISTEMA_DISENO_UI_LISTO,
+                    veredicto="APROBADO",
+                    puntuacion=100,
+                    culpable_detectado=None,
+                )
+            case AgentID.AGENTE_12_MARKETING:
+                return RoutingHeader(
+                    origen=agent_id.value,
+                    destino_siguiente=AgentID.AGENTE_13_SALES_ANALYTICS.value,
+                    estado_entregable=DeliverableStatus.ESTRATEGIA_CAPTACION_LISTA,
+                    veredicto="APROBADO",
+                    puntuacion=100,
+                    culpable_detectado=None,
+                )
+            case AgentID.AGENTE_13_SALES_ANALYTICS:
+                return RoutingHeader(
+                    origen=agent_id.value,
+                    destino_siguiente=AgentID.AGENTE_00_CEO.value,
+                    estado_entregable=DeliverableStatus.EMBUDO_Y_METRICAS_LISTOS,
                     veredicto="APROBADO",
                     puntuacion=100,
                     culpable_detectado=None,

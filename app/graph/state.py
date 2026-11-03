@@ -28,8 +28,10 @@ class SoftwareFactoryState(TypedDict):
 
     project_id: str
     idea_inicial: str
+    ceo_charter: str
     pre_sdd_doc: str
     sdd_arquitectura: str
+    ui_ux_spec: str
     requiere_php: bool
     requiere_python: bool
     codigo_php: str
@@ -40,6 +42,10 @@ class SoftwareFactoryState(TypedDict):
     dictamen_ciso: str
     documentacion_rag: str
     estrategia_growth: str
+    marketing_spec: str
+    sales_analytics_spec: str
+    ceo_signoff: str
+    ceo_approved: bool
     status_qa_php: DeliverableStatus
     status_qa_python: DeliverableStatus
     status_ciso: DeliverableStatus
@@ -48,6 +54,9 @@ class SoftwareFactoryState(TypedDict):
     halt_reason: str | None
     retry_counts: Annotated[dict[str, int], merge_retry_counts]
     execution_history: Annotated[list[StepExecutionRecord], append_execution_records]
+
+
+ProjectState = SoftwareFactoryState
 
 
 def create_initial_state(
@@ -60,8 +69,10 @@ def create_initial_state(
     return {
         "project_id": project_id,
         "idea_inicial": idea_inicial,
+        "ceo_charter": "",
         "pre_sdd_doc": "",
         "sdd_arquitectura": "",
+        "ui_ux_spec": "",
         "requiere_php": requiere_php,
         "requiere_python": requiere_python,
         "codigo_php": "",
@@ -72,6 +83,10 @@ def create_initial_state(
         "dictamen_ciso": "",
         "documentacion_rag": "",
         "estrategia_growth": "",
+        "marketing_spec": "",
+        "sales_analytics_spec": "",
+        "ceo_signoff": "",
+        "ceo_approved": False,
         "status_qa_php": DeliverableStatus.PENDIENTE,
         "status_qa_python": DeliverableStatus.PENDIENTE,
         "status_ciso": DeliverableStatus.PENDIENTE,
