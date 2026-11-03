@@ -170,6 +170,8 @@ echo "[LocalDeployer] Despliegue local completado correctamente."
                         cwd=build_path,
                         capture_output=True,
                         text=True,
+                        encoding="utf-8",
+                        errors="replace",
                         timeout=15,
                     )
                     return res.returncode == 0
@@ -311,6 +313,39 @@ echo "[LocalDeployer] Despliegue local completado correctamente."
                             ct.write_text(new_text, encoding="utf-8")
                             ciso_patch_applied = True
 
+        # Ensure valid pyproject.toml in build directory for Docker build
+        pyproject_file = build_dir / "pyproject.toml"
+        if pyproject_file.exists():
+            content = pyproject_file.read_text(encoding="utf-8")
+            if "[build-system]" not in content and "[project]" not in content:
+                valid_pyproject = """[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agentoffice-engine"
+version = "0.1.0"
+description = "FastAPI engine service"
+dependencies = [
+    "fastapi>=0.110.0",
+    "uvicorn[standard]>=0.28.0",
+    "pydantic>=2.6.0",
+    "pydantic-settings>=2.2.0",
+    "redis[hiredis]>=5.0.0",
+    "sqlalchemy>=2.0.0",
+    "asyncpg>=0.29.0",
+    "aiodns>=3.1.0",
+    "pyyaml>=6.0.0",
+    "httpx>=0.27.0",
+]
+"""
+                pyproject_file.write_text(valid_pyproject, encoding="utf-8")
+
+        dockerfile_rel = "Dockerfile"
+        if not (build_dir / "Dockerfile").exists():
+            if (build_dir / "docker" / "fastapi" / "Dockerfile").exists():
+                dockerfile_rel = "docker/fastapi/Dockerfile"
+
         # Generate docker-compose.local.yml with non-conflicting host ports
         local_compose = f"""version: '3.8'
 
@@ -350,7 +385,7 @@ services:
   engine_fastapi:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: {dockerfile_rel}
     container_name: agentoffice_engine_{project_id}
     restart: unless-stopped
     environment:
@@ -386,10 +421,12 @@ REDIS_URL=redis://localhost:16379/0
 
         containers_started = False
         health_status = "untested"
+        error_details: str | None = None
 
         if start_containers:
             if shutil.which("docker") is not None:
                 def _run_docker_up() -> bool:
+                    nonlocal error_details
                     try:
                         res = subprocess.run(
                             [
@@ -404,10 +441,27 @@ REDIS_URL=redis://localhost:16379/0
                             cwd=build_dir,
                             capture_output=True,
                             text=True,
-                            timeout=60,
+                            encoding="utf-8",
+                            errors="replace",
+                            timeout=180,
                         )
-                        return res.returncode == 0
+                        if res.returncode != 0:
+                            err_msg = (res.stderr or res.stdout or "").strip()
+                            error_details = err_msg
+                            print(
+                                f"\n[Docker Error] Fallo al iniciar contenedores "
+                                f"(código {res.returncode}):\n{err_msg}\n"
+                            )
+                            logger.error(
+                                "Docker compose up falló (código %s): %s",
+                                res.returncode,
+                                err_msg,
+                            )
+                            return False
+                        return True
                     except Exception as exc:
+                        error_details = str(exc)
+                        print(f"\n[Docker Error] Excepción al ejecutar Docker compose: {exc}\n")
                         logger.warning("Fallo al levantar contenedores Docker: %s", exc)
                         return False
 
@@ -430,6 +484,7 @@ REDIS_URL=redis://localhost:16379/0
                     health_status = "failed_to_start"
             else:
                 health_status = "docker_cli_unavailable"
+                error_details = "Docker CLI no disponible en el sistema PATH."
 
         return {
             "project_id": project_id,
@@ -443,4 +498,5 @@ REDIS_URL=redis://localhost:16379/0
             },
             "containers_started": containers_started,
             "health_check": health_status,
+            "error_details": error_details,
         }

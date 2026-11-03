@@ -136,7 +136,12 @@ class RealMailBridge:
     ) -> bool:
         """Synchronously connect to IMAP SSL, create hierarchy folders and append message."""
         if not self.mail_username or not self.mail_password:
-            logger.warning("Credenciales de correo no configuradas; omitiendo sincronización IMAP")
+            err = (
+                "[Strato IMAP Error] MAIL_USERNAME o MAIL_PASSWORD no configurados "
+                "en .env o entorno. No se pudo sincronizar el correo con Strato."
+            )
+            print(err)
+            logger.error(err)
             return False
 
         imap: imaplib.IMAP4_SSL | None = None
@@ -151,26 +156,61 @@ class RealMailBridge:
             parts = ["INBOX", "AgentOffice", email_record.project_id, recipient_agent]
             for i in range(2, len(parts) + 1):
                 folder_name = sep.join(parts[:i])
+                quoted_folder = f'"{folder_name}"'
                 try:
-                    imap.create(f'"{folder_name}"')
+                    imap.create(quoted_folder)
+                except Exception:
+                    pass
+                try:
+                    imap.subscribe(quoted_folder)
                 except Exception:
                     pass
 
             target_folder = sep.join(parts)
             date_time = imaplib.Time2Internaldate(time.time())
+
+            # 1. Append to agent subfolder
             imap.append(
                 f'"{target_folder}"',
                 "(\\Seen)",
                 date_time,
                 msg.as_bytes(),
             )
+
+            # 2. Append copy to primary INBOX with recipient tag
+            inbox_subject = (
+                f"[{email_record.project_id}][{recipient_agent}] {email_record.subject}"
+            )
+            inbox_msg = self.build_rfc5322_message(
+                email_record,
+                deliverable_path=None,
+            )
+            del inbox_msg["Subject"]
+            inbox_msg["Subject"] = inbox_subject
+
+            try:
+                imap.append(
+                    "INBOX",
+                    "(\\Seen)",
+                    date_time,
+                    inbox_msg.as_bytes(),
+                )
+            except Exception as e_inbox:
+                logger.warning("No se pudo duplicar correo en INBOX principal: %s", e_inbox)
+
+            # 3. Print confirmation line
+            print(
+                f"[Strato IMAP] Correo depositado en carpeta '{target_folder}' "
+                f"e 'INBOX' (ID: {email_record.id})"
+            )
             return True
         except Exception as exc:
-            logger.error(
-                "Fallo al sincronizar correo en IMAP (%s): %s",
-                email_record.id,
-                exc,
+            err_msg = (
+                f"[Strato IMAP Error] Fallo al sincronizar correo en Strato "
+                f"({email_record.id}): {exc}"
             )
+            print(err_msg)
+            logger.error(err_msg)
             return False
         finally:
             if imap is not None:
@@ -182,7 +222,12 @@ class RealMailBridge:
     def _send_smtp_sync(self, msg: EmailMessage) -> bool:
         """Synchronously send message via Strato SMTP SSL."""
         if not self.mail_username or not self.mail_password:
-            logger.warning("Credenciales de correo no configuradas; omitiendo envío SMTP")
+            err = (
+                "[Strato SMTP Error] MAIL_USERNAME o MAIL_PASSWORD no configurados; "
+                "omitiendo envío SMTP."
+            )
+            print(err)
+            logger.error(err)
             return False
 
         server: smtplib.SMTP_SSL | None = None
@@ -192,7 +237,9 @@ class RealMailBridge:
             server.send_message(msg)
             return True
         except Exception as exc:
-            logger.error("Fallo al enviar correo por SMTP: %s", exc)
+            err_msg = f"[Strato SMTP Error] Fallo al enviar correo por SMTP: {exc}"
+            print(err_msg)
+            logger.error(err_msg)
             return False
         finally:
             if server is not None:
@@ -208,9 +255,17 @@ class RealMailBridge:
         deliverable_path: Path | str | None = None,
     ) -> bool:
         """Build RFC 5322 message, append to agent IMAP folder, and optionally dispatch SMTP."""
+        if not self.mail_username or not self.mail_password:
+            print("[Strato Error] Credenciales de correo no configuradas.")
+            return False
+
         msg = self.build_rfc5322_message(email_record, deliverable_path=deliverable_path)
         imap_ok = await asyncio.to_thread(self._sync_imap_sync, email_record, msg)
+        if not imap_ok:
+            return False
+
         smtp_ok = True
         if send_smtp:
             smtp_ok = await asyncio.to_thread(self._send_smtp_sync, msg)
+
         return imap_ok and smtp_ok

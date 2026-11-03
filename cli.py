@@ -505,6 +505,8 @@ async def deploy_local_command(project_id: str, up: bool) -> None:
     if up:
         print(f"Contenedores Iniciados     : {containers_status}")
         print(f"Estado de Salud (Health)   : {res['health_check']}")
+        if not res["containers_started"] and res.get("error_details"):
+            print(f"Detalle del Error          : {res['error_details']}")
     print("------------------------------------------------------------\n")
 
 

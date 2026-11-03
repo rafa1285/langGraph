@@ -15,7 +15,11 @@ from app.services.backfill_service import ProjectBackfillService
 from app.services.github_publisher import GitHubPublisherService
 from app.services.local_deployer import LocalSandboxDeployer
 from app.services.mail_service import MailService
-from app.services.notion_mcp_service import LocalNotionMirrorAdapter
+from app.services.notion_mcp_service import (
+    LocalNotionMirrorAdapter,
+    markdown_to_notion_blocks,
+    normalize_notion_code_language,
+)
 from app.services.office_store import OfficeStore
 from app.services.real_mail_bridge import RealMailBridge
 from cli import backfill_command, deploy_local_command, publish_git_command
@@ -103,6 +107,7 @@ async def test_real_mail_bridge_sync_imap_and_smtp(test_env: dict[str, Any]) -> 
     mock_imap = MagicMock()
     mock_imap.list.return_value = ("OK", [b'(\\HasNoChildren) "." "INBOX"'])
     mock_imap.create.return_value = ("OK", [b"Folder created"])
+    mock_imap.subscribe.return_value = ("OK", [b"Folder subscribed"])
     mock_imap.append.return_value = ("OK", [b"Message appended"])
 
     mock_smtp = MagicMock()
@@ -117,7 +122,8 @@ async def test_real_mail_bridge_sync_imap_and_smtp(test_env: dict[str, Any]) -> 
         # Verify IMAP calls
         mock_imap.login.assert_called_once_with("testbot@strato.de", "supersecretpassword")
         assert mock_imap.create.call_count >= 2
-        mock_imap.append.assert_called_once()
+        assert mock_imap.subscribe.call_count >= 2
+        assert mock_imap.append.call_count >= 2
         mock_imap.logout.assert_called_once()
 
         # Verify SMTP calls
@@ -409,3 +415,96 @@ culpable_detectado: null
         },
     ):
         await publish_git_command("proj_cli_test", "cli-repo", public=False)
+
+
+def test_notion_code_block_language_normalization() -> None:
+    """Test strict language normalization against Notion API allowed enums."""
+    # Mappings
+    assert normalize_notion_code_language("dockerfile") == "docker"
+    assert normalize_notion_code_language("docker") == "docker"
+    assert normalize_notion_code_language("sh") == "bash"
+    assert normalize_notion_code_language("zsh") == "bash"
+    assert normalize_notion_code_language("powershell") == "bash"
+    assert normalize_notion_code_language("ps1") == "bash"
+    assert normalize_notion_code_language("yml") == "yaml"
+    assert normalize_notion_code_language("py") == "python"
+    assert normalize_notion_code_language("js") == "javascript"
+    assert normalize_notion_code_language("ts") == "typescript"
+
+    # Unsupported languages converted to plain text
+    assert normalize_notion_code_language("toml") == "plain text"
+    assert normalize_notion_code_language("ini") == "plain text"
+    assert normalize_notion_code_language("gherkin") == "plain text"
+    assert normalize_notion_code_language("conf") == "plain text"
+    assert normalize_notion_code_language("csv") == "plain text"
+    assert normalize_notion_code_language("nginx") == "plain text"
+    assert normalize_notion_code_language("") == "plain text"
+    assert normalize_notion_code_language(None) == "plain text"
+
+    # Test conversion in markdown_to_notion_blocks
+    sample_md = """# Title
+```dockerfile
+FROM python:3.12-slim
+```
+
+```toml
+[tool.poetry]
+name = "demo"
+```
+"""
+    blocks = markdown_to_notion_blocks(sample_md)
+    code_blocks = [b for b in blocks if b["type"] == "code"]
+    assert len(code_blocks) == 2
+    assert code_blocks[0]["code"]["language"] == "docker"
+    assert code_blocks[1]["code"]["language"] == "plain text"
+
+
+@pytest.mark.asyncio
+async def test_real_mail_bridge_missing_credentials_fails() -> None:
+    """Test that missing credentials log and return False without throwing unhandled exceptions."""
+    bridge = RealMailBridge(mail_username=None, mail_password=None)
+    record = AgentEmailRecord(
+        project_id="p1",
+        step_number=1,
+        sender="agente_01_pm@agentoffice.local",
+        recipient="agente_02_architect@agentoffice.local",
+        cc=[],
+        subject="Test",
+        body_summary="Body",
+        attached_deliverable_path="",
+        priority="NORMAL",
+    )
+    ok = await bridge.sync_email_record(record)
+    assert ok is False
+
+
+@pytest.mark.asyncio
+async def test_local_deployer_docker_failure_captures_error(test_env: dict[str, Any]) -> None:
+    """Test that docker compose up failure captures error_details in return payload."""
+    workspaces = test_env["workspaces"]
+    proj_dir = workspaces / "proj_fail_test"
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    build_dir = proj_dir / "build"
+    build_dir.mkdir(parents=True, exist_ok=True)
+
+    deployer = LocalSandboxDeployer()
+
+    mock_res = MagicMock()
+    mock_res.returncode = 1
+    mock_res.stderr = "Error: port 18000 is already allocated"
+    mock_res.stdout = ""
+
+    with (
+        patch("shutil.which", return_value="C:\\Program Files\\Docker\\docker.exe"),
+        patch("subprocess.run", return_value=mock_res),
+    ):
+        res = await deployer.prepare_and_check_local_stack(
+            project_id="proj_fail_test",
+            start_containers=True,
+            workspaces_dir=workspaces,
+        )
+
+        assert res["containers_started"] is False
+        assert res["health_check"] == "failed_to_start"
+        assert res["error_details"] is not None
+        assert "port 18000 is already allocated" in res["error_details"]

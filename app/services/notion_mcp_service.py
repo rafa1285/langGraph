@@ -20,29 +20,73 @@ NOTION_API_VERSION = "2022-06-28"
 NOTION_MAX_TEXT_CHUNK = 2000
 NOTION_MAX_BLOCKS_PER_REQUEST = 100
 
-NOTION_LANGUAGES: dict[str, str] = {
-    "python": "python",
-    "py": "python",
-    "php": "php",
-    "bash": "bash",
+VALID_NOTION_LANGUAGES: set[str] = {
+    "plain text",
+    "python",
+    "php",
+    "sql",
+    "yaml",
+    "json",
+    "bash",
+    "shell",
+    "docker",
+    "html",
+    "css",
+    "javascript",
+    "typescript",
+    "markdown",
+    "c",
+    "c++",
+    "java",
+    "go",
+    "rust",
+}
+
+LANGUAGE_NORMALIZATION_MAP: dict[str, str] = {
+    "dockerfile": "docker",
+    "docker": "docker",
     "sh": "bash",
+    "zsh": "bash",
+    "powershell": "bash",
+    "ps1": "bash",
     "shell": "shell",
-    "yaml": "yaml",
+    "bash": "bash",
     "yml": "yaml",
-    "json": "json",
-    "javascript": "javascript",
+    "yaml": "yaml",
+    "py": "python",
+    "python": "python",
     "js": "javascript",
-    "typescript": "typescript",
+    "javascript": "javascript",
     "ts": "typescript",
+    "typescript": "typescript",
+    "php": "php",
+    "sql": "sql",
+    "json": "json",
     "html": "html",
     "css": "css",
-    "sql": "sql",
-    "dockerfile": "dockerfile",
     "markdown": "markdown",
     "md": "markdown",
-    "ini": "plain text",
-    "conf": "plain text",
+    "c": "c",
+    "c++": "c++",
+    "cpp": "c++",
+    "java": "java",
+    "go": "go",
+    "rust": "rust",
+    "rs": "rust",
 }
+
+NOTION_LANGUAGES: dict[str, str] = LANGUAGE_NORMALIZATION_MAP
+
+
+def normalize_notion_code_language(lang: str | None) -> str:
+    """Normalize code block language to Notion-compatible enum or fallback to 'plain text'."""
+    if not lang:
+        return "plain text"
+    token = lang.split(":")[0].strip().split()[0].lower() if lang.strip() else ""
+    mapped = LANGUAGE_NORMALIZATION_MAP.get(token, token)
+    if mapped in VALID_NOTION_LANGUAGES:
+        return mapped
+    return "plain text"
 
 
 def build_rich_text(content: str, max_chunk: int = NOTION_MAX_TEXT_CHUNK) -> list[dict[str, Any]]:
@@ -104,7 +148,7 @@ def build_bullet_item(text: str) -> dict[str, Any]:
 
 def build_code_block(code: str, language: str = "plain text") -> list[dict[str, Any]]:
     """Create one or more Notion code blocks respecting rich_text chunk limits."""
-    notion_lang = NOTION_LANGUAGES.get(language.lower().strip(), "plain text")
+    notion_lang = normalize_notion_code_language(language)
     rich_chunks = build_rich_text(code, max_chunk=NOTION_MAX_TEXT_CHUNK)
 
     # Notion permits maximum 100 text elements in a single rich_text array
@@ -621,6 +665,21 @@ class NotionMCPAdapter:
         """Create Notion parent page for the project and cache page ID."""
         await self._mirror.create_project_hub(project_id, title, summary)
 
+        # Check in-memory cache
+        if project_id in self._hub_pages:
+            return self._hub_pages[project_id]
+
+        # Check on-disk cache for idempotency across runs
+        hub_cache_file = (
+            self._mirror.workspaces_dir / project_id / "notion_mirror" / "notion_hub_id.txt"
+        )
+        if hub_cache_file.exists():
+            cached_id = hub_cache_file.read_text(encoding="utf-8").strip()
+            if cached_id:
+                self._hub_pages[project_id] = cached_id
+                logger.info("Reutilizando Project Hub existente de Notion: %s", cached_id)
+                return cached_id
+
         if not self.parent_page_id:
             logger.info(
                 "NOTION_PARENT_PAGE_ID no configurado; operando con registro espejo para %s.",
@@ -655,11 +714,29 @@ class NotionMCPAdapter:
             "children": initial_blocks[:NOTION_MAX_BLOCKS_PER_REQUEST],
         }
 
-        resp = await client.post("/pages", json=payload)
-        resp.raise_for_status()
+        try:
+            resp = await client.post("/pages", json=payload)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            error_body = exc.response.text
+            print(
+                f"\n[Notion API Error] HTTP {exc.response.status_code} "
+                f"en {exc.request.url}:\n{error_body}\n"
+            )
+            logger.error("Notion API Error (%s): %s", exc.response.status_code, error_body)
+            raise
+
         data = resp.json()
         page_id = str(data["id"])
         self._hub_pages[project_id] = page_id
+
+        # Persist hub id to disk
+        try:
+            hub_cache_file.parent.mkdir(parents=True, exist_ok=True)
+            hub_cache_file.write_text(page_id, encoding="utf-8")
+        except Exception:
+            pass
+
         return page_id
 
     async def append_deliverable_page(
@@ -690,6 +767,22 @@ class NotionMCPAdapter:
         if not self.parent_page_id:
             return f"notion_subpage_{project_id}_{step_number}"
 
+        # Idempotency check: check if subpage was already uploaded
+        synced_pages_file = (
+            self._mirror.workspaces_dir / project_id / "notion_mirror" / "notion_synced_pages.json"
+        )
+        synced_pages: dict[str, str] = {}
+        if synced_pages_file.exists():
+            try:
+                synced_pages = json.loads(synced_pages_file.read_text(encoding="utf-8"))
+            except Exception:
+                synced_pages = {}
+
+        page_key = f"{step_number:02d}_{agent_id}"
+        if page_key in synced_pages:
+            logger.info("Página de Notion ya sincronizada previamente: %s", page_key)
+            return synced_pages[page_key]
+
         client = self._get_client()
         blocks = markdown_to_notion_blocks(markdown_content)
 
@@ -707,18 +800,45 @@ class NotionMCPAdapter:
             "children": first_batch,
         }
 
-        resp = await client.post("/pages", json=subpage_payload)
-        resp.raise_for_status()
+        try:
+            resp = await client.post("/pages", json=subpage_payload)
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            error_body = exc.response.text
+            print(
+                f"\n[Notion API Error] HTTP {exc.response.status_code} "
+                f"al crear subpágina {page_title}:\n{error_body}\n"
+            )
+            logger.error("Notion API Error (%s): %s", exc.response.status_code, error_body)
+            raise
+
         subpage_id = str(resp.json()["id"])
 
         # 2. Append remaining blocks in batches of 100
         for i in range(NOTION_MAX_BLOCKS_PER_REQUEST, len(blocks), NOTION_MAX_BLOCKS_PER_REQUEST):
             batch = blocks[i : i + NOTION_MAX_BLOCKS_PER_REQUEST]
-            patch_resp = await client.patch(
-                f"/blocks/{subpage_id}/children",
-                json={"children": batch},
-            )
-            patch_resp.raise_for_status()
+            try:
+                patch_resp = await client.patch(
+                    f"/blocks/{subpage_id}/children",
+                    json={"children": batch},
+                )
+                patch_resp.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                error_body = exc.response.text
+                print(
+                    f"\n[Notion API Error] HTTP {exc.response.status_code} "
+                    f"al anexar bloques a {page_title}:\n{error_body}\n"
+                )
+                logger.error("Notion API Error (%s): %s", exc.response.status_code, error_body)
+                raise
+
+        # Save uploaded page key
+        synced_pages[page_key] = subpage_id
+        try:
+            synced_pages_file.parent.mkdir(parents=True, exist_ok=True)
+            synced_pages_file.write_text(json.dumps(synced_pages, indent=2), encoding="utf-8")
+        except Exception:
+            pass
 
         return subpage_id
 
@@ -744,11 +864,21 @@ class NotionMCPAdapter:
             emoji="✉️",
         )
 
-        resp = await client.patch(
-            f"/blocks/{hub_id}/children",
-            json={"children": [callout, build_divider()]},
-        )
-        resp.raise_for_status()
+        try:
+            resp = await client.patch(
+                f"/blocks/{hub_id}/children",
+                json={"children": [callout, build_divider()]},
+            )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            error_body = exc.response.text
+            print(
+                f"\n[Notion API Error] HTTP {exc.response.status_code} "
+                f"al registrar correo en hub:\n{error_body}\n"
+            )
+            logger.error("Notion API Error (%s): %s", exc.response.status_code, error_body)
+            raise
+
         return "notion_block_email"
 
     async def update_project_status(
@@ -771,10 +901,18 @@ class NotionMCPAdapter:
             emoji="📊",
         )
         try:
-            await client.patch(
+            resp = await client.patch(
                 f"/blocks/{hub_id}/children",
                 json={"children": [status_callout]},
             )
+            resp.raise_for_status()
+        except httpx.HTTPStatusError as exc:
+            error_body = exc.response.text
+            print(
+                f"\n[Notion API Error] HTTP {exc.response.status_code} "
+                f"al actualizar estado en hub:\n{error_body}\n"
+            )
+            logger.error("Notion API Error (%s): %s", exc.response.status_code, error_body)
         except Exception as exc:
             logger.warning("Fallo al actualizar estado en Notion para %s: %s", project_id, exc)
 

@@ -205,6 +205,8 @@ class CodeMaterializerService:
                 capture_output=True,
                 check=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             subprocess.run(
                 ["git", "add", "."],
@@ -212,6 +214,8 @@ class CodeMaterializerService:
                 capture_output=True,
                 check=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             subprocess.run(
                 [
@@ -228,6 +232,8 @@ class CodeMaterializerService:
                 capture_output=True,
                 check=True,
                 text=True,
+                encoding="utf-8",
+                errors="replace",
             )
             return True
         except (subprocess.CalledProcessError, OSError) as exc:
