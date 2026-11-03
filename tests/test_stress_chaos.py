@@ -51,7 +51,7 @@ async def test_chaos_scenario_perfect_storm_and_ciso_cross_bounce(
     config: RunnableConfig = {"configurable": {"thread_id": project_id}}
 
     async with AsyncSqliteSaver.from_conn_string(str(db_file)) as checkpointer:
-        graph = compile_factory_graph(nodes, checkpointer=checkpointer)
+        graph = compile_factory_graph(nodes, checkpointer=checkpointer, full_13_agents=False)
         final_state = await graph.ainvoke(initial_state, config=config)
 
     # Invocaciones exactas por agente LLM
@@ -115,7 +115,7 @@ async def test_chaos_scenario_circuit_breaker_collapse_on_ciso(
     config: RunnableConfig = {"configurable": {"thread_id": project_id}}
 
     async with AsyncSqliteSaver.from_conn_string(str(db_file)) as checkpointer:
-        graph = compile_factory_graph(nodes, checkpointer=checkpointer)
+        graph = compile_factory_graph(nodes, checkpointer=checkpointer, full_13_agents=False)
         final_state = await graph.ainvoke(initial_state, config=config)
 
         # Consultar checkpoint guardado en SQLite mediante aget_state
@@ -169,7 +169,7 @@ async def test_chaos_scenario_disk_artifacts_audit(tmp_path: Path) -> None:
     config: RunnableConfig = {"configurable": {"thread_id": project_id}}
 
     async with AsyncSqliteSaver.from_conn_string(str(db_file)) as checkpointer:
-        graph = compile_factory_graph(nodes, checkpointer=checkpointer)
+        graph = compile_factory_graph(nodes, checkpointer=checkpointer, full_13_agents=False)
         final_state = await graph.ainvoke(initial_state, config=config)
 
     workspace_dir = tmp_path / "workspaces" / project_id

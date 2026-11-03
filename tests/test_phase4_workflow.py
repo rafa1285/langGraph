@@ -25,7 +25,7 @@ async def test_workflow_happy_path_hybrid(tmp_path: Path) -> None:
     nodes = FactoryNodes(gateway, loader, writer)
 
     checkpointer = MemorySaver()
-    graph = compile_factory_graph(nodes, checkpointer=checkpointer)
+    graph = compile_factory_graph(nodes, checkpointer=checkpointer, full_13_agents=False)
 
     project_id = "test_happy_path"
     initial_state = create_initial_state(
@@ -75,7 +75,7 @@ async def test_workflow_asymmetric_qa_refactor_loop(tmp_path: Path) -> None:
     nodes = FactoryNodes(gateway, loader, writer)
 
     checkpointer = MemorySaver()
-    graph = compile_factory_graph(nodes, checkpointer=checkpointer)
+    graph = compile_factory_graph(nodes, checkpointer=checkpointer, full_13_agents=False)
 
     project_id = "test_asymm_qa"
     initial_state = create_initial_state(
@@ -117,7 +117,7 @@ async def test_workflow_ciso_blockage_and_re_audit(tmp_path: Path) -> None:
     nodes = FactoryNodes(gateway, loader, writer)
 
     checkpointer = MemorySaver()
-    graph = compile_factory_graph(nodes, checkpointer=checkpointer)
+    graph = compile_factory_graph(nodes, checkpointer=checkpointer, full_13_agents=False)
 
     project_id = "test_ciso_block"
     initial_state = create_initial_state(
@@ -153,7 +153,7 @@ async def test_workflow_circuit_breaker_halts(tmp_path: Path) -> None:
     nodes = FactoryNodes(gateway, loader, writer)
 
     checkpointer = MemorySaver()
-    graph = compile_factory_graph(nodes, checkpointer=checkpointer)
+    graph = compile_factory_graph(nodes, checkpointer=checkpointer, full_13_agents=False)
 
     project_id = "test_circuit_breaker"
     initial_state = create_initial_state(

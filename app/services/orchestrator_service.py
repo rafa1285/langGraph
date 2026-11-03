@@ -49,11 +49,13 @@ class OrchestratorService:
         checkpointer: BaseCheckpointSaver[Any] | None = None,
         knowledge_sync: KnowledgeSyncPort | None = None,
         event_bus: ConnectionManager | None = None,
+        full_13_agents: bool = True,
     ) -> None:
         """Initialize the Orchestrator with storage and service dependencies."""
         from app.graph.nodes import FactoryNodes
         from app.graph.workflow import compile_factory_graph
 
+        self.full_13_agents = full_13_agents
         self.db_path = db_path
         self.llm_gateway = (
             llm_gateway
@@ -90,6 +92,7 @@ class OrchestratorService:
             self.graph: FactoryGraph = compile_factory_graph(
                 self.nodes,
                 checkpointer=self.checkpointer,
+                full_13_agents=self.full_13_agents,
             )
         else:
             self.graph = cast("FactoryGraph", None)
@@ -102,7 +105,11 @@ class OrchestratorService:
             Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
             self._saver_cm = AsyncSqliteSaver.from_conn_string(self.db_path)
             self.checkpointer = await self._saver_cm.__aenter__()
-            self.graph = compile_factory_graph(self.nodes, checkpointer=self.checkpointer)
+            self.graph = compile_factory_graph(
+                self.nodes,
+                checkpointer=self.checkpointer,
+                full_13_agents=self.full_13_agents,
+            )
 
     async def close(self) -> None:
         """Close SQLite checkpointer context if managed internally."""
@@ -211,10 +218,13 @@ class OrchestratorService:
 
         history = snapshot.values.get("execution_history", [])
         last_record = history[-1] if history else None
-        completed_status = DeliverableStatus.CICLO_DE_SOFTWARE_COMPLETADO_100
+        completed_statuses = (
+            DeliverableStatus.CICLO_DE_SOFTWARE_COMPLETADO_100,
+            DeliverableStatus.LANZAMIENTO_AUTORIZADO,
+        )
         is_completed = (
-            last_record is not None and last_record.status == completed_status
-        ) or snapshot.values.get("current_status") == completed_status
+            last_record is not None and last_record.status in completed_statuses
+        ) or snapshot.values.get("current_status") in completed_statuses
 
         blocked_status = DeliverableStatus.BLOQUEADO_POR_CIBERSEGURIDAD
         if not snapshot.next and not is_completed:

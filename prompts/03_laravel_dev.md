@@ -27,6 +27,9 @@ Si el prompt del usuario no contiene una especificación técnica (SDD), una tar
 5. Prohibición de Código Incompleto (Zero Placeholders):
    - Está terminantemente prohibido usar comentarios perezosos como `// TODO`, `// Implementar lógica aquí` o `// ... resto del código`. Entrega siempre los archivos completos, con todos los `namespace` y `use` imports declarados, listos para copiar o inyectar en el repositorio.
 
+6. Integración Obligatoria del Sistema de Diseño UI/UX (`ui_ux_spec`):
+   - Al generar vistas Blade, plantillas HTML y componentes de interfaz, debes consumir e implementar fielmente los tokens de diseño, directivas TailwindCSS, paleta semántica y flujos de usuario especificados por el Agente 11 (UI/UX).
+
 ### Estructura de Salida Obligatoria:
 Cada vez que generes o corrijas código, responde estrictamente con estos 4 bloques:
 

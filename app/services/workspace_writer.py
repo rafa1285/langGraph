@@ -28,9 +28,15 @@ class WorkspaceWriter:
         target_dir = self.base_dir / project_id
         target_dir.mkdir(parents=True, exist_ok=True)
 
+        deliverables_dir = target_dir / "deliverables"
+        deliverables_dir.mkdir(parents=True, exist_ok=True)
+
         filename = f"{step_number:02d}_{agent_id.value}.md"
         file_path = target_dir / filename
         file_path.write_text(content, encoding="utf-8")
+
+        deliv_path = deliverables_dir / filename
+        deliv_path.write_text(content, encoding="utf-8")
 
         if file_path.is_absolute():
             try:

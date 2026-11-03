@@ -8,6 +8,8 @@ from app.graph.state import (
     merge_retry_counts,
 )
 from app.graph.workflow import (
+    NODE_CEO_CHARTER,
+    NODE_CEO_SIGNOFF,
     FactoryGraph,
     compile_factory_graph,
     route_after_architect,
@@ -15,11 +17,14 @@ from app.graph.workflow import (
     route_after_qa_php,
     route_after_qa_python,
     route_after_sync_barrier,
+    route_after_ui_ux,
 )
 
 __all__ = [
     "FactoryGraph",
     "FactoryNodes",
+    "NODE_CEO_CHARTER",
+    "NODE_CEO_SIGNOFF",
     "SoftwareFactoryState",
     "_build_user_payload",
     "append_execution_records",
@@ -31,4 +36,5 @@ __all__ = [
     "route_after_qa_php",
     "route_after_qa_python",
     "route_after_sync_barrier",
+    "route_after_ui_ux",
 ]

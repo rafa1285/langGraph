@@ -22,6 +22,21 @@ def route_after_architect(state: SoftwareFactoryState) -> list[str]:
     return [AgentID.AGENTE_03_LARAVEL.value, AgentID.AGENTE_04_FASTAPI.value]
 
 
+def route_after_ui_ux(state: SoftwareFactoryState) -> list[str]:
+    """Fan-out to Laravel and/or FastAPI development nodes following UI/UX design."""
+    req_php = state.get("requiere_php", True)
+    req_python = state.get("requiere_python", True)
+
+    if req_php and req_python:
+        return [AgentID.AGENTE_03_LARAVEL.value, AgentID.AGENTE_04_FASTAPI.value]
+    if req_php:
+        return [AgentID.AGENTE_03_LARAVEL.value]
+    if req_python:
+        return [AgentID.AGENTE_04_FASTAPI.value]
+
+    return [AgentID.AGENTE_03_LARAVEL.value, AgentID.AGENTE_04_FASTAPI.value]
+
+
 def route_after_qa_php(state: SoftwareFactoryState) -> str:
     """Route PHP workflow based on QA audit approval, circuit breaker, or refactor."""
     if state.get("status_qa_php") == DeliverableStatus.APROBADO_PARA_DESPLIEGUE:
@@ -64,8 +79,8 @@ def route_after_ciso(state: SoftwareFactoryState) -> str:
 
     history = state.get("execution_history", [])
     if state.get("retry_counts", {}).get("ciso", 0) >= settings.MAX_RETRIES_PER_GATE:
-        # If extensive refactoring has occurred (>= 15 steps), route to Docs to conclude
-        if len(history) >= 15:
+        # If extensive refactoring has occurred (>= 16 steps), route to Docs to conclude
+        if len(history) >= 16:
             print(
                 "\n[CISO Router] Aviso: Avance forzado hacia Agente 08 (Docs) tras agotamiento "
                 f"de iteraciones de auditoría CISO ({settings.MAX_RETRIES_PER_GATE} reintentos) "

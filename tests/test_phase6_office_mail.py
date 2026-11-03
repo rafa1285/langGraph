@@ -187,7 +187,7 @@ async def test_full_workflow_end_to_end_with_mail_and_conversations(
     db_path = str(tmp_path / "checkpoints.db")
     project_id = "proj_e2e_office"
     async with AsyncSqliteSaver.from_conn_string(db_path) as checkpointer:
-        graph = compile_factory_graph(nodes, checkpointer=checkpointer)
+        graph = compile_factory_graph(nodes, checkpointer=checkpointer, full_13_agents=False)
         state = create_initial_state(project_id, "Plataforma de comercio online.")
         config: RunnableConfig = {"configurable": {"thread_id": project_id}}
         final_state = await graph.ainvoke(state, config=config)

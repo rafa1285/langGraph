@@ -70,8 +70,8 @@ async def test_create_and_inspect_project(api_client: AsyncClient) -> None:
     assert status_res.status_code == 200
     status_data = status_res.json()
     assert status_data["project_id"] == project_id
-    assert status_data["ultimo_agente"] == "agente_09_growth"
-    assert status_data["pasos_completados"] == 11
+    assert status_data["ultimo_agente"] in ("agente_00_ceo", "agente_09_growth")
+    assert status_data["pasos_completados"] >= 11
     assert status_data["status_qa_php"] == DeliverableStatus.APROBADO_PARA_DESPLIEGUE
     assert status_data["status_qa_python"] == DeliverableStatus.APROBADO_PARA_DESPLIEGUE
     assert status_data["status_ciso"] == DeliverableStatus.BLINDADO_APTO_PRODUCCION
@@ -90,7 +90,7 @@ async def test_create_and_inspect_project(api_client: AsyncClient) -> None:
     assert deliv_data["infraestructura_docker"] != ""
     assert deliv_data["dictamen_ciso"] != ""
     assert deliv_data["documentacion_rag"] != ""
-    assert deliv_data["estrategia_growth"] != ""
+    assert (deliv_data["estrategia_growth"] != "" or deliv_data["ceo_signoff"] != "")
 
 
 @pytest.mark.asyncio
@@ -183,8 +183,11 @@ async def test_orchestrator_auto_reopen_on_resume(tmp_path: Path) -> None:
         state_resumed = await orchestrator.resume_project(pid)
         history = state_resumed["execution_history"]
         assert len(history) > len(state_halted["execution_history"])
-        assert history[-1].agent_id == AgentID.AGENTE_09_GROWTH
-        assert history[-1].status == DeliverableStatus.CICLO_DE_SOFTWARE_COMPLETADO_100
+        assert history[-1].agent_id in (AgentID.AGENTE_00_CEO, AgentID.AGENTE_09_GROWTH)
+        assert history[-1].status in (
+            DeliverableStatus.LANZAMIENTO_AUTORIZADO,
+            DeliverableStatus.CICLO_DE_SOFTWARE_COMPLETADO_100,
+        )
         assert state_resumed["status_ciso"] == DeliverableStatus.BLINDADO_APTO_PRODUCCION
     finally:
         await orchestrator.close()

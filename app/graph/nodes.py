@@ -3,10 +3,11 @@
 import logging
 import time
 from datetime import UTC, datetime
+from uuid import uuid4
 
 from app.core.config import settings
 from app.graph.state import SoftwareFactoryState
-from app.schemas.office import AgentConversationRecord
+from app.schemas.office import AgentConversationRecord, AgentEmailRecord
 from app.schemas.routing import AgentID, DeliverableStatus, StepExecutionRecord
 from app.services.event_bus import ConnectionManager
 from app.services.event_bus import event_bus as _default_event_bus
@@ -63,6 +64,11 @@ def _build_user_payload(agent_id: AgentID, state: SoftwareFactoryState) -> str:
 
         case AgentID.AGENTE_03_LARAVEL:
             parts = [f"# SDD Arquitectura Técnica\n{state['sdd_arquitectura']}"]
+            if state.get("ui_ux_spec"):
+                parts.append(
+                    "# Especificación Sistema de Diseño UI/UX y Vistas Frontend\n"
+                    f"{state['ui_ux_spec']}"
+                )
             if state["status_qa_php"] == DeliverableStatus.RECHAZADO_PARA_REFACTOR:
                 parts.append(
                     "# CÓDIGO PHP PREVIO A REFACTORIZAR\n"
@@ -104,10 +110,16 @@ def _build_user_payload(agent_id: AgentID, state: SoftwareFactoryState) -> str:
             return "\n\n".join(parts)
 
         case AgentID.AGENTE_05_QA_PHP:
-            return (
-                f"# SDD Arquitectura Técnica\n{state['sdd_arquitectura']}\n\n"
-                f"# Código PHP / Laravel a Auditar\n{state['codigo_php']}"
-            )
+            parts = [
+                f"# SDD Arquitectura Técnica\n{state['sdd_arquitectura']}",
+                f"# Código PHP / Laravel a Auditar\n{state['codigo_php']}",
+            ]
+            if state.get("ui_ux_spec"):
+                parts.append(
+                    "# Especificación Sistema de Diseño UI/UX (Auditoría de Fidelidad Visual)\n"
+                    f"{state['ui_ux_spec']}"
+                )
+            return "\n\n".join(parts)
 
         case AgentID.AGENTE_06_QA_PYTHON:
             return (
@@ -380,6 +392,42 @@ class FactoryNodes:
 
         return raw_output, header.estado_entregable, header.destino_siguiente, record
 
+    async def _escalate_circuit_breaker_to_ceo(
+        self,
+        project_id: str,
+        gate: str,
+        culprit: AgentID | None,
+        retries: int,
+        step_number: int,
+    ) -> None:
+        """Register a CRITICAL escalation email notification to CEO when Circuit Breaker trips."""
+        culprit_str = culprit.value if culprit else "desconocido"
+        escalation_email = AgentEmailRecord(
+            id=uuid4(),
+            project_id=project_id,
+            step_number=step_number,
+            sender=(
+                f"{AgentID.AGENTE_10_CISO.value}@agentoffice.local"
+                if gate == "ciso"
+                else f"agente_{gate}@agentoffice.local"
+            ),
+            recipient="ceo@agentoffice.local",
+            subject=f"🚨 [CIRCUIT BREAKER] Escalado Crítico al CEO en compuerta {gate.upper()}",
+            body_summary=(
+                f"ALERTA CRÍTICA: Límite de {retries} reintentos superado en {gate.upper()}.\n"
+                f"Culpable identificado: {culprit_str}.\n"
+                "Flujo detenido preventivamente por activación del Circuit Breaker."
+            ),
+            attached_deliverable_path=f"circuit_breaker://{gate}",
+            priority="CRITICAL",
+        )
+        await self.office_store.save_email(escalation_email)
+        await self.event_bus.broadcast(
+            project_id=project_id,
+            event_type="CIRCUIT_BREAKER_ESCALATION",
+            data=escalation_email.model_dump(mode="json"),
+        )
+
     async def node_01_pm(self, state: SoftwareFactoryState) -> dict[str, object]:
         """Node for Agent 01 (PM): Generates Pre-SDD specification."""
         raw_output, _status, _dest, record = await self._execute_agent_step(
@@ -451,7 +499,16 @@ class FactoryNodes:
         }
         if status == DeliverableStatus.RECHAZADO_PARA_REFACTOR:
             current_retries = state.get("retry_counts", {}).get("qa_php", 0)
-            updates["retry_counts"] = {"qa_php": current_retries + 1}
+            new_retries = current_retries + 1
+            updates["retry_counts"] = {"qa_php": new_retries}
+            if new_retries >= settings.MAX_RETRIES_PER_GATE:
+                await self._escalate_circuit_breaker_to_ceo(
+                    project_id=state["project_id"],
+                    gate="qa_php",
+                    culprit=AgentID.AGENTE_03_LARAVEL,
+                    retries=new_retries,
+                    step_number=len(state.get("execution_history", [])) + 1,
+                )
 
         return updates
 
@@ -468,7 +525,16 @@ class FactoryNodes:
         }
         if status == DeliverableStatus.RECHAZADO_PARA_REFACTOR:
             current_retries = state.get("retry_counts", {}).get("qa_python", 0)
-            updates["retry_counts"] = {"qa_python": current_retries + 1}
+            new_retries = current_retries + 1
+            updates["retry_counts"] = {"qa_python": new_retries}
+            if new_retries >= settings.MAX_RETRIES_PER_GATE:
+                await self._escalate_circuit_breaker_to_ceo(
+                    project_id=state["project_id"],
+                    gate="qa_python",
+                    culprit=AgentID.AGENTE_04_FASTAPI,
+                    retries=new_retries,
+                    step_number=len(state.get("execution_history", [])) + 1,
+                )
 
         return updates
 
@@ -514,10 +580,20 @@ class FactoryNodes:
 
         if status == DeliverableStatus.BLOQUEADO_POR_CIBERSEGURIDAD:
             current_ciso_retries = state.get("retry_counts", {}).get("ciso", 0)
-            updates["retry_counts"] = {"ciso": current_ciso_retries + 1}
+            new_ciso_retries = current_ciso_retries + 1
+            updates["retry_counts"] = {"ciso": new_ciso_retries}
 
             culprit = header.culpable_detectado or AgentID.AGENTE_07_DEVOPS
             updates["ciso_culprit"] = culprit
+
+            if new_ciso_retries >= settings.MAX_RETRIES_PER_GATE:
+                await self._escalate_circuit_breaker_to_ceo(
+                    project_id=state["project_id"],
+                    gate="ciso",
+                    culprit=culprit,
+                    retries=new_ciso_retries,
+                    step_number=len(state.get("execution_history", [])) + 1,
+                )
 
             # Reset QA gate so patched code is re-tested before returning to DevOps/CISO
             if culprit == AgentID.AGENTE_03_LARAVEL:
