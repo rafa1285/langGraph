@@ -153,6 +153,24 @@ def test_build_vercel_bundle_creates_expected_assets(phase11_env: dict[str, Any]
     assert vercel_data["rewrites"][0]["destination"] == "/api/index.py"
     assert "builds" not in vercel_data
 
+    # 7. Static files placed strictly in root (sibling to api/)
+    assert (bundle_path / "index.html").is_file()
+    assert (bundle_path / "docs.html").is_file()
+    assert (bundle_path / "api").is_dir()
+    assert not (bundle_path / "api" / "index.html").exists()
+    assert not (bundle_path / "api" / "docs.html").exists()
+
+
+def test_serverless_routes_strictly_prefixed_and_no_wildcard() -> None:
+    """Verify FastAPI serverless app does not intercept static files with catch-all routes."""
+    for route in serverless_app.routes:
+        path = getattr(route, "path", "")
+        # Only built-in docs or /api/ paths should exist, no root wildcard
+        assert not path.startswith("/{path"), f"Wildcard route detected: {path}"
+        assert not path.startswith("/{full_path"), f"Wildcard route detected: {path}"
+        if path not in ("/openapi.json", "/docs", "/docs/oauth2-redirect", "/redoc"):
+            assert path.startswith("/api/"), f"Route not prefixed with /api/: {path}"
+
 
 # =====================================================================
 # 2. Serverless FastAPI Engine Endpoint Tests
