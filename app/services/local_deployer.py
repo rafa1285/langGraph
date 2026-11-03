@@ -332,14 +332,23 @@ dependencies = [
     "pydantic>=2.6.0",
     "pydantic-settings>=2.2.0",
     "redis[hiredis]>=5.0.0",
-    "sqlalchemy>=2.0.0",
+    "sqlalchemy[asyncio]>=2.0.0",
     "asyncpg>=0.29.0",
+    "greenlet>=3.0.0",
     "aiodns>=3.1.0",
     "pyyaml>=6.0.0",
     "httpx>=0.27.0",
 ]
 """
                 pyproject_file.write_text(valid_pyproject, encoding="utf-8")
+
+        # Mirror pyproject.toml to engine_fastapi/pyproject.toml if directory exists
+        engine_fastapi_dir = build_dir / "engine_fastapi"
+        if engine_fastapi_dir.exists() and pyproject_file.exists():
+            (engine_fastapi_dir / "pyproject.toml").write_text(
+                pyproject_file.read_text(encoding="utf-8"),
+                encoding="utf-8",
+            )
 
         dockerfile_rel = "Dockerfile"
         if not (build_dir / "Dockerfile").exists():
