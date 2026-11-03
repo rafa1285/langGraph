@@ -22,6 +22,8 @@ from app.core.config import settings
 from app.schemas.api import (
     CreateProjectRequest,
     CreateProjectResponse,
+    DeployVercelRequest,
+    DeployVercelResponse,
     MaterializeResponse,
     ProjectDeliverablesResponse,
     ProjectsListResponse,
@@ -41,6 +43,7 @@ from app.services.local_deployer import LocalSandboxDeployer
 from app.services.mail_service import MailService
 from app.services.office_store import OfficeStore
 from app.services.orchestrator_service import OrchestratorService
+from app.services.vercel_deployer import VercelDeployerService
 
 logger = logging.getLogger(__name__)
 
@@ -357,6 +360,54 @@ async def materialize_project_source(
         compose_file=env_info.get("compose_file"),
         compose_valid=is_valid,
         scripts=env_info.get("scripts", []),
+    )
+
+
+@router.post(
+    "/api/v1/projects/{project_id}/deploy-vercel",
+    response_model=DeployVercelResponse,
+    tags=["Deployments"],
+)
+async def deploy_project_to_vercel(
+    project_id: str,
+    payload: DeployVercelRequest | None = None,
+) -> DeployVercelResponse:
+    """Package serverless distribution bundle and deploy to Vercel Cloud."""
+    source_dir = Path(settings.WORKSPACES_DIR) / project_id
+    if not source_dir.exists() or not source_dir.is_dir():
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Proyecto {project_id} no encontrado en workspaces.",
+        )
+
+    project_name = payload.name if payload else "validator-hq-saas"
+    deployer = VercelDeployerService()
+    result = await deployer.deploy_to_vercel(
+        project_id=project_id,
+        project_name=project_name,
+        sync_notifications=True,
+    )
+
+    if not result["success"]:
+        status_code = (
+            status.HTTP_400_BAD_REQUEST
+            if "VERCEL_TOKEN" in (result["error"] or "")
+            else status.HTTP_502_BAD_GATEWAY
+        )
+        raise HTTPException(
+            status_code=status_code,
+            detail=result["error"] or "Error al desplegar en Vercel.",
+        )
+
+    return DeployVercelResponse(
+        success=True,
+        project_id=result["project_id"],
+        project_name=result["project_name"],
+        deployment_url=result["deployment_url"],
+        bundle_path=result["bundle_path"],
+        total_files=result["total_files"],
+        email_logged=result["email_logged"],
+        error=None,
     )
 
 

@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="es" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ValidatorHQ — Higienización y Verificación de Emails a Escala</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Plus Jakarta Sans', sans-serif; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased selection:bg-indigo-500 selection:text-white">
+
+    <!-- Navbar -->
+    <header class="sticky top-0 z-40 w-full border-b border-slate-800 bg-slate-950/80 backdrop-blur">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="h-9 w-9 rounded-lg bg-gradient-to-tr from-indigo-600 to-violet-500 flex items-center justify-center font-bold text-white shadow-lg shadow-indigo-500/30">
+                    V
+                </div>
+                <span class="text-xl font-extrabold tracking-tight text-white">Validator<span class="text-indigo-400">HQ</span></span>
+            </div>
+            <nav class="hidden md:flex items-center gap-8 text-sm font-medium text-slate-300">
+                <a href="#metodos" class="hover:text-white transition">Comparativa</a>
+                <a href="#demo" class="hover:text-white transition">Simulador en Vivo</a>
+                <a href="#precios" class="hover:text-white transition">Precios</a>
+                <a href="#faq" class="hover:text-white transition">FAQ</a>
+                <a href="/docs.html" class="hover:text-indigo-400 transition flex items-center gap-1.5">
+                    Docs API
+                    <span class="text-xs bg-indigo-500/20 text-indigo-300 px-1.5 py-0.5 rounded border border-indigo-500/30">v2.4</span>
+                </a>
+            </nav>
+            <div class="flex items-center gap-3">
+                <a href="#demo" class="bg-indigo-600 hover:bg-indigo-500 text-white font-semibold px-4 py-2 rounded-lg text-sm shadow-lg shadow-indigo-600/30 transition">
+                    Probar Demo
+                </a>
+            </div>
+        </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="relative pt-20 pb-24 overflow-hidden border-b border-slate-800/80">
+        <div class="max-w-5xl mx-auto px-4 text-center">
+            <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-8">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                MOTOR v2.4 ACTIVO | Handshake SMTP Asíncrono en Tiempo Real | 0% Falsos Positivos
+            </div>
+            <h1 class="text-4xl sm:text-6xl font-extrabold tracking-tight text-white leading-tight mb-6">
+                Deja de Enviar Correos a la Basura: Protege tu Dominio con <span class="bg-gradient-to-r from-indigo-400 via-violet-400 to-pink-400 bg-clip-text text-transparent">Verificación SMTP Pura</span>
+            </h1>
+            <p class="text-lg sm:text-xl text-slate-400 max-w-3xl mx-auto mb-10 leading-relaxed">
+                Sube tu lista en CSV o TXT. Nuestro motor en Python valida cada dirección mediante handshake SMTP directo sin enviar un solo mensaje comercial. Los correos indeterminados (<code class="text-indigo-300 font-mono">UNKNOWN</code>) no se cobran y se reembolsan de inmediato.
+            </p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
+                <a href="#demo" class="w-full sm:w-auto px-8 py-4 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-bold text-base shadow-xl shadow-indigo-500/25 transition">
+                    Limpiar mi Lista Gratis — 100 Verificaciones
+                </a>
+                <a href="/docs.html" class="w-full sm:w-auto px-8 py-4 rounded-xl border border-slate-700 bg-slate-900/60 hover:bg-slate-800 text-slate-200 font-semibold text-base transition">
+                    Consultar Documentación
+                </a>
+            </div>
+            <div class="flex flex-wrap justify-center items-center gap-6 text-xs font-medium text-slate-400">
+                <div class="flex items-center gap-1.5"><span class="text-emerald-400 font-bold">✓</span> Sin tarjeta de crédito requerida</div>
+                <div class="flex items-center gap-1.5"><span class="text-emerald-400 font-bold">✓</span> Deduplicación SHA-256 a 0€</div>
+                <div class="flex items-center gap-1.5"><span class="text-emerald-400 font-bold">✓</span> Blindaje Anti-SSRF Certificado</div>
+                <div class="flex items-center gap-1.5"><span class="text-emerald-400 font-bold">✓</span> GDPR Cumplido (Purga a 15 días)</div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Comparativa de Métodos -->
+    <section id="metodos" class="py-20 border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-3xl mx-auto mb-14">
+                <h2 class="text-3xl font-extrabold text-white mb-4">El Coste de la Ceguera frente a ValidatorHQ</h2>
+                <p class="text-slate-400">Por qué los métodos antiguos de envío a ciegas o validadores opacos destruyen tu reputación.</p>
+            </div>
+            <div class="overflow-x-auto rounded-xl border border-slate-800 bg-slate-900/50">
+                <table class="w-full text-left text-sm text-slate-300">
+                    <thead class="bg-slate-900 border-b border-slate-800 text-xs uppercase tracking-wider text-slate-400">
+                        <tr>
+                            <th class="p-4 font-semibold">Dimensión Crítica</th>
+                            <th class="p-4 font-semibold text-rose-400">El Método Antiguo</th>
+                            <th class="p-4 font-semibold text-emerald-400">ValidatorHQ (Motor Autónomo)</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-slate-800/60">
+                        <tr>
+                            <td class="p-4 font-medium text-white">Impacto en Entregabilidad</td>
+                            <td class="p-4 text-slate-400">Envías a buzones inexistentes y los filtros mandan tu dominio a SPAM.</td>
+                            <td class="p-4 text-emerald-300 font-medium">Handshake SMTP seguro detecta 550 User Unknown antes del envío.</td>
+                        </tr>
+                        <tr>
+                            <td class="p-4 font-medium text-white">Política de Cobro Unknown</td>
+                            <td class="p-4 text-slate-400">Te cobran por correos que su servidor no pudo verificar o dieron timeout.</td>
+                            <td class="p-4 text-emerald-300 font-medium">Reembolso 100% automático de vuelta a tu billetera disponible.</td>
+                        </tr>
+                        <tr>
+                            <td class="p-4 font-medium text-white">Gestión de Duplicados</td>
+                            <td class="p-4 text-slate-400">Pagas el doble o triple si la misma dirección aparece varias veces.</td>
+                            <td class="p-4 text-emerald-300 font-medium">Deduplicación SHA-256 instantánea y gratuita a coste 0 créditos.</td>
+                        </tr>
+                        <tr>
+                            <td class="p-4 font-medium text-white">Privacidad y GDPR</td>
+                            <td class="p-4 text-slate-400">Bases de datos almacenadas indefinidamente sin control.</td>
+                            <td class="p-4 text-emerald-300 font-medium">Autodestrucción física en 15 días o botón de borrado instantáneo.</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
+    <!-- Simulador en Vivo -->
+    <section id="demo" class="py-20 border-b border-slate-800 bg-slate-900/30">
+        <div class="max-w-5xl mx-auto px-4">
+            <div class="text-center mb-10">
+                <span class="text-indigo-400 text-xs uppercase tracking-widest font-bold">Prueba en Directo</span>
+                <h2 class="text-3xl font-extrabold text-white mt-2">Simulador Interactivo de Verificación</h2>
+                <p class="text-slate-400 text-sm mt-2">Prueba cómo nuestro motor analiza duplicados, sintaxis y filtra vectores de seguridad SSRF.</p>
+            </div>
+            <div class="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-2xl">
+                <label for="emails-input" class="block text-sm font-semibold text-slate-300 mb-2">Ingresa o pega un lote de correos (uno por línea):</label>
+                <textarea id="emails-input" rows="6" class="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-slate-200 font-mono text-xs focus:ring-2 focus:ring-indigo-500 focus:outline-none transition mb-4">lead.marketing@google.com
+soporte@stripe.com
+usuario.duplicado@empresa.com
+usuario.duplicado@empresa.com
+test.hacker@127.0.0.1
+bot@[::ffff:127.0.0.1]
+junk.lead@tempmail.com
+correo_invalido_sin_arroba.com</textarea>
+
+                <div class="flex flex-wrap items-center justify-between gap-4 mb-6">
+                    <button id="btn-validate" onclick="runValidation()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-6 py-2.5 rounded-xl text-sm shadow-lg shadow-indigo-600/30 transition flex items-center gap-2">
+                        <span>⚡ Verificar Lote en Tiempo Real</span>
+                    </button>
+                    <span id="validation-spinner" class="hidden text-xs text-indigo-400 animate-pulse font-medium">Conectando con clúster FastAPI Serverless...</span>
+                </div>
+
+                <!-- Resumen de Métricas -->
+                <div id="demo-summary" class="hidden grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6 p-4 rounded-xl bg-slate-950 border border-slate-800/80 text-center">
+                    <div>
+                        <div class="text-xs text-slate-400">Total</div>
+                        <div id="stat-total" class="text-xl font-bold text-white">0</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-emerald-400 font-medium">Entregables</div>
+                        <div id="stat-deliverable" class="text-xl font-bold text-emerald-400">0</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-rose-400 font-medium">Rebotes</div>
+                        <div id="stat-undeliverable" class="text-xl font-bold text-rose-400">0</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-amber-400 font-medium">Riesgosos / SSRF</div>
+                        <div id="stat-risky" class="text-xl font-bold text-amber-400">0</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-indigo-400 font-medium">Créditos Gastados</div>
+                        <div id="stat-credits" class="text-xl font-bold text-indigo-400">0</div>
+                    </div>
+                </div>
+
+                <!-- Tabla de Resultados -->
+                <div id="results-table-container" class="hidden overflow-x-auto rounded-xl border border-slate-800">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-950 border-b border-slate-800 text-slate-400 uppercase">
+                            <tr>
+                                <th class="p-3">Dirección Email</th>
+                                <th class="p-3">Veredicto</th>
+                                <th class="p-3">Razón / Código</th>
+                                <th class="p-3 text-right">Créditos</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-tbody" class="divide-y divide-slate-800/50"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Matriz de Precios -->
+    <section id="precios" class="py-20 border-b border-slate-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center max-w-2xl mx-auto mb-16">
+                <span class="text-indigo-400 text-xs uppercase tracking-widest font-bold">Planes Claros</span>
+                <h2 class="text-3xl font-extrabold text-white mt-2">Matriz de Tarifas Sin Sorpresas</h2>
+                <p class="text-slate-400 text-sm mt-2">Liquidación justa: solo pagas por verificaciones concluyentes.</p>
+            </div>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                <!-- Starter -->
+                <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-8 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold text-white mb-2">Starter Pay-As-You-Go</h3>
+                        <p class="text-xs text-slate-400 mb-6">Para auditorías puntuales de listas pequeñas.</p>
+                        <div class="flex items-baseline gap-2 mb-6">
+                            <span class="text-4xl font-extrabold text-white">$19</span>
+                            <span class="text-slate-400 text-xs">/ pago único</span>
+                        </div>
+                        <ul class="space-y-3 text-xs text-slate-300 mb-8">
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> 5.000 Créditos concluyentes</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> $0.0038 por verificación</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Hasta 50.000 filas por archivo</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Deduplicación SHA-256 gratis</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Reembolso automático de UNKNOWN</li>
+                        </ul>
+                    </div>
+                    <button class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition">Comprar 5.000 Créditos</button>
+                </div>
+
+                <!-- Growth -->
+                <div class="rounded-2xl border-2 border-indigo-500 bg-slate-900 p-8 flex flex-col justify-between relative shadow-2xl shadow-indigo-500/10">
+                    <span class="absolute -top-3.5 left-1/2 -translate-x-1/2 bg-indigo-600 text-white font-bold text-[10px] tracking-wider uppercase py-1 px-3 rounded-full">
+                        Más Popular
+                    </span>
+                    <div>
+                        <h3 class="text-lg font-bold text-white mb-2">Growth Scale</h3>
+                        <p class="text-xs text-slate-400 mb-6">Para agencias y equipos de outbound activo.</p>
+                        <div class="flex items-baseline gap-2 mb-6">
+                            <span class="text-4xl font-extrabold text-white">$69</span>
+                            <span class="text-slate-400 text-xs">/ mes</span>
+                        </div>
+                        <ul class="space-y-3 text-xs text-slate-300 mb-8">
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> 25.000 Créditos mensuales</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> $0.0027 por verificación</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> 2 Lotes simultáneos</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> API REST con Webhooks Sanctum</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Deduplicación SHA-256 gratis</li>
+                        </ul>
+                    </div>
+                    <button class="w-full py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold shadow-lg shadow-indigo-500/30 transition">Comenzar Plan Growth</button>
+                </div>
+
+                <!-- High Volume -->
+                <div class="rounded-2xl border border-slate-800 bg-slate-900/60 p-8 flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-lg font-bold text-white mb-2">High-Volume Pro</h3>
+                        <p class="text-xs text-slate-400 mb-6">Para empresas con alto flujo de prospección.</p>
+                        <div class="flex items-baseline gap-2 mb-6">
+                            <span class="text-4xl font-extrabold text-white">$199</span>
+                            <span class="text-slate-400 text-xs">/ mes</span>
+                        </div>
+                        <ul class="space-y-3 text-xs text-slate-300 mb-8">
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> 100.000 Créditos mensuales</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> $0.0019 por verificación</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Retención ampliada a 30 días</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Cola de sockets prioritaria</li>
+                            <li class="flex items-center gap-2"><span class="text-emerald-400">✓</span> Soporte técnico dedicado</li>
+                        </ul>
+                    </div>
+                    <button class="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-xs font-bold transition">Activar High-Volume</button>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- FAQ -->
+    <section id="faq" class="py-20 border-b border-slate-800">
+        <div class="max-w-4xl mx-auto px-4">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl font-extrabold text-white">Preguntas Frecuentes</h2>
+                <p class="text-slate-400 text-sm mt-2">Transparencia técnica y financiera garantizada.</p>
+            </div>
+            <div class="space-y-4">
+                <div class="p-6 rounded-xl border border-slate-800 bg-slate-900/40">
+                    <h3 class="font-bold text-white text-base mb-2">¿Le llegará algún correo de prueba a mis contactos?</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">No, en absoluto. Ejecutamos un handshake directo conectándonos al servidor MX, saludando con HELO/MAIL FROM y verificando con RCPT TO, cortando la conexión antes de enviar el comando DATA. Ningún mensaje se transmite.</p>
+                </div>
+                <div class="p-6 rounded-xl border border-slate-800 bg-slate-900/40">
+                    <h3 class="font-bold text-white text-base mb-2">¿Por qué no cobran los correos en estado UNKNOWN?</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">Por nuestra política de liquidación justa. Si un servidor de destino tiene greylisting agresivo o caídas de red que impiden una certeza matemática, el crédito se reembolsa 100% automáticamente a tu balance disponible.</p>
+                </div>
+                <div class="p-6 rounded-xl border border-slate-800 bg-slate-900/40">
+                    <h3 class="font-bold text-white text-base mb-2">¿Qué significa el estado RISKY o SSRF_BLOCKED?</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">RISKY clasifica servidores configurados como Catch-All o dominios temporales. SSRF_BLOCKED protege contra destinos que apuntan a interfaces locales o privadas protegidas según normativas de ciberseguridad.</p>
+                </div>
+                <div class="p-6 rounded-xl border border-slate-800 bg-slate-900/40">
+                    <h3 class="font-bold text-white text-base mb-2">¿Qué sucede con mis archivos tras procesarse?</h3>
+                    <p class="text-slate-400 text-sm leading-relaxed">Se retienen de forma segura durante 15 días naturales bajo normativa GDPR y luego se destruyen físicamente. Puedes solicitar la purga instantánea con el botón "Eliminar Resultados Ahora".</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="py-12 text-center text-xs text-slate-500">
+        <p>© 2026 ValidatorHQ. Todos los derechos reservados. Desarrollado con arquitectura LangGraph & Vercel Serverless.</p>
+    </footer>
+
+    <!-- Widget Flotante de Chat RAG: Alex Asesor IA 24/7 -->
+    <div id="alex-chat-container" class="fixed bottom-6 right-6 z-50">
+        <button id="alex-toggle-btn" onclick="toggleAlexChat()" class="bg-gradient-to-tr from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500 text-white font-semibold px-4 py-3 rounded-full shadow-2xl flex items-center gap-2 transition transform hover:scale-105">
+            <span class="w-2.5 h-2.5 rounded-full bg-emerald-400"></span>
+            <span>Alex — Asesor IA 24/7</span>
+        </button>
+
+        <div id="alex-chat-modal" class="hidden absolute bottom-14 right-0 w-80 sm:w-96 rounded-2xl border border-slate-800 bg-slate-900 shadow-2xl overflow-hidden flex flex-col h-[460px]">
+            <div class="p-4 border-b border-slate-800 bg-slate-950 flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center font-bold text-white text-xs">AI</div>
+                    <div>
+                        <div class="text-xs font-bold text-white">Alex (Asesor Zero-Touch)</div>
+                        <div class="text-[10px] text-emerald-400">En línea • Respuestas RAG Oficiales</div>
+                    </div>
+                </div>
+                <button onclick="toggleAlexChat()" class="text-slate-400 hover:text-white text-sm">✕</button>
+            </div>
+            <div id="alex-messages" class="flex-1 p-4 overflow-y-auto space-y-3 text-xs">
+                <div class="bg-slate-800/80 p-3 rounded-xl text-slate-200">
+                    ¡Hola! Soy Alex, el asesor inteligente de ValidatorHQ. ¿En qué puedo ayudarte sobre créditos, entregabilidad o normativas de privacidad?
+                </div>
+            </div>
+            <div class="p-3 border-t border-slate-800 bg-slate-950">
+                <div class="flex gap-2">
+                    <input id="alex-input" type="text" placeholder="Pregunta sobre créditos, GDPR..." class="flex-1 bg-slate-900 border border-slate-800 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-indigo-500" onkeydown="if(event.key==='Enter') sendAlexMessage()">
+                    <button onclick="sendAlexMessage()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-bold">Enviar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Scripts de la Aplicación Web -->
+    <script>
+        async function runValidation() {
+            const textarea = document.getElementById("emails-input");
+            const spinner = document.getElementById("validation-spinner");
+            const summaryBox = document.getElementById("demo-summary");
+            const tableBox = document.getElementById("results-table-container");
+            const tbody = document.getElementById("results-tbody");
+
+            const rawText = textarea.value.trim();
+            if (!rawText) return;
+
+            const emails = rawText.split(/[\n,]+/).map(s => s.trim()).filter(Boolean);
+
+            spinner.classList.remove("hidden");
+            try {
+                const res = await fetch("/api/validate-demo", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ emails })
+                });
+                const data = await res.json();
+
+                // Actualizar métricas
+                document.getElementById("stat-total").innerText = data.summary.total_emails;
+                document.getElementById("stat-deliverable").innerText = data.summary.deliverable;
+                document.getElementById("stat-undeliverable").innerText = data.summary.undeliverable;
+                document.getElementById("stat-risky").innerText = data.summary.risky;
+                document.getElementById("stat-credits").innerText = data.summary.credits_consumed;
+
+                summaryBox.classList.remove("hidden");
+                tbody.innerHTML = "";
+
+                data.items.forEach(item => {
+                    let badgeClass = "bg-slate-800 text-slate-300";
+                    if (item.verdict === "DELIVERABLE") badgeClass = "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30";
+                    if (item.verdict === "UNDELIVERABLE") badgeClass = "bg-rose-500/20 text-rose-400 border border-rose-500/30";
+                    if (item.verdict === "RISKY") badgeClass = "bg-amber-500/20 text-amber-400 border border-amber-500/30";
+                    if (item.verdict === "DUPLICATE") badgeClass = "bg-slate-700/40 text-slate-400 border border-slate-700";
+
+                    const tr = document.createElement("tr");
+                    tr.className = "hover:bg-slate-800/30 transition";
+                    tr.innerHTML = `
+                        <td class="p-3 font-mono text-slate-200">${item.email}</td>
+                        <td class="p-3"><span class="px-2 py-0.5 rounded text-[11px] font-semibold ${badgeClass}">${item.verdict}</span></td>
+                        <td class="p-3 text-slate-400">${item.reason}</td>
+                        <td class="p-3 text-right font-bold ${item.credits === 0 ? 'text-emerald-400' : 'text-slate-300'}">${item.credits}</td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+
+                tableBox.classList.remove("hidden");
+            } catch (err) {
+                alert("Error al conectar con el servidor: " + err);
+            } finally {
+                spinner.classList.add("hidden");
+            }
+        }
+
+        function toggleAlexChat() {
+            const modal = document.getElementById("alex-chat-modal");
+            modal.classList.toggle("hidden");
+        }
+
+        async function sendAlexMessage() {
+            const input = document.getElementById("alex-input");
+            const q = input.value.trim();
+            if (!q) return;
+
+            const box = document.getElementById("alex-messages");
+            const userMsg = document.createElement("div");
+            userMsg.className = "bg-indigo-600 text-white p-3 rounded-xl ml-6 text-right";
+            userMsg.innerText = q;
+            box.appendChild(userMsg);
+            input.value = "";
+            box.scrollTop = box.scrollHeight;
+
+            const loading = document.createElement("div");
+            loading.className = "text-slate-400 italic text-[11px]";
+            loading.innerText = "Consultando base de conocimiento RAG...";
+            box.appendChild(loading);
+            box.scrollTop = box.scrollHeight;
+
+            try {
+                const res = await fetch("/api/rag/ask", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ question: q })
+                });
+                const data = await res.json();
+                box.removeChild(loading);
+
+                const botMsg = document.createElement("div");
+                botMsg.className = "bg-slate-800 p-3 rounded-xl text-slate-200 mr-6";
+                botMsg.innerHTML = `
+                    <div class="mb-1 text-[10px] text-indigo-400 font-bold uppercase tracking-wider">${data.chunk_id} • ${data.category}</div>
+                    <div>${data.answer}</div>
+                `;
+                box.appendChild(botMsg);
+                box.scrollTop = box.scrollHeight;
+            } catch (err) {
+                loading.innerText = "Error obteniendo respuesta.";
+            }
+        }
+    </script>
+</body>
+</html>

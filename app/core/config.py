@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     MAIL_PASSWORD: str | None = None
     GITHUB_TOKEN: str | None = None
     GITHUB_USERNAME: str | None = None
+    VERCEL_TOKEN: str | None = None
+    VERCEL_TEAM_ID: str | None = None
 
     @field_validator("AGENT_MODEL_OVERRIDES", mode="before")
     @classmethod

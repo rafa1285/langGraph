@@ -23,6 +23,7 @@ from app.services.notion_mcp_service import (
 from app.services.office_store import OfficeStore
 from app.services.orchestrator_service import OrchestratorService
 from app.services.prompt_loader import PromptLoader
+from app.services.vercel_deployer import VercelDeployerService
 from app.services.workspace_writer import WorkspaceWriter
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -510,6 +511,33 @@ async def deploy_local_command(project_id: str, up: bool) -> None:
     print("------------------------------------------------------------\n")
 
 
+async def deploy_vercel_command(project_id: str, name: str = "validator-hq-saas") -> None:
+    """Build serverless web bundle and deploy to Vercel Cloud."""
+    deployer = VercelDeployerService()
+    try:
+        res = await deployer.deploy_to_vercel(project_id=project_id, project_name=name)
+    except Exception as exc:
+        print(f"\n[ERROR] Fallo en despliegue a Vercel: {exc}\n")
+        return
+
+    print("\n------------------------------------------------------------")
+    print(f"Despliegue Serverless en Vercel Cloud: Proyecto {project_id}")
+    print("------------------------------------------------------------")
+    print(f"Nombre en Vercel    : {res['project_name']}")
+    print(f"Éxito               : {'SÍ' if res['success'] else 'NO'}")
+    if res["deployment_url"]:
+        print(f"URL de Producción   : {res['deployment_url']}")
+        print(f"Endpoint de Salud   : {res['deployment_url']}/api/health")
+        print(f"Demo Interactiva    : {res['deployment_url']}/#demo")
+        print(f"Documentación       : {res['deployment_url']}/docs.html")
+    print(f"Directorio Paquete  : {res['bundle_path']}")
+    print(f"Archivos Desplegados: {res['total_files']}")
+    print(f"Notificación CEO    : {'Enviada' if res['email_logged'] else 'No enviada'}")
+    if res.get("error"):
+        print(f"Detalle del Error   : {res['error']}")
+    print("------------------------------------------------------------\n")
+
+
 def main() -> None:
     """Parse command line arguments and execute corresponding async commands."""
     parser = argparse.ArgumentParser(
@@ -638,6 +666,19 @@ def main() -> None:
         help="Start docker containers with docker compose up -d",
     )
 
+    # deploy-vercel command
+    vercel_parser = subparsers.add_parser(
+        "deploy-vercel",
+        help="Build and deploy serverless web package to Vercel Cloud",
+    )
+    vercel_parser.add_argument("--project-id", required=True, type=str, help="Project ID")
+    vercel_parser.add_argument(
+        "--name",
+        default="validator-hq-saas",
+        type=str,
+        help="Vercel project name",
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -663,6 +704,8 @@ def main() -> None:
             asyncio.run(publish_git_command(args.project_id, args.repo_name, args.public))
         case "deploy-local":
             asyncio.run(deploy_local_command(args.project_id, args.up))
+        case "deploy-vercel":
+            asyncio.run(deploy_vercel_command(args.project_id, args.name))
         case _:
             parser.print_help()
 

@@ -110,3 +110,31 @@ class MaterializeResponse(BaseModel):
     compose_file: str | None = None
     compose_valid: bool = False
     scripts: list[str] = Field(default_factory=list)
+
+
+class DeployVercelRequest(BaseModel):
+    """Payload to deploy project serverless bundle to Vercel."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(
+        default="validator-hq-saas",
+        min_length=3,
+        description="Nombre del proyecto en Vercel.",
+    )
+
+
+class DeployVercelResponse(BaseModel):
+    """Response returned upon deploying project serverless bundle to Vercel."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    success: bool
+    project_id: str
+    project_name: str
+    deployment_url: str | None = None
+    bundle_path: str
+    total_files: int
+    email_logged: bool
+    error: str | None = None
+
