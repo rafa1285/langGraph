@@ -496,39 +496,58 @@ Plataforma SaaS moderna de verificación y saneamiento de datos 100% autoservici
 """
             case AgentID.AGENTE_11_UI_UX:
                 return """---
-origen: "agente_11_ui_ux"
-destino_siguiente: "agente_03_laravel, agente_04_fastapi"
-estado_entregable: "SISTEMA_DISENO_UI_LISTO"
-veredicto: "APROBADO"
-puntuacion: 100
-culpable_detectado: null
+id_proyecto: "<ID_DEL_PROYECTO>"
+version_iteracion: 1
+agente_emisor: "agente_11_ui_ux"
+agente_receptor: "agente_03_laravel"
+estado: "SISTEMA_DISENO_UI_LISTO"
+prioridad: "HIGH"
+timestamp: "2026-11-04T00:00:00Z"
 ---
 
-# Especificación de Diseño UI/UX y Sistema de Diseño
-## 1. Tokens de Diseño y Paleta Semántica
-- Fondo: `bg-slate-950`
-- Primario: `indigo-600`
-- Éxito: `emerald-500`
+# Sistema de Diseño y Especificación de Vistas UI/UX
+## 1. User Journey & Wireframe Map
+Landing Hero con simulador interactivo de validación sin registro previo.
+Flujo de conversión estricto en 3 clics y 4 estados por pantalla (Default, Loading, Empty, Error).
 
-## 2. Configuración TailwindCSS
+## 2. Design Tokens & Tailwind Config
+Paleta semántica Brand, Primary, Neutral, Success, Warning y Danger.
+
+## 3. Artefacto Técnico Extraíble (`tailwind.config.js`)
 ```javascript
-// tailwind.config.js
+// filepath: tailwind.config.js
 module.exports = {
-  darkMode: 'class',
+  content: [
+    "./resources/**/*.blade.php",
+    "./resources/**/*.js",
+    "./public/**/*.html",
+  ],
   theme: {
     extend: {
       colors: {
-        brand: '#4f46e5',
-      }
-    }
-  }
+        brand: {
+          50: '#f0fdf4',
+          500: '#22c55e',
+          600: '#16a34a',
+          700: '#15803d',
+        },
+      },
+    },
+  },
+  plugins: [],
 }
 ```
 
-## 3. Flujo de Conversión en 3 Clics
-1. Subida interactiva de lista de correos.
-2. Deduplicación y verificación visual en tiempo real.
-3. Pago directo y descarga sin fricción.
+## 4. Artefacto Técnico Extraíble (`resources/css/design_tokens.css`)
+```css
+/* filepath: resources/css/design_tokens.css */
+:root {
+  --color-primary: #16a34a;
+  --color-bg-base: #0f172a;
+  --color-text-main: #f8fafc;
+  --radius-box: 0.75rem;
+}
+```
 """
             case AgentID.AGENTE_12_MARKETING:
                 return """---

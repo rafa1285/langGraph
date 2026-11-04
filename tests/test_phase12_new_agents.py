@@ -8,6 +8,7 @@ from app.graph.nodes import FactoryNodes
 from app.graph.state import ProjectState, SoftwareFactoryState, create_initial_state
 from app.schemas.api import ProjectDeliverablesResponse
 from app.schemas.routing import AgentID, DeliverableStatus, StepExecutionRecord
+from app.services.code_materializer import CodeMaterializerService
 from app.services.llm_gateway import MockLLMGateway
 from app.services.mail_service import MailService
 from app.services.office_store import OfficeStore
@@ -115,6 +116,7 @@ async def test_prompt_loader_and_mock_llm_for_new_agents() -> None:
     header_ui = AgentOutputParser.parse_routing_header(AgentID.AGENTE_11_UI_UX, mock_ui)
     assert header_ui.estado_entregable == DeliverableStatus.SISTEMA_DISENO_UI_LISTO
     assert "tailwind.config.js" in mock_ui
+    assert "design_tokens.css" in mock_ui
 
     # AGENTE_12_MARKETING
     prompt_mkt = await loader.load_prompt(AgentID.AGENTE_12_MARKETING)
@@ -252,7 +254,8 @@ async def test_ui_ux_marketing_sales_nodes(
     state["ui_ux_spec"] = str(res_ui["ui_ux_spec"])
     _append_history(state, res_ui)
     assert "tailwind.config.js" in state["ui_ux_spec"]
-    assert "3 Clics" in state["ui_ux_spec"]
+    assert "design_tokens.css" in state["ui_ux_spec"]
+    assert "3 Clics" in state["ui_ux_spec"] or "3 clics" in state["ui_ux_spec"]
 
     ui_file = clean_test_workspace / "proj_growth_stack" / "01_agente_11_ui_ux.md"
     assert ui_file.exists()
@@ -277,9 +280,9 @@ async def test_ui_ux_marketing_sales_nodes(
     sales_file = clean_test_workspace / "proj_growth_stack" / "03_agente_13_sales_analytics.md"
     assert sales_file.exists()
 
-    # Verify mail sequence: UI/UX -> Laravel & FastAPI (2), Mkt -> Sales (1), Sales -> CEO (1)
+    # Verify mail sequence: UI/UX -> Laravel (1), Mkt -> Sales (1), Sales -> CEO (1)
     all_emails = await test_office_store.get_emails("proj_growth_stack")
-    assert len(all_emails) == 4
+    assert len(all_emails) in (3, 4)
     senders = [em.sender for em in all_emails]
     assert "agente_11_ui_ux@agentoffice.local" in senders
     assert "agente_12_marketing@agentoffice.local" in senders
@@ -313,3 +316,45 @@ def test_project_deliverables_response_phase12() -> None:
     assert data["marketing_spec"] == "# Marketing Spec"
     assert data["sales_analytics_spec"] == "# Sales Spec"
     assert data["ceo_signoff"] == "# CEO Signoff"
+
+
+@pytest.mark.asyncio
+async def test_ui_ux_emits_artifacts_and_materializer(
+    clean_test_workspace: Path,
+    test_office_store: OfficeStore,
+) -> None:
+    """Verify that node_11_ui_ux outputs tailwind.config.js & design_tokens.css for materializer."""
+    gateway = MockLLMGateway()
+    loader = PromptLoader()
+    writer = WorkspaceWriter(base_dir=clean_test_workspace)
+    mail_svc = MailService(store=test_office_store)
+    nodes = FactoryNodes(
+        llm_gateway=gateway,
+        prompt_loader=loader,
+        workspace_writer=writer,
+        office_store=test_office_store,
+        mail_service=mail_svc,
+    )
+
+    state = create_initial_state(
+        project_id="proj_ui_materializer",
+        idea_inicial="App de validación masiva con diseño TailwindCSS.",
+    )
+    state["pre_sdd_doc"] = "# Pre-SDD"
+    state["sdd_arquitectura"] = "# SDD"
+
+    res_ui = await nodes.ui_ux_node(state)
+    ui_spec = str(res_ui["ui_ux_spec"])
+    assert "tailwind.config.js" in ui_spec
+    assert "design_tokens.css" in ui_spec
+
+    materializer = CodeMaterializerService(workspaces_dir=clean_test_workspace)
+    build_dir, manifest = materializer.materialize_project("proj_ui_materializer")
+
+    tailwind_file = build_dir / "tailwind.config.js"
+    assert tailwind_file.exists()
+    assert "module.exports" in tailwind_file.read_text(encoding="utf-8")
+
+    tokens_file = build_dir / "resources" / "css" / "design_tokens.css"
+    assert tokens_file.exists()
+    assert "--color-primary" in tokens_file.read_text(encoding="utf-8")

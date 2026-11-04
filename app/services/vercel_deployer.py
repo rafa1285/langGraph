@@ -340,20 +340,19 @@ class VercelDeployerService:
             raw_url = data.get("url")
             # If production alias exists, prioritize canonical domain over transient preview hash
             aliases = data.get("alias")
+            target_alias = f"{project_name}.vercel.app"
             canonical_url: str | None = None
             if isinstance(aliases, list) and aliases:
-                target_alias = f"{project_name}.vercel.app"
                 for al in aliases:
                     al_str = str(al)
-                    is_clean = al_str.endswith(".vercel.app") and "-" not in al_str
-                    if al_str == target_alias or is_clean:
+                    if al_str == target_alias:
                         canonical_url = al_str
                         break
                 if not canonical_url:
                     canonical_url = str(aliases[0])
 
             if not canonical_url:
-                canonical_url = raw_url or f"{project_name}.vercel.app"
+                canonical_url = target_alias if target_alias else (raw_url or "vercel.app")
 
             deployment_url = f"https://{canonical_url}"
 

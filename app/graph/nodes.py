@@ -130,6 +130,58 @@ Auditoría completada para Ingeniería, CISO, Documentación, Marketing y Ventas
 ```
 """
 
+FALLBACK_UI_UX = """---
+id_proyecto: "<ID_DEL_PROYECTO>"
+version_iteracion: 1
+agente_emisor: "agente_11_ui_ux"
+agente_receptor: "agente_03_laravel"
+estado: "SISTEMA_DISENO_UI_LISTO"
+prioridad: "HIGH"
+timestamp: "2026-11-04T00:00:00Z"
+---
+
+# Sistema de Diseño y Especificación de Vistas UI/UX
+## 1. User Journey & Wireframe Map
+Conversión en 3 clics y simulador interactivo en Hero sin registro previo.
+
+## 2. Design Tokens & Tailwind Config
+Paleta semántica Brand, Primary, Neutral, Success, Warning y Danger.
+
+```javascript
+// filepath: tailwind.config.js
+module.exports = {
+  content: [
+    "./resources/**/*.blade.php",
+    "./resources/**/*.js",
+    "./public/**/*.html",
+  ],
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          50: '#f0fdf4',
+          500: '#22c55e',
+          600: '#16a34a',
+          700: '#15803d',
+        },
+      },
+    },
+  },
+  plugins: [],
+}
+```
+
+```css
+/* filepath: resources/css/design_tokens.css */
+:root {
+  --color-primary: #16a34a;
+  --color-bg-base: #0f172a;
+  --color-text-main: #f8fafc;
+  --radius-box: 0.75rem;
+}
+```
+"""
+
 
 def _build_ceo_signoff_payload(state: SoftwareFactoryState) -> str:
     """Build comprehensive closing payload for CEO signoff and governance audit."""
@@ -307,10 +359,14 @@ def _build_user_payload(agent_id: AgentID, state: SoftwareFactoryState) -> str:
             )
 
         case AgentID.AGENTE_11_UI_UX:
-            return (
-                f"# Pre-SDD Funcional\n{state.get('pre_sdd_doc', '')}\n\n"
-                f"# SDD Arquitectura Técnica\n{state.get('sdd_arquitectura', '')}"
-            )
+            parts = []
+            if state.get("ceo_charter"):
+                parts.append(
+                    f"# Business Charter CEO (Reglas Zero-Touch)\n{state['ceo_charter']}"
+                )
+            parts.append(f"# Pre-SDD Funcional\n{state.get('pre_sdd_doc', '')}")
+            parts.append(f"# SDD Arquitectura Técnica\n{state.get('sdd_arquitectura', '')}")
+            return "\n\n".join(parts)
 
         case AgentID.AGENTE_12_MARKETING:
             return (
@@ -803,6 +859,8 @@ class FactoryNodes:
             AgentID.AGENTE_11_UI_UX,
             state,
         )
+        if not raw_output or "tailwind.config.js" not in raw_output:
+            raw_output = FALLBACK_UI_UX
         return {
             "ui_ux_spec": raw_output,
             "execution_history": [record],

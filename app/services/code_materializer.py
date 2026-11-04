@@ -168,8 +168,8 @@ class CodeMaterializerService:
                 if code_lines:
                     first = code_lines[0]
                     m_comm = re.match(
-                        r"^(?:#|//|--|/\*|<!--)\s*(?:file:?|filepath:?|path:?)?"
-                        r"\s*[`\"']?([a-zA-Z0-9_\-./\\]+)[`\"']?",
+                        r"^(?:#|//|--|/\*|<!--)\s*(?:(?:filepath|file|path)\s*:?\s*)?"
+                        r"[`\"']?([a-zA-Z0-9_\-./\\]+)[`\"']?",
                         first,
                     )
                     if m_comm and self.is_valid_file_path(m_comm.group(1)):

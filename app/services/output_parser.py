@@ -372,6 +372,7 @@ class AgentOutputParser:
             veredicto = str(veredicto_raw) if veredicto_raw is not None else None
             if veredicto is None and estado_entregable in (
                 DeliverableStatus.CHARTER_NEGOCIO_LISTO,
+                DeliverableStatus.SISTEMA_DISENO_UI_LISTO,
                 DeliverableStatus.LANZAMIENTO_AUTORIZADO,
             ):
                 veredicto = "APROBADO"
@@ -384,6 +385,7 @@ class AgentOutputParser:
                 puntuacion = int(puntuacion_raw.strip())
             elif puntuacion is None and estado_entregable in (
                 DeliverableStatus.CHARTER_NEGOCIO_LISTO,
+                DeliverableStatus.SISTEMA_DISENO_UI_LISTO,
                 DeliverableStatus.LANZAMIENTO_AUTORIZADO,
             ):
                 puntuacion = 100
