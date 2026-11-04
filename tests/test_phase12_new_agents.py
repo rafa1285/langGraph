@@ -358,3 +358,57 @@ async def test_ui_ux_emits_artifacts_and_materializer(
     tokens_file = build_dir / "resources" / "css" / "design_tokens.css"
     assert tokens_file.exists()
     assert "--color-primary" in tokens_file.read_text(encoding="utf-8")
+
+
+@pytest.mark.asyncio
+async def test_marketing_emits_seo_artifacts_and_materializer(
+    clean_test_workspace: Path,
+    test_office_store: OfficeStore,
+) -> None:
+    """Verify that node_12_marketing outputs robots, sitemap and seo metadata for materializer."""
+    import json
+
+    gateway = MockLLMGateway()
+    loader = PromptLoader()
+    writer = WorkspaceWriter(base_dir=clean_test_workspace)
+    mail_svc = MailService(store=test_office_store)
+    nodes = FactoryNodes(
+        llm_gateway=gateway,
+        prompt_loader=loader,
+        workspace_writer=writer,
+        office_store=test_office_store,
+        mail_service=mail_svc,
+    )
+
+    state = create_initial_state(
+        project_id="proj_mkt_materializer",
+        idea_inicial="SaaS de verificación masiva con SEO programático.",
+    )
+    state["ceo_charter"] = "# Charter CEO 100% Zero-Touch"
+    state["ui_ux_spec"] = "# UI/UX Spec con 3 clics y simulador en Hero"
+    state["documentacion_rag"] = "# Docs OpenAPI y fragmentos RAG"
+
+    res_mkt = await nodes.marketing_node(state)
+    mkt_spec = str(res_mkt["marketing_spec"])
+    assert "public/robots.txt" in mkt_spec
+    assert "public/sitemap.xml" in mkt_spec
+    assert "config/seo_metadata.json" in mkt_spec
+    assert '"human_sales_cta_allowed": false' in mkt_spec
+
+    materializer = CodeMaterializerService(workspaces_dir=clean_test_workspace)
+    build_dir, manifest = materializer.materialize_project("proj_mkt_materializer")
+
+    robots_file = build_dir / "public" / "robots.txt"
+    assert robots_file.exists()
+    assert "User-agent: *" in robots_file.read_text(encoding="utf-8")
+
+    sitemap_file = build_dir / "public" / "sitemap.xml"
+    assert sitemap_file.exists()
+    assert "<urlset" in sitemap_file.read_text(encoding="utf-8")
+
+    seo_file = build_dir / "config" / "seo_metadata.json"
+    assert seo_file.exists()
+    seo_data = json.loads(seo_file.read_text(encoding="utf-8"))
+    assert seo_data["human_sales_cta_allowed"] is False
+    assert "PLG" in seo_data["acquisition_model"]
+

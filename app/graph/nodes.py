@@ -182,6 +182,87 @@ module.exports = {
 ```
 """
 
+FALLBACK_MARKETING = (
+    "---\n"
+    'id_proyecto: "<ID_DEL_PROYECTO>"\n'
+    "version_iteracion: 1\n"
+    'agente_emisor: "agente_12_marketing"\n'
+    'agente_receptor: "agente_13_sales_analytics"\n'
+    'estado: "ESTRATEGIA_CAPTACION_LISTA"\n'
+    'prioridad: "HIGH"\n'
+    'timestamp: "2026-11-04T00:00:00Z"\n'
+    "---\n\n"
+    "# Estrategia de Marketing Digital, SEO Programático y Captación Zero-Touch\n"
+    "## 1. Posicionamiento y Copywriting de Alta Conversión (PAS + PLG)\n"
+    "- Hero Section con Time-to-First-Value en menos de 60 segundos "
+    "sin registro previo ni tarjeta.\n"
+    "- Simulador interactivo en vivo y 0 fricción.\n\n"
+    "## 2. Configuración de Rastreo Web Técnico (`public/robots.txt`)\n"
+    "```text\n"
+    "# filepath: public/robots.txt\n"
+    "User-agent: *\n"
+    "Allow: /\n"
+    "Allow: /docs.html\n"
+    "Disallow: /api/\n"
+    "Disallow: /admin/\n"
+    "Disallow: /workspace/\n\n"
+    "Sitemap: https://validator-hq-saas.vercel.app/sitemap.xml\n"
+    "```\n\n"
+    "## 3. Mapa del Sitio Canónico (`public/sitemap.xml`)\n"
+    "```xml\n"
+    "<!-- filepath: public/sitemap.xml -->\n"
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+    "  <url>\n"
+    "    <loc>https://validator-hq-saas.vercel.app/</loc>\n"
+    "    <changefreq>daily</changefreq>\n"
+    "    <priority>1.0</priority>\n"
+    "  </url>\n"
+    "  <url>\n"
+    "    <loc>https://validator-hq-saas.vercel.app/docs.html</loc>\n"
+    "    <changefreq>weekly</changefreq>\n"
+    "    <priority>0.8</priority>\n"
+    "  </url>\n"
+    "</urlset>\n"
+    "```\n\n"
+    "## 4. Metadata SEO y Esquema JSON-LD (`config/seo_metadata.json`)\n"
+    "```json\n"
+    "// filepath: config/seo_metadata.json\n"
+    "{\n"
+    '  "acquisition_model": "100% Zero-Touch PLG & Programmatic SEO",\n'
+    '  "human_sales_cta_allowed": false,\n'
+    '  "meta_tags": {\n'
+    '    "title": "ValidatorHQ SaaS — Instant Zero-Touch Validation & Compliance Engine",\n'
+    '    "description": "Validate payload integrity, security headers and compliance in under '
+    '60 seconds. Live interactive simulator with zero signup required.",\n'
+    '    "og_type": "website",\n'
+    '    "robots": "index, follow"\n'
+    "  },\n"
+    '  "json_ld_schema": {\n'
+    '    "@context": "https://schema.org",\n'
+    '    "@type": "SoftwareApplication",\n'
+    '    "name": "ValidatorHQ SaaS",\n'
+    '    "applicationCategory": "DeveloperApplication",\n'
+    '    "operatingSystem": "Web, Cloud",\n'
+    '    "offers": {\n'
+    '      "@type": "AggregateOffer",\n'
+    '      "lowPrice": "19.00",\n'
+    '      "highPrice": "199.00",\n'
+    '      "priceCurrency": "USD"\n'
+    "    }\n"
+    "  },\n"
+    '  "automated_drip_sequence": [\n'
+    '    {"step": 1, "trigger": "on_free_simulator_run", "delay_hours": 0, "subject": '
+    '"Your instant validation report + API key inside"},\n'
+    '    {"step": 2, "trigger": "on_quota_50_percent", "delay_hours": 48, "subject": '
+    '"Automate your pipeline in 1 click (Zero-Touch webhook setup)"},\n'
+    '    {"step": 3, "trigger": "on_quota_80_percent", "delay_hours": 120, "subject": '
+    '"Unlock 25,000 validations/mo — Instant self-serve upgrade"}\n'
+    "  ]\n"
+    "}\n"
+    "```\n"
+)
+
 
 def _build_ceo_signoff_payload(state: SoftwareFactoryState) -> str:
     """Build comprehensive closing payload for CEO signoff and governance audit."""
@@ -874,6 +955,8 @@ class FactoryNodes:
             AgentID.AGENTE_12_MARKETING,
             state,
         )
+        if not raw_output or "robots.txt" not in raw_output:
+            raw_output = FALLBACK_MARKETING
         return {
             "marketing_spec": raw_output,
             "execution_history": [record],

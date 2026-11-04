@@ -373,6 +373,8 @@ class AgentOutputParser:
             if veredicto is None and estado_entregable in (
                 DeliverableStatus.CHARTER_NEGOCIO_LISTO,
                 DeliverableStatus.SISTEMA_DISENO_UI_LISTO,
+                DeliverableStatus.ESTRATEGIA_CAPTACION_LISTA,
+                DeliverableStatus.EMBUDO_Y_METRICAS_LISTOS,
                 DeliverableStatus.LANZAMIENTO_AUTORIZADO,
             ):
                 veredicto = "APROBADO"
@@ -386,6 +388,8 @@ class AgentOutputParser:
             elif puntuacion is None and estado_entregable in (
                 DeliverableStatus.CHARTER_NEGOCIO_LISTO,
                 DeliverableStatus.SISTEMA_DISENO_UI_LISTO,
+                DeliverableStatus.ESTRATEGIA_CAPTACION_LISTA,
+                DeliverableStatus.EMBUDO_Y_METRICAS_LISTOS,
                 DeliverableStatus.LANZAMIENTO_AUTORIZADO,
             ):
                 puntuacion = 100

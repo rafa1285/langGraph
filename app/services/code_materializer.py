@@ -188,6 +188,24 @@ class CodeMaterializerService:
                 norm_path = path.replace("\\", "/").strip("/")
                 if norm_path.startswith("./"):
                     norm_path = norm_path[2:]
+
+                # Strip leading comment line for JSON and XML to guarantee valid syntax
+                if norm_path.endswith((".json", ".xml")):
+                    code_lines = [cl.strip() for cl in code.splitlines() if cl.strip()]
+                    if code_lines:
+                        first = code_lines[0]
+                        m_comm = re.match(
+                            r"^(?:#|//|--|/\*|<!--)\s*(?:(?:filepath|file|path)\s*:?\s*)?"
+                            r"[`\"']?([a-zA-Z0-9_\-./\\]+)[`\"']?",
+                            first,
+                        )
+                        if m_comm:
+                            lines_raw = code.splitlines(keepends=True)
+                            for idx, lr in enumerate(lines_raw):
+                                if lr.strip() == first:
+                                    code = "".join(lines_raw[idx + 1 :]).lstrip()
+                                    break
+
                 results.append((norm_path, code))
 
         return results
