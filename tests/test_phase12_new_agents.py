@@ -87,6 +87,8 @@ async def test_prompt_loader_and_mock_llm_for_new_agents() -> None:
     assert header_ceo.estado_entregable == DeliverableStatus.CHARTER_NEGOCIO_LISTO
     assert header_ceo.destino_siguiente == AgentID.AGENTE_01_PM.value
     assert "Zero-Touch" in mock_ceo_charter
+    assert "config/business_charter.json" in mock_ceo_charter
+    assert '"human_touchpoints_allowed": false' in mock_ceo_charter
 
     # AGENTE_00_CEO Closing (Signoff)
     mock_ceo_signoff = await gateway.invoke_agent(
@@ -99,6 +101,8 @@ async def test_prompt_loader_and_mock_llm_for_new_agents() -> None:
     )
     assert header_signoff.estado_entregable == DeliverableStatus.LANZAMIENTO_AUTORIZADO
     assert header_signoff.destino_siguiente == AgentID.END_PIPELINE.value
+    assert "config/release_manifest.json" in mock_ceo_signoff
+    assert '"zero_touch_compliance": true' in mock_ceo_signoff
 
     # AGENTE_11_UI_UX
     prompt_ui = await loader.load_prompt(AgentID.AGENTE_11_UI_UX)
@@ -171,6 +175,8 @@ async def test_ceo_opening_and_signoff_nodes(
 
     assert "Business Charter" in state["ceo_charter"]
     assert "Zero-Touch" in state["ceo_charter"]
+    assert "config/business_charter.json" in state["ceo_charter"]
+    assert '"human_touchpoints_allowed": false' in state["ceo_charter"]
     assert len(state["execution_history"]) == 1
     assert state["execution_history"][0].agent_id == AgentID.AGENTE_00_CEO
     assert state["execution_history"][0].status == DeliverableStatus.CHARTER_NEGOCIO_LISTO
@@ -178,7 +184,12 @@ async def test_ceo_opening_and_signoff_nodes(
     # Verify deliverable file was written
     charter_file = clean_test_workspace / "proj_ceo_lifecycle" / "01_agente_00_ceo.md"
     assert charter_file.exists()
-    assert "origen: \"agente_00_ceo\"" in charter_file.read_text(encoding="utf-8")
+    charter_text = charter_file.read_text(encoding="utf-8")
+    has_ceo_header = (
+        'agente_emisor: "agente_00_ceo"' in charter_text
+        or 'origen: "agente_00_ceo"' in charter_text
+    )
+    assert has_ceo_header
 
     # Verify email sent from ceo@agentoffice.local to agente_01_pm
     emails_pm = await test_office_store.get_emails("proj_ceo_lifecycle")
@@ -200,6 +211,8 @@ async def test_ceo_opening_and_signoff_nodes(
 
     assert "Acta de Cierre Ejecutivo" in state["ceo_signoff"]
     assert state["ceo_approved"] is True
+    assert "config/release_manifest.json" in state["ceo_signoff"]
+    assert '"zero_touch_compliance": true' in state["ceo_signoff"]
     assert len(state["execution_history"]) == 2
     assert state["execution_history"][1].status == DeliverableStatus.LANZAMIENTO_AUTORIZADO
 

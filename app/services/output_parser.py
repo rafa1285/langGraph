@@ -341,15 +341,24 @@ class AgentOutputParser:
                 normalized_dict.get("origen")
                 or normalized_dict.get("source")
                 or normalized_dict.get("agent_id")
+                or normalized_dict.get("agente_emisor")
+                or normalized_dict.get("emisor")
                 or agent_id.value
             )
-            destino_siguiente = str(
+            raw_dest = str(
                 normalized_dict.get("destino_siguiente")
                 or normalized_dict.get("destino")
                 or normalized_dict.get("next_agent")
                 or normalized_dict.get("siguiente_agente")
+                or normalized_dict.get("agente_receptor")
+                or normalized_dict.get("receptor")
                 or ""
             )
+            if raw_dest.lower() in ("broadcast_all", "broadcast"):
+                destino_siguiente = AgentID.END_PIPELINE.value
+            else:
+                destino_siguiente = raw_dest
+
             raw_status = str(
                 normalized_dict.get("estado_entregable")
                 or normalized_dict.get("estado")
@@ -361,6 +370,11 @@ class AgentOutputParser:
 
             veredicto_raw = normalized_dict.get("veredicto") or normalized_dict.get("verdict")
             veredicto = str(veredicto_raw) if veredicto_raw is not None else None
+            if veredicto is None and estado_entregable in (
+                DeliverableStatus.CHARTER_NEGOCIO_LISTO,
+                DeliverableStatus.LANZAMIENTO_AUTORIZADO,
+            ):
+                veredicto = "APROBADO"
 
             puntuacion_raw = normalized_dict.get("puntuacion") or normalized_dict.get("score")
             puntuacion: int | None = None
@@ -368,6 +382,11 @@ class AgentOutputParser:
                 puntuacion = int(puntuacion_raw)
             elif isinstance(puntuacion_raw, str) and puntuacion_raw.strip().isdigit():
                 puntuacion = int(puntuacion_raw.strip())
+            elif puntuacion is None and estado_entregable in (
+                DeliverableStatus.CHARTER_NEGOCIO_LISTO,
+                DeliverableStatus.LANZAMIENTO_AUTORIZADO,
+            ):
+                puntuacion = 100
 
             culpable_raw = normalized_dict.get("culpable_detectado") or normalized_dict.get(
                 "culpable"

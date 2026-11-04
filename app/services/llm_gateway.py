@@ -382,15 +382,23 @@ Plan de lanzamiento, métricas operativas y checklist de producción.
             case AgentID.AGENTE_00_CEO:
                 if any(
                     k in user_payload
-                    for k in ("Resumen Ejecutivo", "Charter Inicial", "Dictamen CISO", "Acta")
+                    for k in (
+                        "Resumen Ejecutivo",
+                        "Charter Inicial",
+                        "Dictamen CISO",
+                        "Acta",
+                        "Auditoría de Cierre",
+                    )
                 ):
                     return """---
-origen: "agente_00_ceo"
-destino_siguiente: "end_pipeline"
-estado_entregable: "LANZAMIENTO_AUTORIZADO"
-veredicto: "APROBADO"
-puntuacion: 100
-culpable_detectado: null
+id_proyecto: "<ID_DEL_PROYECTO>"
+version_iteracion: 1
+agente_emisor: "agente_00_ceo"
+agente_receptor: "broadcast_all"
+estado: "LANZAMIENTO_AUTORIZADO"
+estado_global: "CICLO_DE_SOFTWARE_COMPLETADO_100"
+prioridad: "HIGH"
+timestamp: "2026-11-04T00:00:00Z"
 ---
 
 # Acta de Cierre Ejecutivo y Lanzamiento a Producción
@@ -398,24 +406,93 @@ Auditoría completada para Ingeniería, CISO, Documentación, Marketing y Ventas
 - Circuit Breaker: INACTIVO (0 fallos críticos).
 - Modelo de Negocio: 100% Zero-Touch validado.
 - Veredicto: Lanzamiento comercial y productivo formalmente autorizado.
+
+```json
+// filepath: config/release_manifest.json
+{
+  "release_status": "AUTHORIZED_FOR_PRODUCTION",
+  "zero_touch_compliance": true,
+  "security_shield_verified": true,
+  "circuit_breaker_triggered": false,
+  "approved_departments": [
+    "agente_01_pm",
+    "agente_02_architect",
+    "agente_11_ui_ux",
+    "agente_03_laravel",
+    "agente_04_fastapi",
+    "agente_05_qa_php",
+    "agente_06_qa_python",
+    "agente_07_devops",
+    "agente_10_ciso",
+    "agente_08_docs",
+    "agente_12_marketing",
+    "agente_13_sales_analytics"
+  ]
+}
+```
 """
                 return """---
-origen: "agente_00_ceo"
-destino_siguiente: "agente_01_pm"
-estado_entregable: "CHARTER_NEGOCIO_LISTO"
-veredicto: "APROBADO"
-puntuacion: 100
-culpable_detectado: null
+id_proyecto: "<ID_DEL_PROYECTO>"
+version_iteracion: 1
+agente_emisor: "agente_00_ceo"
+agente_receptor: "agente_01_pm"
+estado: "CHARTER_NEGOCIO_LISTO"
+prioridad: "HIGH"
+timestamp: "2026-11-04T00:00:00Z"
 ---
 
 # Business Charter y Reglas de Negocio Zero-Touch
-## 1. Visión y Propuesta de Valor
-Plataforma SaaS moderna de verificación y saneamiento de datos con arquitectura cloud.
-## 2. Regla Inquebrantable de Negocio
-Operación 100% Zero-Touch / Self-Service. Queda prohibido depender de comerciales
-humanos o agendas manuales de demos.
-## 3. Economía Unitaria
-CAC proyectado < $25, LTV proyectado > $200. Margen bruto objetivo 85%.
+## 1. Tesis de Negocio y Reposicionamiento Zero-Touch
+Plataforma SaaS moderna de verificación y saneamiento de datos 100% autoservicio sin comerciales.
+## 2. Ingeniería de Unit Economics y Pricing Tier Matrix
+- Starter: $19
+- Growth: $69
+- Scale: $199
+## 3. Mandatos Vinculantes por Departamento
+- agente_01_pm: Enfoque estricto en MVP sin intervención manual.
+- agente_02_architect: Stateless y Serverless-ready.
+- agente_11_ui_ux: Conversión en 3 clics y simulador interactivo en Hero.
+
+```json
+// filepath: config/business_charter.json
+{
+  "business_model": "100% Zero-Touch Micro-SaaS",
+  "human_touchpoints_allowed": false,
+  "max_ttfv_seconds": 60,
+  "target_gross_margin_pct": 85.0,
+  "tiers": [
+    {
+      "id": "tier_entry",
+      "name": "Starter",
+      "price_usd": 19,
+      "billing": "one_time_or_monthly",
+      "hard_quota": 2500,
+      "max_cogs_usd": 1.50
+    },
+    {
+      "id": "tier_pro",
+      "name": "Growth",
+      "price_usd": 69,
+      "billing": "monthly",
+      "hard_quota": 25000,
+      "max_cogs_usd": 6.00
+    },
+    {
+      "id": "tier_scale",
+      "name": "Scale",
+      "price_usd": 199,
+      "billing": "monthly",
+      "hard_quota": 150000,
+      "max_cogs_usd": 22.00
+    }
+  ],
+  "kill_switch_rules": {
+    "free_demo_rate_limit_per_ip_hour": 10,
+    "sha256_deduplication_zero_cost": true,
+    "auto_suspend_on_margin_below_pct": 50.0
+  }
+}
+```
 """
             case AgentID.AGENTE_11_UI_UX:
                 return """---
