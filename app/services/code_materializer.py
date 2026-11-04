@@ -45,10 +45,15 @@ VALID_EXTENSIONS: set[str] = {
 
 DEFAULT_EXCLUDED_AGENTS: set[str] = {
     "agente_10_ciso",
+    "ciso",
     "agente_05_qa_php",
+    "qa_php",
     "agente_06_qa_python",
+    "qa_python",
     "agente_01_pm",
+    "pm",
     "agente_09_growth",
+    "growth",
 }
 
 

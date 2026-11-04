@@ -436,7 +436,7 @@ def _build_user_payload(agent_id: AgentID, state: SoftwareFactoryState) -> str:
     """Construct exact relevant context for each agent without attention dilution."""
     match agent_id:
         case AgentID.AGENTE_00_CEO:
-            if (
+            if state.get("ceo_charter") and (
                 state.get("sales_analytics_spec")
                 or state.get("marketing_spec")
                 or state.get("dictamen_ciso")
@@ -1032,9 +1032,15 @@ class FactoryNodes:
 
     async def ceo_charter_node(self, state: SoftwareFactoryState) -> dict[str, object]:
         """Node for Agent 00 (CEO Opening): Establishes Zero-Touch business charter."""
+        charter_payload = (
+            f"# Idea Inicial del Proyecto\n{state.get('idea_inicial', '')}\n\n"
+            f"# Regla Inquebrantable de Negocio\n"
+            f"Definir Business Charter 100% Zero-Touch y Self-Service sin comerciales humanos."
+        )
         raw_output, _status, _dest, record = await self._execute_agent_step(
             AgentID.AGENTE_00_CEO,
             state,
+            payload_override=charter_payload,
         )
         if not raw_output or "config/business_charter.json" not in raw_output:
             raw_output = FALLBACK_CEO_CHARTER

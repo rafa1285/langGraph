@@ -1,6 +1,9 @@
 """Service layer implementations for prompts, parsing, workspaces, LLMs, and orchestration."""
 
-from app.services.backfill_service import ProjectBackfillService
+from app.services.backfill_service import (
+    ProjectBackfillService,
+    extend_project_with_new_agents,
+)
 from app.services.code_materializer import CodeMaterializerService
 from app.services.event_bus import ConnectionManager, event_bus
 from app.services.github_publisher import GitHubPublisherService
@@ -45,5 +48,6 @@ __all__ = [
     "RealMailBridge",
     "WorkspaceWriter",
     "event_bus",
+    "extend_project_with_new_agents",
     "get_knowledge_sync_adapter",
 ]

@@ -9,7 +9,10 @@ from pathlib import Path
 
 from app.core.config import settings
 from app.schemas.routing import AgentID, StepExecutionRecord
-from app.services.backfill_service import ProjectBackfillService
+from app.services.backfill_service import (
+    ProjectBackfillService,
+    extend_project_with_new_agents,
+)
 from app.services.code_materializer import CodeMaterializerService
 from app.services.github_publisher import GitHubPublisherService
 from app.services.llm_gateway import GeminiLLMGateway, MockLLMGateway
@@ -456,6 +459,35 @@ async def backfill_command(project_id: str, real_mail: bool, notion: bool) -> No
     print("------------------------------------------------------------\n")
 
 
+async def extend_agents_command(
+    project_id: str,
+    real_mail: bool = False,
+    sync_notion: bool = False,
+) -> None:
+    """Extend an existing legacy project with CEO, UI/UX, Marketing, and Sales departments."""
+    try:
+        res = await extend_project_with_new_agents(
+            project_id=project_id,
+            real_mail=real_mail,
+            sync_notion=sync_notion,
+        )
+    except FileNotFoundError as exc:
+        print(f"\n[ERROR] {exc}\n")
+        return
+
+    print("\n------------------------------------------------------------")
+    print(f"Extensión de Agentes Completada: Proyecto {project_id}")
+    print("------------------------------------------------------------")
+    print("Nodos Ejecutados             :")
+    for node_name in res.get("executed_nodes", []):
+        print(f"  - {node_name}")
+    print(f"Artefactos Materializados    : {len(res.get('materialized_files', []))}")
+    for mf in res.get("materialized_files", []):
+        print(f"  * {mf}")
+    print(f"Estado Final                 : {res.get('status', 'UNKNOWN')}")
+    print("------------------------------------------------------------\n")
+
+
 async def publish_git_command(project_id: str, repo_name: str, public: bool) -> None:
     """Create a remote repository on GitHub and push the materialized build."""
     service = GitHubPublisherService()
@@ -679,6 +711,28 @@ def main() -> None:
         help="Vercel project name",
     )
 
+    # extend-agents command
+    extend_parser = subparsers.add_parser(
+        "extend-agents",
+        help="Extend legacy project with 4 new departments (CEO, UI/UX, Marketing, Sales)",
+    )
+    extend_parser.add_argument(
+        "--project-id",
+        required=True,
+        type=str,
+        help="Legacy Project ID to extend",
+    )
+    extend_parser.add_argument(
+        "--real-mail",
+        action="store_true",
+        help="Sync generated handoff emails to Strato IMAP",
+    )
+    extend_parser.add_argument(
+        "--sync-notion",
+        action="store_true",
+        help="Sync deliverables and logs to Notion / Local Mirror",
+    )
+
     args = parser.parse_args()
 
     match args.command:
@@ -700,6 +754,14 @@ def main() -> None:
             asyncio.run(sync_notion_command(args.project_id, args.local_mirror))
         case "backfill":
             asyncio.run(backfill_command(args.project_id, args.real_mail, args.notion))
+        case "extend-agents":
+            asyncio.run(
+                extend_agents_command(
+                    args.project_id,
+                    args.real_mail,
+                    args.sync_notion,
+                )
+            )
         case "publish-git":
             asyncio.run(publish_git_command(args.project_id, args.repo_name, args.public))
         case "deploy-local":

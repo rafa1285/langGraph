@@ -17,8 +17,63 @@ from app.schemas.office import AgentEmailRecord
 logger = logging.getLogger(__name__)
 
 
+AGENT_IMAP_FOLDER_MAP: dict[str, str] = {
+    "agente_00_ceo": "AgentOffice/00_CEO",
+    "ceo": "AgentOffice/00_CEO",
+    "agente_01_pm": "AgentOffice/01_PM",
+    "pm": "AgentOffice/01_PM",
+    "agente_02_architect": "AgentOffice/02_Architect",
+    "architect": "AgentOffice/02_Architect",
+    "agente_11_ui_ux": "AgentOffice/11_UI_UX",
+    "ui_ux": "AgentOffice/11_UI_UX",
+    "agente_03_laravel": "AgentOffice/03_Laravel",
+    "laravel": "AgentOffice/03_Laravel",
+    "agente_04_fastapi": "AgentOffice/04_FastAPI",
+    "fastapi": "AgentOffice/04_FastAPI",
+    "agente_05_qa_php": "AgentOffice/05_QA_PHP",
+    "qa_php": "AgentOffice/05_QA_PHP",
+    "agente_06_qa_python": "AgentOffice/06_QA_Python",
+    "qa_python": "AgentOffice/06_QA_Python",
+    "agente_07_devops": "AgentOffice/07_DevOps",
+    "devops": "AgentOffice/07_DevOps",
+    "agente_10_ciso": "AgentOffice/10_CISO",
+    "ciso": "AgentOffice/10_CISO",
+    "agente_08_docs": "AgentOffice/08_Docs",
+    "docs": "AgentOffice/08_Docs",
+    "agente_09_growth": "AgentOffice/09_Growth",
+    "growth": "AgentOffice/09_Growth",
+    "agente_12_marketing": "AgentOffice/12_Marketing",
+    "marketing": "AgentOffice/12_Marketing",
+    "agente_13_sales_analytics": "AgentOffice/13_Sales_Analytics",
+    "sales_analytics": "AgentOffice/13_Sales_Analytics",
+    "sales": "AgentOffice/13_Sales_Analytics",
+    "13_sales_analytics": "AgentOffice/13_Sales_Analytics",
+    "00_ceo": "AgentOffice/00_CEO",
+    "11_ui_ux": "AgentOffice/11_UI_UX",
+    "12_marketing": "AgentOffice/12_Marketing",
+}
+
+
+def resolve_agent_imap_folder(recipient_or_agent: str) -> str:
+    """Resolve full IMAP folder path for an agent identifier."""
+    clean = recipient_or_agent.split("@")[0].lower().strip()
+    return AGENT_IMAP_FOLDER_MAP.get(clean, f"AgentOffice/{clean}")
+
+
 class RealMailBridge:
     """Connects internal agent communication to live Strato IMAP/SMTP services."""
+
+    AGENT_IMAP_FOLDER_MAP = AGENT_IMAP_FOLDER_MAP
+
+    @classmethod
+    def resolve_agent_imap_folder(cls, recipient_or_agent: str) -> str:
+        """Resolve full IMAP folder path for an agent identifier."""
+        return resolve_agent_imap_folder(recipient_or_agent)
+
+    @classmethod
+    def get_agent_imap_folder(cls, recipient_or_agent: str) -> str:
+        """Alias for resolve_agent_imap_folder."""
+        return resolve_agent_imap_folder(recipient_or_agent)
 
     def __init__(
         self,
@@ -152,8 +207,11 @@ class RealMailBridge:
             sep = self._detect_imap_separator(imap)
             recipient_agent = email_record.recipient.split("@")[0]
 
-            # Build hierarchy: INBOX.AgentOffice.<project_id>.<recipient_agent>
-            parts = ["INBOX", "AgentOffice", email_record.project_id, recipient_agent]
+            mapped_folder = self.resolve_agent_imap_folder(recipient_agent)
+            agent_segment = mapped_folder.split("/")[-1]
+
+            # Build hierarchy: INBOX.AgentOffice.<project_id>.<agent_segment>
+            parts = ["INBOX", "AgentOffice", email_record.project_id, agent_segment]
             for i in range(2, len(parts) + 1):
                 folder_name = sep.join(parts[:i])
                 quoted_folder = f'"{folder_name}"'

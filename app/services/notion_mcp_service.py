@@ -12,6 +12,7 @@ from typing import Any, Protocol, runtime_checkable
 import httpx
 
 from app.core.config import settings
+from app.schemas.routing import AgentID
 
 logger = logging.getLogger(__name__)
 
@@ -76,6 +77,141 @@ LANGUAGE_NORMALIZATION_MAP: dict[str, str] = {
 }
 
 NOTION_LANGUAGES: dict[str, str] = LANGUAGE_NORMALIZATION_MAP
+
+NOTION_AGENT_METADATA: dict[str, dict[str, str]] = {
+    "agente_00_ceo": {
+        "icon": "👔",
+        "label": "00. CEO — Business Charter & Executive Sign-off",
+    },
+    "ceo": {
+        "icon": "👔",
+        "label": "00. CEO — Business Charter & Executive Sign-off",
+    },
+    "agente_01_pm": {
+        "icon": "📋",
+        "label": "01. PM — Pre-SDD & Requirements",
+    },
+    "pm": {
+        "icon": "📋",
+        "label": "01. PM — Pre-SDD & Requirements",
+    },
+    "agente_02_architect": {
+        "icon": "🏗️",
+        "label": "02. Architect — SDD & Technical Design",
+    },
+    "architect": {
+        "icon": "🏗️",
+        "label": "02. Architect — SDD & Technical Design",
+    },
+    "agente_11_ui_ux": {
+        "icon": "🎨",
+        "label": "11. UI/UX — Design System & Wireframes",
+    },
+    "ui_ux": {
+        "icon": "🎨",
+        "label": "11. UI/UX — Design System & Wireframes",
+    },
+    "agente_03_laravel": {
+        "icon": "🐘",
+        "label": "03. Laravel — Backend & Core Services",
+    },
+    "laravel": {
+        "icon": "🐘",
+        "label": "03. Laravel — Backend & Core Services",
+    },
+    "agente_04_fastapi": {
+        "icon": "⚡",
+        "label": "04. FastAPI — Microservices & Async Engine",
+    },
+    "fastapi": {
+        "icon": "⚡",
+        "label": "04. FastAPI — Microservices & Async Engine",
+    },
+    "agente_05_qa_php": {
+        "icon": "🧪",
+        "label": "05. QA PHP — Pest & Unit Verification",
+    },
+    "qa_php": {
+        "icon": "🧪",
+        "label": "05. QA PHP — Pest & Unit Verification",
+    },
+    "agente_06_qa_python": {
+        "icon": "🔬",
+        "label": "06. QA Python — Pytest & Integration Tests",
+    },
+    "qa_python": {
+        "icon": "🔬",
+        "label": "06. QA Python — Pytest & Integration Tests",
+    },
+    "agente_07_devops": {
+        "icon": "🚀",
+        "label": "07. DevOps — Docker & Infrastructure",
+    },
+    "devops": {
+        "icon": "🚀",
+        "label": "07. DevOps — Docker & Infrastructure",
+    },
+    "agente_10_ciso": {
+        "icon": "🛡️",
+        "label": "10. CISO — Cybersecurity & Hardening Audit",
+    },
+    "ciso": {
+        "icon": "🛡️",
+        "label": "10. CISO — Cybersecurity & Hardening Audit",
+    },
+    "agente_08_docs": {
+        "icon": "📚",
+        "label": "08. Docs — Documentation & RAG Chunks",
+    },
+    "docs": {
+        "icon": "📚",
+        "label": "08. Docs — Documentation & RAG Chunks",
+    },
+    "agente_09_growth": {
+        "icon": "🌱",
+        "label": "09. Growth — Strategy & Launch (Legacy)",
+    },
+    "growth": {
+        "icon": "🌱",
+        "label": "09. Growth — Strategy & Launch (Legacy)",
+    },
+    "agente_12_marketing": {
+        "icon": "📣",
+        "label": "12. Marketing — Programmatic SEO & Acquisition",
+    },
+    "marketing": {
+        "icon": "📣",
+        "label": "12. Marketing — Programmatic SEO & Acquisition",
+    },
+    "agente_13_sales_analytics": {
+        "icon": "📈",
+        "label": "13. Sales & BI — Self-Serve Revenue & Analytics",
+    },
+    "sales_analytics": {
+        "icon": "📈",
+        "label": "13. Sales & BI — Self-Serve Revenue & Analytics",
+    },
+}
+
+
+def get_notion_agent_metadata(agent_id: str | AgentID) -> dict[str, str]:
+    """Retrieve official Notion page icon and label for an agent identifier."""
+    raw_id = agent_id.value if isinstance(agent_id, AgentID) else str(agent_id)
+    clean = raw_id.lower().strip()
+    data = NOTION_AGENT_METADATA.get(
+        clean,
+        {
+            "icon": "📄",
+            "label": f"Deliverable — {raw_id}",
+            "title": f"Deliverable — {raw_id}",
+        },
+    )
+    result = dict(data)
+    if "label" in result and "title" not in result:
+        result["title"] = result["label"]
+    elif "title" in result and "label" not in result:
+        result["label"] = result["title"]
+    return result
 
 
 def normalize_notion_code_language(lang: str | None) -> str:
@@ -632,6 +768,11 @@ class NotionMCPAdapter:
         self._hub_pages: dict[str, str] = {}
         self._mirror = LocalNotionMirrorAdapter(workspaces_dir=self.workspaces_dir)
 
+    @classmethod
+    def get_agent_metadata(cls, agent_id: str | AgentID) -> dict[str, str]:
+        """Retrieve official Notion page icon and label for an agent identifier."""
+        return get_notion_agent_metadata(agent_id)
+
     def _get_client(self) -> httpx.AsyncClient:
         """Obtain or instantiate an authenticated HTTP client."""
         if self._client is None or self._client.is_closed:
@@ -932,3 +1073,7 @@ def get_knowledge_sync_adapter(
         workspaces_dir=workspaces_dir,
         http_client=http_client,
     )
+
+
+NotionMCPService = NotionMCPAdapter
+
