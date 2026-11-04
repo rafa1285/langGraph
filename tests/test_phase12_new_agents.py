@@ -133,7 +133,7 @@ async def test_prompt_loader_and_mock_llm_for_new_agents() -> None:
 
     # AGENTE_13_SALES_ANALYTICS
     prompt_sales = await loader.load_prompt(AgentID.AGENTE_13_SALES_ANALYTICS)
-    assert "Sales" in prompt_sales or "Ventas" in prompt_sales
+    assert "sales" in prompt_sales.lower() or "ventas" in prompt_sales.lower()
     mock_sales = await gateway.invoke_agent(
         agent_id=AgentID.AGENTE_13_SALES_ANALYTICS,
         system_prompt=prompt_sales,
@@ -411,4 +411,65 @@ async def test_marketing_emits_seo_artifacts_and_materializer(
     seo_data = json.loads(seo_file.read_text(encoding="utf-8"))
     assert seo_data["human_sales_cta_allowed"] is False
     assert "PLG" in seo_data["acquisition_model"]
+
+
+@pytest.mark.asyncio
+async def test_sales_analytics_emits_bi_artifacts_and_materializer(
+    clean_test_workspace: Path,
+    test_office_store: OfficeStore,
+) -> None:
+    """Verify that node_13_sales_analytics outputs stripe plans, playbook & SQL schema."""
+    import json
+
+    gateway = MockLLMGateway()
+    loader = PromptLoader()
+    writer = WorkspaceWriter(base_dir=clean_test_workspace)
+    mail_svc = MailService(store=test_office_store)
+    nodes = FactoryNodes(
+        llm_gateway=gateway,
+        prompt_loader=loader,
+        workspace_writer=writer,
+        office_store=test_office_store,
+        mail_service=mail_svc,
+    )
+
+    state = create_initial_state(
+        project_id="proj_sales_materializer",
+        idea_inicial="SaaS de verificación masiva con monetización 100% autoservicio.",
+    )
+    state["ceo_charter"] = "# Charter CEO 100% Zero-Touch"
+    state["marketing_spec"] = "# Marketing TOFU listo con SEO programático"
+    state["ui_ux_spec"] = "# UI/UX Spec con 3 clics y simulador en Hero"
+    state["documentacion_rag"] = "# Docs OpenAPI y fragmentos RAG"
+
+    res_sales = await nodes.sales_analytics_node(state)
+    sales_spec = str(res_sales["sales_analytics_spec"])
+    assert "config/stripe_plans.json" in sales_spec
+    assert "config/ai_sales_playbook.json" in sales_spec
+    assert "database/analytics_schema.sql" in sales_spec
+    assert '"human_sales_reps_allowed": false' in sales_spec
+    assert '"human_escalation_enabled": false' in sales_spec
+
+    materializer = CodeMaterializerService(workspaces_dir=clean_test_workspace)
+    build_dir, manifest = materializer.materialize_project("proj_sales_materializer")
+
+    plans_file = build_dir / "config" / "stripe_plans.json"
+    assert plans_file.exists()
+    plans_data = json.loads(plans_file.read_text(encoding="utf-8"))
+    assert plans_data["human_sales_reps_allowed"] is False
+    assert len(plans_data["plans"]) == 3
+
+    playbook_file = build_dir / "config" / "ai_sales_playbook.json"
+    assert playbook_file.exists()
+    playbook_data = json.loads(playbook_file.read_text(encoding="utf-8"))
+    assert playbook_data["human_escalation_enabled"] is False
+    assert len(playbook_data["objection_handlers"]) >= 3
+
+    sql_file = build_dir / "database" / "analytics_schema.sql"
+    assert sql_file.exists()
+    sql_text = sql_file.read_text(encoding="utf-8")
+    assert "CREATE TABLE IF NOT EXISTS funnel_events" in sql_text
+    assert "CREATE TABLE IF NOT EXISTS subscription_ledger" in sql_text
+    assert "CREATE VIEW IF NOT EXISTS v_unit_economics_kpi" in sql_text
+
 

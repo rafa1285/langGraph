@@ -631,42 +631,141 @@ module.exports = {
                     '```\n'
                 )
             case AgentID.AGENTE_13_SALES_ANALYTICS:
-                return """---
-origen: "agente_13_sales_analytics"
-destino_siguiente: "agente_00_ceo"
-estado_entregable: "EMBUDO_Y_METRICAS_LISTOS"
-veredicto: "APROBADO"
-puntuacion: 100
-culpable_detectado: null
----
-
-# Embudo de Ventas Zero-Touch y Analítica de Negocio (BOFU & BI)
-## 1. Matriz de Precios Stripe
-```json
-// config/stripe_plans.json
-{
-  "currency": "usd",
-  "plans": [
-    {"id": "starter_19", "name": "Starter", "price": 19, "credits": 2500},
-    {"id": "growth_69", "name": "Growth", "price": 69, "credits": 10000},
-    {"id": "scale_199", "name": "Scale Pro", "price": 199, "credits": 50000}
-  ]
-}
-```
-
-## 2. Esquema SQL de Telemetría SaaS
-```sql
--- database/analytics_schema.sql
-CREATE TABLE IF NOT EXISTS saas_subscriptions (
-    id VARCHAR(64) PRIMARY KEY,
-    tenant_id VARCHAR(64) NOT NULL,
-    plan_id VARCHAR(32) NOT NULL,
-    mrr_cents INTEGER NOT NULL,
-    status VARCHAR(20) NOT NULL,
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-);
-```
-"""
+                return (
+                    "---\n"
+                    'id_proyecto: "<ID_DEL_PROYECTO>"\n'
+                    "version_iteracion: 1\n"
+                    'agente_emisor: "agente_13_sales_analytics"\n'
+                    'agente_receptor: "agente_00_ceo"\n'
+                    'estado: "EMBUDO_Y_METRICAS_LISTOS"\n'
+                    'prioridad: "HIGH"\n'
+                    'timestamp: "2026-11-04T00:00:00Z"\n'
+                    "---\n\n"
+                    "# Embudo de Ventas Zero-Touch y Analítica de Negocio (BOFU & BI)\n"
+                    "## 1. Matriz de Precios Stripe (`config/stripe_plans.json`)\n"
+                    "```json\n"
+                    "// filepath: config/stripe_plans.json\n"
+                    "{\n"
+                    '  "sales_model": "100% Self-Serve Automated Checkout",\n'
+                    '  "human_sales_reps_allowed": false,\n'
+                    '  "currency": "USD",\n'
+                    '  "plans": [\n'
+                    "    {\n"
+                    '      "plan_id": "tier_entry",\n'
+                    '      "name": "Starter",\n'
+                    '      "price_usd": 19,\n'
+                    '      "billing_interval": "one_time_or_monthly",\n'
+                    '      "quota_requests": 2500,\n'
+                    '      "overage_action": "auto_prompt_upgrade_to_pro",\n'
+                    '      "target_gross_margin_pct": 85.0\n'
+                    "    },\n"
+                    "    {\n"
+                    '      "plan_id": "tier_pro",\n'
+                    '      "name": "Growth",\n'
+                    '      "price_usd": 69,\n'
+                    '      "billing_interval": "monthly",\n'
+                    '      "quota_requests": 25000,\n'
+                    '      "overage_action": "auto_prompt_upgrade_to_scale",\n'
+                    '      "target_gross_margin_pct": 86.5\n'
+                    "    },\n"
+                    "    {\n"
+                    '      "plan_id": "tier_scale",\n'
+                    '      "name": "Scale",\n'
+                    '      "price_usd": 199,\n'
+                    '      "billing_interval": "monthly",\n'
+                    '      "quota_requests": 150000,\n'
+                    '      "overage_action": "auto_topup_pack",\n'
+                    '      "target_gross_margin_pct": 88.0\n'
+                    "    }\n"
+                    "  ],\n"
+                    '  "upsell_triggers": [\n'
+                    '    {"threshold_quota_pct": 80, '
+                    '"action": "send_in_app_banner_and_smtp_alert", '
+                    '"discount_offer_pct": 0},\n'
+                    '    {"threshold_quota_pct": 100, "action": '
+                    '"trigger_instant_1click_upgrade_modal", "grace_requests": 50}\n'
+                    "  ],\n"
+                    '  "dunning_and_retention": {\n'
+                    '    "smart_retries_days": [1, 3, 7],\n'
+                    '    "auto_downgrade_to_free_on_final_failure": true,\n'
+                    '    "cancel_flow_automated_offer": '
+                    '"pause_subscription_30_days_or_20pct_off_next_cycle"\n'
+                    "  }\n"
+                    "}\n"
+                    "```\n\n"
+                    "## 2. Playbook de Cierre Comercial IA (`config/ai_sales_playbook.json`)\n"
+                    "```json\n"
+                    "// filepath: config/ai_sales_playbook.json\n"
+                    "{\n"
+                    '  "assistant_role": "24/7 Autonomous Revenue & Technical Closer",\n'
+                    '  "human_escalation_enabled": false,\n'
+                    '  "objection_handlers": [\n'
+                    "    {\n"
+                    '      "category": "pricing_and_roi",\n'
+                    '      "trigger_keywords": '
+                    '["expensive", "price", "cost", "discount", "free"],\n'
+                    '      "response_strategy": "Highlight instant ROI: $19 Starter plan costs '
+                    "less than 15 minutes of engineering debugging and includes 2,500 verified "
+                    'executions with zero setup.",\n'
+                    '      "target_cta_url": "/#pricing-checkout-starter"\n'
+                    "    },\n"
+                    "    {\n"
+                    '      "category": "security_and_compliance",\n'
+                    '      "trigger_keywords": ["security", "gdpr", "data", "ciso", "privacy", '
+                    '"ssrf"],\n'
+                    '      "response_strategy": "Confirm CISO-audited architecture: SHA-256 '
+                    "zero-cost deduplication, strict SSRF protection, zero payload retention and "
+                    'stateless execution.",\n'
+                    '      "target_cta_url": "/docs.html#security"\n'
+                    "    },\n"
+                    "    {\n"
+                    '      "category": "integration_speed",\n'
+                    '      "trigger_keywords": ["api", "integration", "sdk", "webhook", '
+                    '"latency"],\n'
+                    '      "response_strategy": "Demonstrate sub-60s Time-to-First-Value via REST '
+                    "API with instant Bearer token provisioning immediately after Stripe "
+                    'checkout.",\n'
+                    '      "target_cta_url": "/#demo"\n'
+                    "    }\n"
+                    "  ]\n"
+                    "}\n"
+                    "```\n\n"
+                    "## 3. Esquema SQL de Telemetría SaaS (`database/analytics_schema.sql`)\n"
+                    "```sql\n"
+                    "-- filepath: database/analytics_schema.sql\n"
+                    "CREATE TABLE IF NOT EXISTS funnel_events (\n"
+                    "    event_id VARCHAR(64) PRIMARY KEY,\n"
+                    "    anonymous_id VARCHAR(64) NOT NULL,\n"
+                    "    user_id VARCHAR(64),\n"
+                    "    event_name VARCHAR(64) NOT NULL,\n"
+                    "    plan_id VARCHAR(32),\n"
+                    "    metadata_json TEXT,\n"
+                    "    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n"
+                    ");\n\n"
+                    "CREATE TABLE IF NOT EXISTS subscription_ledger (\n"
+                    "    subscription_id VARCHAR(64) PRIMARY KEY,\n"
+                    "    user_id VARCHAR(64) NOT NULL,\n"
+                    "    plan_id VARCHAR(32) NOT NULL,\n"
+                    "    mrr_cents INTEGER NOT NULL,\n"
+                    "    cogs_cents INTEGER NOT NULL DEFAULT 0,\n"
+                    "    status VARCHAR(32) NOT NULL,\n"
+                    "    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,\n"
+                    "    canceled_at TIMESTAMP\n"
+                    ");\n\n"
+                    "CREATE VIEW IF NOT EXISTS v_unit_economics_kpi AS\n"
+                    "SELECT\n"
+                    "    plan_id,\n"
+                    "    COUNT(CASE WHEN status = 'active' THEN 1 END) AS active_subscribers,\n"
+                    "    SUM(CASE WHEN status = 'active' THEN mrr_cents ELSE 0 END) / 100.0 "
+                    "AS total_mrr_usd,\n"
+                    "    SUM(CASE WHEN status = 'active' THEN (mrr_cents - cogs_cents) "
+                    "ELSE 0 END) * 100.0 /\n"
+                    "        NULLIF(SUM(CASE WHEN status = 'active' THEN mrr_cents ELSE 0 END), "
+                    "0) AS gross_margin_pct\n"
+                    "FROM subscription_ledger\n"
+                    "GROUP BY plan_id;\n"
+                    "```\n"
+                )
             case _:
                 return """---
 origen: "unknown"

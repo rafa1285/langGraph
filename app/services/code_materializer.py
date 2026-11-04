@@ -189,8 +189,8 @@ class CodeMaterializerService:
                 if norm_path.startswith("./"):
                     norm_path = norm_path[2:]
 
-                # Strip leading comment line for JSON and XML to guarantee valid syntax
-                if norm_path.endswith((".json", ".xml")):
+                # Strip leading comment line for JSON, XML and SQL to guarantee clean syntax
+                if norm_path.endswith((".json", ".xml", ".sql", ".yaml", ".yml")):
                     code_lines = [cl.strip() for cl in code.splitlines() if cl.strip()]
                     if code_lines:
                         first = code_lines[0]
