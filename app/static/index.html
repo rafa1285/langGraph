@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🏢 AgentOffice v2.5 — Command Center &amp; AI Virtual Office</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Fira+Code:wght@400;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/pixel.css">
+</head>
+<body>
+
+  <!-- CRT Scanline overlay -->
+  <div id="scanlines" aria-hidden="true"></div>
+
+  <div id="app">
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         TOP HUD BAR (Header & Real-Time KPIs)
+    ═══════════════════════════════════════════════════════════════════ -->
+    <header id="top-hud-bar">
+
+      <div class="hud-brand">
+        <span class="hud-icon" aria-hidden="true">🏢</span>
+        <div class="hud-title-group">
+          <span class="hud-title">AGENTOFFICE</span>
+          <span class="hud-tag">CYBER-LOFT v2.5</span>
+        </div>
+        <span class="hud-live-badge"><span class="live-dot"></span>LIVE</span>
+      </div>
+
+      <!-- Real-Time Global Telemetry KPIs -->
+      <div id="hud-kpis" role="region" aria-label="Métricas globales en vivo">
+        <div class="kpi-chip" id="kpi-tasks">
+          <span class="kpi-label">TASKS:</span>
+          <span class="kpi-val" id="kpi-tasks-val">15/15</span>
+        </div>
+        <div class="kpi-chip" id="kpi-tokens">
+          <span class="kpi-label">TOKENS:</span>
+          <span class="kpi-val" id="kpi-tokens-val">0</span>
+        </div>
+        <div class="kpi-chip" id="kpi-cost">
+          <span class="kpi-label">COST:</span>
+          <span class="kpi-val" id="kpi-cost-val">$0.00</span>
+        </div>
+        <div class="kpi-chip" id="kpi-health">
+          <span class="kpi-label">SALUD:</span>
+          <span class="kpi-val" id="kpi-health-val">100%</span>
+        </div>
+      </div>
+
+      <!-- Mode Toggle -->
+      <nav id="mode-selector" aria-label="Modo de trabajo">
+        <button class="mode-btn active" data-mode="greenfield">■ GREENFIELD</button>
+        <button class="mode-btn" data-mode="brownfield">□ BROWNFIELD</button>
+      </nav>
+
+      <!-- Action Launch Controls -->
+      <div id="hud-action-controls">
+        <!-- Greenfield Controls -->
+        <div id="greenfield-controls" class="project-controls active" role="form" aria-label="Lanzar nuevo proyecto">
+          <input type="text" id="idea-input" class="pixel-input"
+                 placeholder="DESCRIBE TU IDEA DE NEGOCIO..." maxlength="500"
+                 aria-label="Idea inicial del proyecto">
+          <button id="btn-launch" class="pixel-btn primary" aria-label="Lanzar proyecto">
+            ▶ LANZAR
+          </button>
+        </div>
+
+        <!-- Brownfield Controls -->
+        <div id="brownfield-controls" class="project-controls" role="form" aria-label="Auditar proyecto GitHub">
+          <input type="text" id="repo-url-input" class="pixel-input"
+                 placeholder="https://github.com/owner/repo"
+                 aria-label="URL del repositorio GitHub">
+          <select id="audit-depth" class="pixel-select" aria-label="Profundidad del análisis">
+            <option value="surface">⚡ RÁPIDO</option>
+            <option value="deep" selected>🔬 PROFUNDO</option>
+          </select>
+          <button id="btn-audit" class="pixel-btn secondary" aria-label="Iniciar auditoría">
+            🔍 AUDITAR
+          </button>
+        </div>
+      </div>
+
+      <!-- Project Selector & Resume -->
+      <div id="project-selector">
+        <label for="project-select" class="pixel-label">PROYECTO:</label>
+        <select id="project-select" class="pixel-select" aria-label="Proyecto activo">
+          <option value="">— NINGUNO —</option>
+        </select>
+        <button id="btn-refresh-projects" class="pixel-btn icon" title="Recargar proyectos">↺</button>
+        <button id="btn-resume" class="pixel-btn secondary" title="Reanudar proyecto pausado">⏯ REANUDAR</button>
+      </div>
+
+    </header>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         MAIN COMMAND CENTER (Office Stage + Operations Sidebar)
+    ═══════════════════════════════════════════════════════════════════ -->
+    <main id="main-layout">
+
+      <!-- Center-Left: The 2D Pixel Art Office Open-Space Loft -->
+      <div id="office-viewport">
+
+        <!-- Stage Canvas containing the Architectural 2D Pixel Art Office Engine -->
+        <div id="office-stage" role="main" aria-label="Plano Arquitectónico y Simulación Canvas 2D">
+
+          <!-- HTML5 Canvas 2D Pixel Art Office Engine (Estilo pablodelucca/pixel-agents) -->
+          <canvas id="office-canvas" width="1024" height="640" aria-label="Oficina Virtual Pixel Agents Canvas 2D"></canvas>
+
+          <!-- Banner overlay when Decoration / Edit Mode is active -->
+          <div id="canvas-edit-banner" class="hidden" role="status" aria-live="polite">
+            <span class="banner-icon">🎨</span>
+            <span>MODO DECORACIÓN ACTIVO: Arrastra muebles o agentes para mover • R: Rotar • Supr: Eliminar</span>
+          </div>
+
+          <!-- Zoom & Pan Camera controls -->
+          <div id="camera-controls" aria-label="Controles de cámara">
+            <button id="cam-zoom-in" class="pixel-btn icon" title="Acercar">+</button>
+            <button id="cam-zoom-out" class="pixel-btn icon" title="Alejar">−</button>
+            <button id="cam-reset" class="pixel-btn icon" title="Vista original">1:1</button>
+            <button id="cam-edit-mode" class="pixel-btn secondary" title="Modo Decoración y Edición de Oficina">🎨 DECORAR</button>
+          </div>
+
+          <!-- Tooltip overlay for agent hover -->
+          <div id="canvas-agent-tooltip" class="canvas-tooltip hidden" aria-hidden="true"></div>
+
+        </div><!-- /#office-stage -->
+
+      </div><!-- /#office-viewport -->
+
+      <!-- Right Column: Operations Panel (Pipeline Stepper + Activity Terminal) -->
+      <aside id="right-ops-panel" aria-label="Operaciones y streaming en tiempo real">
+
+        <!-- Widget 1: Request Pipeline Stepper -->
+        <section id="pipeline-stepper-widget" class="ops-widget" aria-label="Progreso del Pipeline">
+          <div class="widget-header">
+            <span class="widget-icon">🚀</span>
+            <span class="widget-title">REQUEST PIPELINE</span>
+            <span class="widget-status" id="stepper-active-status">ESPERANDO</span>
+          </div>
+          <div id="pipeline-stepper-track" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+            <!-- Stepper steps injected dynamically by JS -->
+          </div>
+        </section>
+
+        <!-- Widget 2: Live Activity Log Terminal -->
+        <section id="activity-log-widget" class="ops-widget" aria-label="Terminal de eventos en vivo">
+          <div class="widget-header">
+            <span class="widget-icon">📡</span>
+            <span class="widget-title">ACTIVITY LOG</span>
+            <span class="widget-badge" id="activity-counter">LIVE</span>
+          </div>
+          <div id="activity-terminal" role="log" aria-live="polite" aria-label="Eventos en streaming">
+            <div id="activity-list"></div>
+          </div>
+        </section>
+
+      </aside><!-- /#right-ops-panel -->
+
+      <!-- Slide-out Side Panel (Chat 1-on-1, Logs, Workspace File Editor) -->
+      <aside id="side-panel" class="hidden" aria-label="Panel de interacción con agente">
+
+        <div id="panel-header">
+          <div id="panel-agent-info">
+            <span id="panel-agent-icon" aria-hidden="true">❓</span>
+            <div>
+              <div id="panel-agent-name">SELECCIONA UN AGENTE</div>
+              <div id="panel-agent-role"></div>
+            </div>
+          </div>
+          <div id="panel-status-dot" class="idle" aria-hidden="true"></div>
+          <button id="btn-close-panel" class="pixel-btn icon" aria-label="Cerrar panel">✕</button>
+        </div>
+
+        <div id="panel-tabs" role="tablist" aria-label="Secciones del panel">
+          <button class="tab-btn active" data-tab="chat" role="tab" aria-selected="true">💬 CHAT</button>
+          <button class="tab-btn" data-tab="logs" role="tab" aria-selected="false">📋 LOGS</button>
+          <button class="tab-btn" data-tab="files" role="tab" aria-selected="false">📁 ARCHIVOS</button>
+        </div>
+
+        <div id="panel-content">
+
+          <!-- Chat Tab -->
+          <div class="tab-content active" id="tab-chat" role="tabpanel">
+            <div id="chat-messages" aria-live="polite" aria-label="Mensajes del chat"></div>
+            <div id="chat-input-area">
+              <textarea id="chat-input" class="pixel-input"
+                        placeholder="ESCRIBE UN MENSAJE... (Ctrl+Enter para enviar)"
+                        rows="3" aria-label="Mensaje para el agente"></textarea>
+              <div id="chat-actions">
+                <button id="btn-send-chat" class="pixel-btn primary">ENVIAR ▶</button>
+                <button id="btn-file-edit" class="pixel-btn secondary"
+                        title="Pedir al agente que edite un archivo del workspace">
+                  ✏ EDITAR ARCHIVO
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Logs Tab -->
+          <div class="tab-content" id="tab-logs" role="tabpanel">
+            <div id="logs-list" aria-label="Historial de ejecución del pipeline"></div>
+          </div>
+
+          <!-- Files Tab -->
+          <div class="tab-content" id="tab-files" role="tabpanel">
+            <div id="files-header">
+              <span id="files-project-label">Sin proyecto activo</span>
+            </div>
+            <div id="files-tree" aria-label="Árbol de entregables generados"></div>
+            <div id="file-viewer">
+              <div id="file-viewer-header"></div>
+              <pre id="file-viewer-content" aria-label="Contenido del archivo"></pre>
+            </div>
+          </div>
+
+        </div><!-- /#panel-content -->
+
+      </aside><!-- /#side-panel -->
+
+    </main>
+
+    <!-- ══════════════════════════════════════════════════════════════════
+         BOTTOM MODULAR COMMAND DOCK (Tools, Telemetry Accordion, Controls)
+    ═══════════════════════════════════════════════════════════════════ -->
+    <footer id="bottom-command-dock" role="toolbar" aria-label="Barra de herramientas de comando">
+
+      <div class="dock-actions">
+        <button id="dock-btn-files" class="pixel-btn secondary" title="Abrir explorador de código y entregables">
+          📁 ARCHIVOS &amp; CÓDIGO
+        </button>
+        <button id="dock-btn-chat" class="pixel-btn secondary" title="Abrir conversación directa">
+          💬 CHAT 1-A-1
+        </button>
+        <button id="dock-btn-telemetry" class="pixel-btn secondary" title="Ver telemetría detallada de tokens y latencias">
+          📊 TELEMETRÍA
+        </button>
+        <button id="dock-btn-decor" class="pixel-btn secondary" title="Modo Decoración: agregar y mover muebles, plantas y puestos">
+          🎨 DECORAR OFICINA
+        </button>
+        <button id="dock-btn-brownfield" class="pixel-btn secondary" title="Auditar repositorio GitHub con CISO y Arquitecto">
+          🛡️ AUDITAR GITHUB
+        </button>
+      </div>
+
+      <div class="dock-system-info">
+        <div id="ws-status" class="status-item" aria-live="polite">
+          <span class="status-dot disconnected" aria-hidden="true"></span>
+          <span id="ws-status-text">SIN CONEXIÓN</span>
+        </div>
+        <div class="status-item">
+          PROYECTO: <span id="status-project-id">—</span>
+        </div>
+        <div class="status-item">
+          ESTADO: <span id="status-pipeline">LISTO</span>
+        </div>
+        <div class="status-item">
+          <span id="status-agents">15</span> AGENTES LISTOS
+        </div>
+        <div class="status-item" id="time-display">
+          <span id="current-time">00:00:00</span>
+        </div>
+      </div>
+
+    </footer>
+
+    <!-- Decoration & Office Designer Tray (Collapsible) -->
+    <div id="decor-tray" class="hidden" role="toolbar" aria-label="Bandeja de decoración de la oficina">
+      <div class="decor-tray-header">
+        <div class="decor-tray-title">
+          <span>🎨 CATÁLOGO DE DECORACIÓN &amp; MOBILIARIO</span>
+          <span class="decor-tray-badge" id="decor-status-badge">Haz clic en un elemento para colocarlo en la oficina</span>
+        </div>
+        <div class="decor-tray-actions">
+          <button id="btn-save-layout" class="pixel-btn primary" title="Guardar diseño en el navegador">💾 GUARDAR</button>
+          <button id="btn-reset-layout" class="pixel-btn secondary" title="Restablecer a la distribución de fábrica">↺ RESTABLECER</button>
+          <button id="btn-close-decor" class="pixel-btn icon" title="Salir del modo diseño">✕</button>
+        </div>
+      </div>
+
+      <nav class="decor-tabs-nav" role="tablist">
+        <button class="decor-tab-btn active" data-cat="furniture" role="tab">🪑 Mobiliario</button>
+        <button class="decor-tab-btn" data-cat="tech" role="tab">💻 Tecnología</button>
+        <button class="decor-tab-btn" data-cat="decor" role="tab">🪴 Decoración &amp; Arte</button>
+        <button class="decor-tab-btn" data-cat="breakroom" role="tab">☕ Cocina &amp; Mascotas</button>
+        <button class="decor-tab-btn" data-cat="agents" role="tab">👤 Reubicar Agentes</button>
+      </nav>
+
+      <div id="decor-items-container" class="decor-items-grid" role="list">
+        <!-- Injected dynamically by JS according to selected tab -->
+      </div>
+
+      <div class="decor-tray-footer">
+        <div class="decor-hints">
+          <span class="decor-hint-chip"><kbd>Clic + Arrastre</kbd> Mover elemento</span>
+          <span class="decor-hint-chip"><kbd>R</kbd> Rotar orientación</span>
+          <span class="decor-hint-chip"><kbd>Supr</kbd> / <kbd>Backspace</kbd> Eliminar</span>
+          <span class="decor-hint-chip"><kbd>Esc</kbd> Deseleccionar</span>
+        </div>
+        <div id="decor-selection-info" class="decor-selection-info">
+          Ningún elemento seleccionado
+        </div>
+      </div>
+    </div>
+
+    <!-- Telemetry Accordion Drawer (Collapsible) -->
+    <div id="telemetry-drawer" class="hidden" role="region" aria-label="Panel de telemetría detallada">
+      <div class="drawer-header">
+        <span>📊 TELEMETRÍA DETALLADA DEL SISTEMA</span>
+        <button id="btn-close-telemetry" class="pixel-btn icon">✕</button>
+      </div>
+      <div class="drawer-body">
+        <div class="telemetry-grid">
+          <div class="telemetry-card">
+            <h4>CONSUMO DE TOKENS</h4>
+            <div id="telemetry-token-breakdown">In: 0 | Out: 0 | Total: 0</div>
+          </div>
+          <div class="telemetry-card">
+            <h4>DISTRIBUCIÓN DE MODELOS</h4>
+            <div id="telemetry-model-info">Gemini 3.5 Flash (Rate-Limited, 0 Cost)</div>
+          </div>
+          <div class="telemetry-card">
+            <h4>AGENTES Y CHECKPOINTS</h4>
+            <div id="telemetry-agents-active">15 roles coordinados por LangGraph StateGraph</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Floating Action Button for Quick Chat -->
+    <button id="fab-chat" class="pixel-fab" title="Abrir chat con agente" aria-label="Chat interactivo">
+      💬
+    </button>
+
+  </div><!-- /#app -->
+
+  <!-- Modal overlay (File Edit & Brownfield Audit) -->
+  <div id="modal-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div id="modal-container">
+      <div id="modal-header">
+        <span id="modal-title"></span>
+        <button id="btn-close-modal" class="pixel-btn icon" aria-label="Cerrar">✕</button>
+      </div>
+      <div id="modal-body"></div>
+      <div id="modal-footer"></div>
+    </div>
+  </div>
+
+  <noscript>
+    <div style="font-family:monospace;padding:40px;text-align:center;background:#0d1117;color:#c9d1d9;position:fixed;inset:0;display:flex;align-items:center;justify-content:center;">
+      ⚠ AgentOffice requiere JavaScript habilitado para funcionar.
+    </div>
+  </noscript>
+
+  <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

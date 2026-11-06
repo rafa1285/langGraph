@@ -191,6 +191,14 @@ NOTION_AGENT_METADATA: dict[str, dict[str, str]] = {
         "icon": "📈",
         "label": "13. Sales & BI — Self-Serve Revenue & Analytics",
     },
+    "agente_14_qa_ui_ux": {
+        "icon": "🎯",
+        "label": "14. QA UI/UX — Visual & Usability Quality Gate",
+    },
+    "qa_ui_ux": {
+        "icon": "🎯",
+        "label": "14. QA UI/UX — Visual & Usability Quality Gate",
+    },
 }
 
 

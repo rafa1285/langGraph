@@ -50,6 +50,8 @@ class SoftwareFactoryState(TypedDict):
     status_qa_python: DeliverableStatus
     status_ciso: DeliverableStatus
     ciso_culprit: AgentID | None
+    reporte_qa_ui_ux: NotRequired[str]
+    status_qa_ui_ux: NotRequired[DeliverableStatus]
     current_status: NotRequired[DeliverableStatus]
     halt_reason: str | None
     retry_counts: Annotated[dict[str, int], merge_retry_counts]

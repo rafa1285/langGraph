@@ -79,6 +79,13 @@ class GeminiLLMGateway:
                 except Exception as e:
                     err_str = str(e).lower()
                     exc_name = type(e).__name__.lower()
+                    is_daily_quota = (
+                        "per day limit exceeded" in err_str
+                        or "perprojectpermodel-freetier" in err_str
+                    )
+                    if is_daily_quota:
+                        raise e
+
                     is_transient = (
                         "429" in err_str
                         or "resourceexhausted" in err_str
@@ -766,6 +773,52 @@ module.exports = {
                     "GROUP BY plan_id;\n"
                     "```\n"
                 )
+            case AgentID.AGENTE_14_QA_UI_UX:
+                return """---
+origen: "agente_14_qa_ui_ux"
+destino_siguiente: "agente_07_devops"
+estado_entregable: "APROBADO_PARA_DESPLIEGUE"
+veredicto: "APROBADO"
+puntuacion: 100
+fallos_criticos: 0
+fallos_mayores: 0
+fallos_menores: 0
+---
+
+# Dictamen de Auditoría de Calidad UI/UX & Usabilidad Visual
+## 1. Cohesión Espacial y Escenario Central
+- Escenario unificado y continuo verificado sin fragmentación ni cajas flotantes.
+- Zonificación completa respetada: Dirección, Bullpen, Estrategia, CISO, QA y Breakroom.
+- Pasillo central de circulación diáfano.
+
+## 2. Fidelidad Gráfica y Renderizado Canvas 2D
+- Renderizado sobre HTML5 Canvas 2D con `imageSmoothingEnabled = false`.
+- Erradicación del uso de emojis Unicode como mobiliario.
+- Muebles y elementos dibujados con escala humana y estética pixel-art.
+
+## 3. Ergonomía, Tipografía Híbrida y Accesibilidad
+- Separación de capas: texto operativo nítido en Fira Code / Inter con contraste WCAG AA.
+- Clic directo sobre agentes verificado: abre chat contextual sin bloqueo de clases CSS.
+
+## 4. Suite de Pruebas Automatizadas E2E (Playwright)
+```javascript
+// filepath: tests/e2e/ui_ux_audit.spec.js
+import { test, expect } from '@playwright/test';
+
+test('Verifica escenario Canvas 2D y apertura directa de chat 1-a-1', async ({ page }) => {
+  await page.goto('http://127.0.0.1:8080');
+  const canvas = page.locator('#office-canvas');
+  await expect(canvas).toBeVisible();
+
+  // Click en agente Laravel
+  await canvas.click({ position: { x: 260, y: 320 } });
+  const panel = page.locator('#side-panel');
+  await expect(panel).toHaveClass(/open/);
+  await expect(panel).not.toHaveClass(/hidden/);
+  await expect(page.locator('#chat-agent-select')).toHaveValue('agente_03_laravel');
+});
+```
+"""
             case _:
                 return """---
 origen: "unknown"

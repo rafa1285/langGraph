@@ -291,6 +291,29 @@ class AgentOutputParser:
                     puntuacion=100,
                     culpable_detectado=None,
                 )
+            case AgentID.AGENTE_14_QA_UI_UX:
+                is_rejected = (
+                    "RECHAZADO" in text_upper
+                    or "FAIL" in text_upper
+                    or "REFACTOR" in text_upper
+                )
+                if is_rejected:
+                    return RoutingHeader(
+                        origen=agent_id.value,
+                        destino_siguiente=AgentID.AGENTE_11_UI_UX.value,
+                        estado_entregable=DeliverableStatus.RECHAZADO_PARA_REFACTOR_UI_UX,
+                        veredicto="RECHAZADO",
+                        puntuacion=40,
+                        culpable_detectado=AgentID.AGENTE_11_UI_UX,
+                    )
+                return RoutingHeader(
+                    origen=agent_id.value,
+                    destino_siguiente=AgentID.AGENTE_07_DEVOPS.value,
+                    estado_entregable=DeliverableStatus.APROBADO_PARA_DESPLIEGUE,
+                    veredicto="APROBADO",
+                    puntuacion=100,
+                    culpable_detectado=None,
+                )
             case _:
                 return RoutingHeader(
                     origen=agent_id.value,

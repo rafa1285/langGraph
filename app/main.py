@@ -5,13 +5,24 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
+from app.api.routes_office import router as office_router
 from app.core.config import settings
 from app.services.llm_gateway import GeminiLLMGateway, MockLLMGateway
 from app.services.orchestrator_service import OrchestratorService
 from app.services.prompt_loader import PromptLoader
 from app.services.workspace_writer import WorkspaceWriter
+
+# Directory containing the 2D Pixel Art SPA assets
+_STATIC_DIR: Path = Path(__file__).parent / "static"
+
+
+async def _serve_spa() -> FileResponse:
+    """Serve the AgentOffice 2D Pixel Art single-page application."""
+    return FileResponse(str(_STATIC_DIR / "index.html"))
 
 
 @asynccontextmanager
@@ -46,15 +57,45 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    """Application factory for the Software Factory FastAPI service."""
+    """Application factory for the AgentOffice Software Factory service."""
     application = FastAPI(
-        title="Software Factory LangGraph Backend",
-        description="Autonomous multi-agent backend powered by LangGraph and FastAPI.",
-        version="0.1.0",
+        title="AgentOffice — Software Factory",
+        description=(
+            "Autonomous multi-agent software factory powered by LangGraph, FastAPI "
+            "and a 2D Pixel Art virtual office UI."
+        ),
+        version="2.0.0",
         lifespan=lifespan,
     )
+
+    # Existing pipeline API routes
     application.include_router(router)
+
+    # Office UI routes (agent status, chat — Phase 2+)
+    application.include_router(office_router)
+
+    # Serve the 2D Pixel Art SPA when the static directory is present
+    if _STATIC_DIR.exists():
+        application.mount(
+            "/static",
+            StaticFiles(directory=str(_STATIC_DIR)),
+            name="static",
+        )
+        application.add_api_route(
+            "/",
+            _serve_spa,
+            methods=["GET"],
+            include_in_schema=False,
+        )
+
     return application
 
 
 app = create_app()
+
+# Expose compiled graph for LangGraph Studio and langgraph-cli
+try:
+    from app.graph_studio import graph
+except Exception:
+    graph = None  # type: ignore[assignment]
+

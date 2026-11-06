@@ -596,6 +596,14 @@ def _build_user_payload(agent_id: AgentID, state: SoftwareFactoryState) -> str:
                 f"# Documentación Técnica y RAG\n{state.get('documentacion_rag', '')}"
             )
 
+        case AgentID.AGENTE_14_QA_UI_UX:
+            return (
+                f"# Business Charter CEO\n{state.get('ceo_charter', '')}\n\n"
+                f"# Sistema de Diseño UI/UX a Auditar\n{state.get('ui_ux_spec', '')}\n\n"
+                f"# Pre-SDD Funcional\n{state.get('pre_sdd_doc', '')}\n\n"
+                f"# SDD Arquitectura Técnica\n{state.get('sdd_arquitectura', '')}"
+            )
+
         case _:
             return state.get("idea_inicial", "")
 
@@ -1115,3 +1123,17 @@ class FactoryNodes:
         }
 
     node_13_sales_analytics = sales_analytics_node
+
+    async def qa_ui_ux_node(self, state: SoftwareFactoryState) -> dict[str, object]:
+        """Node for Agent 14 (QA UI/UX Auditor): Audits visual ergonomics, canvas, and usability."""
+        raw_output, status, _dest, record = await self._execute_agent_step(
+            AgentID.AGENTE_14_QA_UI_UX,
+            state,
+        )
+        return {
+            "reporte_qa_ui_ux": raw_output,
+            "status_qa_ui_ux": status,
+            "execution_history": [record],
+        }
+
+    node_14_qa_ui_ux = qa_ui_ux_node

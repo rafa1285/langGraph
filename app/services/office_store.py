@@ -8,6 +8,8 @@ from uuid import UUID
 import aiosqlite
 
 from app.core.config import settings
+from app.schemas.brownfield import AuditReport
+from app.schemas.chat import ChatTurn
 from app.schemas.office import AgentConversationRecord, AgentEmailRecord, EmailPriority
 from app.schemas.routing import AgentID, DeliverableStatus
 
@@ -72,6 +74,42 @@ class OfficeStore:
             await db.execute(
                 "CREATE INDEX IF NOT EXISTS idx_email_recipient "
                 "ON agent_emails(project_id, recipient, is_read);"
+            )
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS chat_sessions (
+                    id TEXT PRIMARY KEY,
+                    session_id TEXT NOT NULL,
+                    agent_id TEXT NOT NULL,
+                    project_id TEXT,
+                    role TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                """
+            )
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_chat_session "
+                "ON chat_sessions(session_id, created_at);"
+            )
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS brownfield_audits (
+                    project_id TEXT PRIMARY KEY,
+                    repo_url TEXT NOT NULL,
+                    branch TEXT NOT NULL,
+                    depth TEXT NOT NULL,
+                    health_score INTEGER NOT NULL,
+                    report_json TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_bf_status "
+                "ON brownfield_audits(status, created_at);"
             )
             await db.commit()
 
@@ -331,3 +369,116 @@ class OfficeStore:
                             "current_status": "PENDIENTE",
                         }
         return summaries
+
+    async def save_chat_turn(
+        self,
+        turn_id: str,
+        session_id: str,
+        agent_id: str,
+        project_id: str | None,
+        role: str,
+        content: str,
+    ) -> None:
+        """Persist a single chat turn to SQLite."""
+        await self.init_db()
+        from datetime import UTC, datetime
+
+        created_at = datetime.now(UTC).isoformat()
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            await db.execute(
+                """
+                INSERT INTO chat_sessions (
+                    id, session_id, agent_id, project_id, role, content, created_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (turn_id, session_id, agent_id, project_id, role, content, created_at),
+            )
+            await db.commit()
+
+    async def get_chat_history(
+        self, session_id: str, limit: int = 50
+    ) -> list[ChatTurn]:
+        """Retrieve turns for a chat session, ordered chronologically (oldest first)."""
+        await self.init_db()
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT id, session_id, agent_id, project_id, role, content, created_at
+                FROM chat_sessions
+                WHERE session_id = ?
+                ORDER BY created_at ASC
+                LIMIT ?
+                """,
+                (session_id, limit),
+            ) as cursor:
+                rows = await cursor.fetchall()
+        return [
+            ChatTurn(
+                id=str(row["id"]),
+                session_id=str(row["session_id"]),
+                agent_id=str(row["agent_id"]),
+                project_id=row["project_id"],
+                role=str(row["role"]),
+                content=str(row["content"]),
+                created_at=str(row["created_at"]),
+            )
+            for row in rows
+        ]
+
+    async def save_audit_report(self, report: AuditReport) -> None:
+        """Persist or update an executive brownfield audit report."""
+        await self.init_db()
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO brownfield_audits (
+                    project_id, repo_url, branch, depth, health_score,
+                    report_json, status, created_at, updated_at
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    report.project_id,
+                    report.repo_url,
+                    report.branch,
+                    report.depth,
+                    report.health_score,
+                    report.model_dump_json(),
+                    report.status,
+                    report.created_at,
+                    report.updated_at,
+                ),
+            )
+            await db.commit()
+
+    async def get_audit_report(self, project_id: str) -> AuditReport | None:
+        """Retrieve a saved brownfield audit report by its project_id."""
+        await self.init_db()
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT report_json FROM brownfield_audits WHERE project_id = ?
+                """,
+                (project_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+        if row is None:
+            return None
+        return AuditReport.model_validate_json(row["report_json"])
+
+    async def update_audit_status(self, project_id: str, new_status: str) -> None:
+        """Update audit report status (e.g. pending_approval -> approved | rejected)."""
+        report = await self.get_audit_report(project_id)
+        if report is None:
+            raise KeyError(f"Informe de auditoría para '{project_id}' no encontrado.")
+
+        from datetime import UTC, datetime
+
+        now_iso = datetime.now(UTC).isoformat()
+        updated_report = report.model_copy(
+            update={"status": new_status, "updated_at": now_iso}
+        )
+        await self.save_audit_report(updated_report)

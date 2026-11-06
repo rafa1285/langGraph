@@ -82,6 +82,10 @@ AGENT_ALIASES: dict[str, AgentID] = {
     "sales_analytics": AgentID.AGENTE_13_SALES_ANALYTICS,
     "13_sales_analytics": AgentID.AGENTE_13_SALES_ANALYTICS,
     "agente_13_sales_analytics": AgentID.AGENTE_13_SALES_ANALYTICS,
+    # 14 QA UI/UX
+    "qa_ui_ux": AgentID.AGENTE_14_QA_UI_UX,
+    "14_qa_ui_ux": AgentID.AGENTE_14_QA_UI_UX,
+    "agente_14_qa_ui_ux": AgentID.AGENTE_14_QA_UI_UX,
 }
 
 

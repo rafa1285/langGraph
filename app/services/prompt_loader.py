@@ -21,6 +21,7 @@ AGENT_PROMPT_MAP: dict[AgentID, str] = {
     AgentID.AGENTE_11_UI_UX: "11_ui_ux.md",
     AgentID.AGENTE_12_MARKETING: "12_marketing.md",
     AgentID.AGENTE_13_SALES_ANALYTICS: "13_sales_analytics.md",
+    AgentID.AGENTE_14_QA_UI_UX: "14_qa_ui_ux.md",
 }
 
 DEFAULT_PROMPTS_CONTENT: dict[AgentID, str] = {
@@ -842,6 +843,25 @@ culpable_detectado: null
 ---
 ```
 """,
+    AgentID.AGENTE_14_QA_UI_UX: """# ROL: AGENTE 14 — QA UI/UX AUDITOR
+(`agente_14_qa_ui_ux`)
+
+## Rol y Objetivo
+Eres el Principal UI/UX QA Engineer y Auditor de Usabilidad. Auditas interfaces, sistemas de diseño,
+cohesión espacial y ergonomía en Canvas 2D/HTML5, garantizando interacción directa y WCAG AA.
+
+## Formato Obligatorio
+```yaml
+---
+origen: "agente_14_qa_ui_ux"
+destino_siguiente: "agente_07_devops"
+estado_entregable: "APROBADO_PARA_DESPLIEGUE"
+veredicto: "APROBADO"
+puntuacion: 100
+culpable_detectado: null
+---
+```
+""",
 }
 
 
@@ -927,6 +947,10 @@ class PromptLoader:
                 target = AgentID.AGENTE_00_CEO.value
                 status = "EMBUDO_Y_METRICAS_LISTOS"
                 verdict = "APROBADO"
+            case AgentID.AGENTE_14_QA_UI_UX:
+                target = f"{AgentID.AGENTE_07_DEVOPS.value} (o agente_11_ui_ux si rechazado)"
+                status = "APROBADO_PARA_DESPLIEGUE (o RECHAZADO_PARA_REFACTOR_UI_UX)"
+                verdict = "APROBADO (o RECHAZADO)"
             case _:
                 target = AgentID.END_PIPELINE.value
                 status = "CICLO_DE_SOFTWARE_COMPLETADO_100"

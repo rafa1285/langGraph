@@ -42,3 +42,12 @@ Thumbs.db
 # Workspaces artifacts and SQLite checkpoints
 workspaces/*
 !workspaces/.gitkeep
+
+# Caches & Test artifacts
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# LangGraph studio & API
+.langgraph_api/
+*.pckl

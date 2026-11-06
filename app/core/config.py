@@ -1,11 +1,20 @@
 """Application configuration module using Pydantic Settings."""
 
 import json
+from pathlib import Path
 
+from dotenv import load_dotenv
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.schemas.routing import AgentID
+
+# Automatically load .env into os.environ for LangSmith, LangChain, and other libraries
+_env_path = Path(__file__).resolve().parent.parent.parent / ".env"
+if _env_path.exists():
+    load_dotenv(_env_path, override=False)
+else:
+    load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -19,7 +28,7 @@ class Settings(BaseSettings):
 
     GEMINI_API_KEY: str = "dummy-key-for-tests"
     USE_MOCK_LLM: bool = False
-    DEFAULT_LLM_MODEL: str = "gemini-2.5-flash"
+    DEFAULT_LLM_MODEL: str = "gemini-3.5-flash"
     AGENT_MODEL_OVERRIDES: dict[str, str] = {}
     RATE_LIMIT_DELAY_SECONDS: float = 4.0
     MAX_RETRIES_PER_GATE: int = 3
@@ -41,6 +50,10 @@ class Settings(BaseSettings):
     GITHUB_USERNAME: str | None = None
     VERCEL_TOKEN: str | None = None
     VERCEL_TEAM_ID: str | None = None
+    LANGSMITH_TRACING: bool = False
+    LANGSMITH_API_KEY: str | None = None
+    LANGSMITH_PROJECT: str = "agentoffice"
+    LANGSMITH_ENDPOINT: str = "https://eu.api.smith.langchain.com"
 
     @field_validator("AGENT_MODEL_OVERRIDES", mode="before")
     @classmethod

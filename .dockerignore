@@ -1,0 +1,17 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.env
+.git/
+.gitignore
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.langgraph_api/
+*.pckl
+tests/
+workspaces/*
+!workspaces/.gitkeep

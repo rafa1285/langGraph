@@ -430,8 +430,13 @@ def test_agent_alias_resolution() -> None:
     assert resolve_agent_id("marketing") == AgentID.AGENTE_12_MARKETING
     assert resolve_agent_id("13_sales_analytics") == AgentID.AGENTE_13_SALES_ANALYTICS
     assert resolve_agent_id("sales") == AgentID.AGENTE_13_SALES_ANALYTICS
+    assert resolve_agent_id("qa_ui_ux") == AgentID.AGENTE_14_QA_UI_UX
+    assert resolve_agent_id("14_qa_ui_ux") == AgentID.AGENTE_14_QA_UI_UX
+    assert resolve_agent_id("agente_14_qa_ui_ux") == AgentID.AGENTE_14_QA_UI_UX
     assert resolve_agent_id("growth") == AgentID.AGENTE_09_GROWTH
     assert resolve_agent_id("pm") == AgentID.AGENTE_01_PM
+    assert get_notion_agent_metadata("agente_14_qa_ui_ux")["icon"] == "🎯"
+    assert resolve_agent_imap_folder("agente_14_qa_ui_ux") == "AgentOffice/14_QA_UI_UX"
 
 
 @pytest.mark.asyncio
