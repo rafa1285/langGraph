@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🏢 AgentOffice — AI Factory Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Fira+Code:wght@400;600&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/css/pixel.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              bg: '#0b0f19',
+              panel: '#111827',
+              border: '#1f2937',
+              accent: '#06b6d4',
+              emerald: '#10b981',
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'system-ui', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'monospace'],
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    :root {
+      --bg-color: #0b0f19;
+      --panel-color: #111827;
+      --border-color: #1f2937;
+    }
+    body {
+      background-color: var(--bg-color);
+      color: #e2e8f0;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #0b0f19;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #1f2937;
+      border-radius: 3px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #374151;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.9); }
+    }
+    .live-dot {
+      animation: pulse-dot 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+  </style>
+</head>
+<body class="bg-[#0b0f19] text-slate-200 min-h-screen flex flex-col font-sans antialiased selection:bg-cyan-500 selection:text-white">
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       TOP STATUS BAR (Telemetría en Vivo & KPIs Reales)
+  ═══════════════════════════════════════════════════════════════════ -->
+  <header class="bg-[#111827] border-b border-[#1f2937] px-4 py-2.5 sticky top-0 z-50 shadow-md">
+    <div class="max-w-[1920px] mx-auto flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- Bloque Izquierdo: Título y Badges -->
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
+          <span class="text-xl" aria-hidden="true">🏢</span>
+          <h1 class="text-base sm:text-lg font-bold text-white tracking-tight">
+            AgentOffice — AI Factory Dashboard
+          </h1>
+        </div>
+        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-500/40">
+          <span class="w-2 h-2 rounded-full bg-emerald-400 live-dot"></span>
+          LIVE
+        </span>
+      </div>
+
+      <!-- Píldoras de Telemetría Superiores (Alineadas al extremo derecho con reloj de cierre) -->
+      <div class="flex flex-wrap items-center gap-2.5 text-xs font-mono ml-auto pr-2">
+        <div class="px-2.5 py-1 rounded bg-[#0b0f19] border border-[#1f2937] text-slate-300">
+          <span class="text-slate-400">Projects:</span> <span id="kpi-projects" class="text-white font-semibold">0</span>
+        </div>
+        <div class="px-2.5 py-1 rounded bg-[#0b0f19] border border-[#1f2937] text-slate-300">
+          <span class="text-slate-400">Tokens:</span> <span id="kpi-tokens" class="text-cyan-400 font-semibold">0</span>
+        </div>
+        <div class="px-2.5 py-1 rounded bg-[#0b0f19] border border-[#1f2937] text-slate-300">
+          <span class="text-slate-400">Cost:</span> <span id="kpi-cost" class="text-amber-400 font-semibold">$0.0000</span>
+        </div>
+        <div class="px-2.5 py-1 rounded bg-[#0b0f19] border border-[#1f2937] text-slate-300">
+          <span class="text-slate-400">Today:</span> <span id="kpi-today" class="text-slate-200 font-semibold">$0.0000</span>
+        </div>
+        <div class="px-2.5 py-1 rounded bg-emerald-950/60 border border-emerald-500/50 text-emerald-300 font-bold shadow-sm shadow-emerald-950">
+          <span>💰 Saved:</span> <span id="kpi-saved" class="text-emerald-400">$0.00</span>
+        </div>
+        <div class="px-2.5 py-1 rounded bg-[#0b0f19] border border-[#1f2937] text-slate-300">
+          <span class="text-slate-400">Salud:</span> <span id="kpi-health" class="text-emerald-400 font-semibold">100%</span>
+        </div>
+        <div class="px-2.5 py-1 rounded bg-[#0b0f19] border border-[#1f2937] text-slate-300 flex items-center gap-1.5">
+          <span class="text-emerald-400">🟢</span>
+          <span id="kpi-agents" class="text-emerald-400 font-semibold">13/13 Agents Ready</span>
+        </div>
+        
+        <!-- Reloj Digital en tiempo real (Cierre limpio de la cabecera) -->
+        <div class="px-2.5 py-1 rounded bg-[#0b0f19] border border-[#1f2937] text-cyan-400 font-bold tracking-wider" id="live-clock">
+          00:00:00
+        </div>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       BARRA DE NAVEGACIÓN (7 PESTAÑAS CONSOLIDADAS: 2D OFFICE + DASHBOARD)
+  ═══════════════════════════════════════════════════════════════════ -->
+  <nav class="bg-[#0b0f19] border-b border-[#1f2937] px-4 pt-2">
+    <div class="max-w-[1920px] mx-auto flex items-center gap-1.5 overflow-x-auto custom-scrollbar pb-2 text-xs sm:text-sm font-medium">
+      <button class="nav-tab px-4 py-2 rounded-t-lg transition flex items-center gap-2 border-b-2 border-cyan-400 text-cyan-400 bg-slate-800/80 font-semibold" data-target="tab-office">
+        <span>🎮</span> 2D Office
+      </button>
+      <button class="nav-tab px-4 py-2 rounded-t-lg transition flex items-center gap-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40" data-target="tab-interaction">
+        <span>💬</span> Interaction &amp; Pipeline
+      </button>
+      <button class="nav-tab px-4 py-2 rounded-t-lg transition flex items-center gap-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40" data-target="tab-thoughts">
+        <span>🧠</span> Agent Thoughts
+      </button>
+      <button class="nav-tab px-4 py-2 rounded-t-lg transition flex items-center gap-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40" data-target="tab-usage">
+        <span>📊</span> Agent Usage &amp; Stats
+      </button>
+      <button class="nav-tab px-4 py-2 rounded-t-lg transition flex items-center gap-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40" data-target="tab-tokens">
+        <span>💰</span> Token &amp; Cost Monitor
+      </button>
+      <button class="nav-tab px-4 py-2 rounded-t-lg transition flex items-center gap-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40" data-target="tab-security">
+        <span>🛡️</span> Security &amp; Circuit Breakers
+      </button>
+      <button class="nav-tab px-4 py-2 rounded-t-lg transition flex items-center gap-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40" data-target="tab-database">
+        <span>🗄️</span> Database &amp; Artifacts
+      </button>
+    </div>
+  </nav>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       MAIN CONTENT CONTAINER
+  ═══════════════════════════════════════════════════════════════════ -->
+  <main class="flex-1 max-w-[1920px] w-full mx-auto p-4 flex flex-col gap-4">
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PESTAÑA 1: 🎮 2D Office (Activa por defecto, Estilo Mockup)
+    ────────────────────────────────────────────────────────────── -->
+    <div id="tab-office" class="tab-pane flex flex-col flex-1 w-full border border-[#1e293b] rounded-xl overflow-hidden shadow-2xl bg-[#080c14] relative" style="height: calc(100vh - 110px); min-height: 680px;">
+      
+      <!-- Middle Area: Left Column (Sub-bar + Canvas) & Right Column (Ops Panel) -->
+      <div id="office-main-layout" class="flex-1 flex min-h-0 relative overflow-hidden">
+        
+        <!-- Columna Izquierda / Central: Sub-barra + Canvas -->
+        <div class="flex-1 flex flex-col min-w-0 border-r border-[#1e293b] relative overflow-hidden">
+          
+          <!-- Sub-barra superior de controles (Reparto armónico: Modo a la izquierda, Prompt fluido al centro, Proyectos a la derecha) -->
+          <div id="office-sub-toolbar" class="bg-[#0a0f1d] border-b border-[#1e293b] flex-shrink-0 z-20" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 10px 20px;" role="toolbar" aria-label="Controles de simulación y lanzamiento">
+
+            <!-- Izquierda: Mode Toggle (Tamaño Fijo) -->
+            <nav id="mode-selector" class="flex-shrink-0" aria-label="Modo de trabajo">
+              <button class="mode-btn active" data-mode="greenfield">■ GREENFIELD</button>
+              <button class="mode-btn" data-mode="brownfield">□ BROWNFIELD</button>
+            </nav>
+
+            <!-- Centro: Action Launch Controls (Expansión Fluida y Centrada) -->
+            <div id="hud-action-controls" class="flex-1 flex justify-center items-center max-w-[750px] w-full mx-2">
+              <!-- Greenfield Controls -->
+              <div id="greenfield-controls" class="project-controls active flex items-center gap-2 w-full justify-center" role="form" aria-label="Lanzar nuevo proyecto">
+                <input type="text" id="idea-input" class="pixel-input flex-1 max-w-[650px]"
+                       placeholder="DESCRIBE TU IDEA DE NEGOCIO..." maxlength="500"
+                       aria-label="Idea inicial del proyecto">
+                <button id="btn-launch" class="pixel-btn primary flex-shrink-0" aria-label="Lanzar proyecto">
+                  ▶ LANZAR
+                </button>
+              </div>
+
+              <!-- Brownfield Controls -->
+              <div id="brownfield-controls" class="project-controls flex items-center gap-2 w-full justify-center" role="form" aria-label="Auditar proyecto GitHub">
+                <input type="text" id="repo-url-input" class="pixel-input flex-1 max-w-[500px]"
+                       placeholder="https://github.com/owner/repo"
+                       aria-label="URL del repositorio GitHub">
+                <select id="audit-depth" class="pixel-select flex-shrink-0" aria-label="Profundidad del análisis">
+                  <option value="surface">⚡ RÁPIDO</option>
+                  <option value="deep" selected>🔬 PROFUNDO</option>
+                </select>
+                <button id="btn-audit" class="pixel-btn secondary flex-shrink-0" aria-label="Iniciar auditoría">
+                  🔍 AUDITAR
+                </button>
+              </div>
+            </div>
+
+            <!-- Derecha: Project Selector & Resume (Alineados al borde derecho) -->
+            <div id="project-selector" class="flex items-center gap-2 flex-shrink-0">
+              <label for="project-select" class="pixel-label">PROYECTO:</label>
+              <select id="project-select" class="pixel-select" aria-label="Proyecto activo">
+                <option value="">— NINGUNO —</option>
+              </select>
+              <button id="btn-refresh-projects" class="pixel-btn icon" title="Recargar proyectos">↺</button>
+              <button id="btn-resume" class="pixel-btn secondary" title="Reanudar proyecto pausado">⏯ REANUDAR</button>
+            </div>
+
+          </div><!-- /#office-sub-toolbar -->
+
+          <!-- Office Viewport (Canvas Centrado + Botonera de Zoom Exterior a la Izquierda) -->
+          <div id="office-viewport" class="flex-1 relative overflow-auto flex items-center justify-center p-4">
+            <div class="office-workspace-wrapper flex items-start justify-center gap-4 relative max-w-full">
+              
+              <!-- Botonera vertical exterior de controles de cámara (16px a la izquierda del marco) -->
+              <div id="camera-controls" class="flex flex-col gap-1.5 z-30 flex-shrink-0" aria-label="Controles de cámara">
+                <button id="cam-zoom-in" class="pixel-btn icon" title="Acercar">+</button>
+                <button id="cam-zoom-out" class="pixel-btn icon" title="Alejar">−</button>
+                <button id="cam-reset" class="pixel-btn icon" title="Vista original">1:1</button>
+                <button id="cam-edit-mode" class="pixel-btn secondary" title="Modo Decoración y Edición de Oficina">🎨 DECORAR</button>
+              </div>
+
+              <!-- Escenario 2D Pixel Art -->
+              <div id="office-stage" role="main" aria-label="Plano Arquitectónico y Simulación Canvas 2D">
+                <canvas id="office-canvas" width="1024" height="640" aria-label="Oficina Virtual Pixel Agents Canvas 2D"></canvas>
+
+                <div id="canvas-edit-banner" class="hidden" role="status" aria-live="polite">
+                  <span class="banner-icon">🎨</span>
+                  <span>MODO DECORACIÓN ACTIVO: Arrastra muebles o agentes para mover • R: Rotar • Supr: Eliminar</span>
+                </div>
+
+                <div id="canvas-agent-tooltip" class="canvas-tooltip hidden" aria-hidden="true"></div>
+              </div>
+
+            </div>
+          </div><!-- /#office-viewport -->
+
+        </div><!-- /Columna Izquierda -->
+
+        <!-- Columna Derecha (Altura Completa): Operations Panel -->
+        <aside id="right-ops-panel" aria-label="Operaciones y streaming en tiempo real">
+          
+          <!-- Widget 1: Request Pipeline Stepper -->
+          <section id="pipeline-stepper-widget" class="ops-widget" aria-label="Progreso del Pipeline">
+            <div class="widget-header">
+              <span class="widget-icon">🚀</span>
+              <span class="widget-title">REQUEST PIPELINE</span>
+              <span class="widget-status" id="stepper-active-status">ESPERANDO</span>
+            </div>
+            <div id="pipeline-stepper-track" role="progressbar" aria-valuemin="0" aria-valuemax="100">
+              <!-- Stepper steps injected dynamically by JS -->
+            </div>
+          </section>
+
+          <!-- Widget 2: Live Activity Log Terminal -->
+          <section id="activity-log-widget" class="ops-widget" aria-label="Terminal de eventos en vivo">
+            <div class="widget-header">
+              <span class="widget-icon">📡</span>
+              <span class="widget-title">ACTIVITY LOG</span>
+              <span class="widget-badge" id="activity-counter">LIVE</span>
+            </div>
+            <div id="activity-terminal" role="log" aria-live="polite" aria-label="Eventos en streaming">
+              <div id="activity-list"></div>
+            </div>
+          </section>
+
+        </aside><!-- /#right-ops-panel -->
+
+        <!-- Slide-out Side Panel (Chat 1-on-1, Logs, Files) -->
+        <aside id="side-panel" class="hidden" aria-label="Panel de interacción con agente">
+          <div id="panel-header">
+            <div id="panel-agent-info">
+              <span id="panel-agent-icon" aria-hidden="true">❓</span>
+              <div>
+                <div id="panel-agent-name">SELECCIONA UN AGENTE</div>
+                <div id="panel-agent-role"></div>
+              </div>
+            </div>
+            <div id="panel-status-dot" class="idle" aria-hidden="true"></div>
+            <button id="btn-close-panel" class="pixel-btn icon" aria-label="Cerrar panel">✕</button>
+          </div>
+
+          <div id="panel-tabs" role="tablist" aria-label="Secciones del panel">
+            <button class="tab-btn active" data-tab="chat" role="tab" aria-selected="true">💬 CHAT</button>
+            <button class="tab-btn" data-tab="logs" role="tab" aria-selected="false">📋 LOGS</button>
+            <button class="tab-btn" data-tab="files" role="tab" aria-selected="false">📁 ARCHIVOS</button>
+          </div>
+
+          <div id="panel-content">
+            <!-- Chat Tab -->
+            <div class="tab-content active" id="tab-chat" role="tabpanel">
+              <div id="chat-messages" aria-live="polite" aria-label="Mensajes del chat"></div>
+              <div id="chat-input-area">
+                <textarea id="chat-input" class="pixel-input"
+                          placeholder="ESCRIBE UN MENSAJE... (Ctrl+Enter para enviar)"
+                          rows="3" aria-label="Mensaje para el agente"></textarea>
+                <div id="chat-actions">
+                  <button id="btn-send-chat" class="pixel-btn primary">ENVIAR ▶</button>
+                  <button id="btn-file-edit" class="pixel-btn secondary"
+                          title="Pedir al agente que edite un archivo del workspace">
+                    ✏ EDITAR ARCHIVO
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div class="tab-content" id="tab-logs" role="tabpanel">
+              <div id="logs-list" aria-label="Historial de ejecución del pipeline"></div>
+            </div>
+
+            <!-- Files Tab -->
+            <div class="tab-content" id="tab-files" role="tabpanel">
+              <div id="files-header">
+                <span id="files-project-label">Sin proyecto activo</span>
+              </div>
+              <div id="files-tree" aria-label="Árbol de entregables generados"></div>
+              <div id="file-viewer">
+                <div id="file-viewer-header"></div>
+                <pre id="file-viewer-content" aria-label="Contenido del archivo"></pre>
+              </div>
+            </div>
+          </div>
+        </aside><!-- /#side-panel -->
+
+        <!-- Floating Action Button for Quick Chat -->
+        <button id="fab-chat" class="pixel-fab" title="Abrir chat con agente" aria-label="Chat interactivo">
+          💬
+        </button>
+
+      </div><!-- /#office-main-layout -->
+
+      <!-- Barra Inferior (Bottom Modular Command Dock Centrado) -->
+      <footer id="bottom-command-dock" role="toolbar" aria-label="Barra de herramientas de comando" style="display: flex; justify-content: center; align-items: center; gap: 14px;">
+        <div class="dock-actions flex items-center justify-center gap-3.5">
+          <button id="dock-btn-files" class="pixel-btn secondary" title="Abrir explorador de código y entregables">
+            📁 ARCHIVOS &amp; CÓDIGO
+          </button>
+          <button id="dock-btn-chat" class="pixel-btn secondary" title="Abrir conversación directa">
+            💬 CHAT 1-A-1
+          </button>
+          <button id="dock-btn-telemetry" class="pixel-btn secondary" title="Ver telemetría detallada de tokens y latencias">
+            📊 TELEMETRÍA
+          </button>
+          <button id="dock-btn-decor" class="pixel-btn secondary" title="Modo Decoración: agregar y mover muebles, plantas y puestos">
+            🎨 DECORAR OFICINA
+          </button>
+          <button id="dock-btn-brownfield" class="pixel-btn secondary" title="Auditar repositorio GitHub con CISO y Arquitecto">
+            🛡️ AUDITAR GITHUB
+          </button>
+        </div>
+      </footer>
+
+      <!-- Decoration & Office Designer Tray (Collapsible) -->
+      <div id="decor-tray" class="hidden" role="toolbar" aria-label="Bandeja de decoración de la oficina">
+        <div class="decor-tray-header">
+          <div class="decor-tray-title">
+            <span>🎨 CATÁLOGO DE DECORACIÓN &amp; MOBILIARIO</span>
+            <span class="decor-tray-badge" id="decor-status-badge">Haz clic en un elemento para colocarlo en la oficina</span>
+          </div>
+          <div class="decor-tray-actions">
+            <button id="btn-save-layout" class="pixel-btn primary" title="Guardar diseño en el navegador">💾 GUARDAR</button>
+            <button id="btn-reset-layout" class="pixel-btn secondary" title="Restablecer a la distribución de fábrica">↺ RESTABLECER</button>
+            <button id="btn-close-decor" class="pixel-btn icon" title="Salir del modo diseño">✕</button>
+          </div>
+        </div>
+
+        <nav class="decor-tabs-nav" role="tablist">
+          <button class="decor-tab-btn active" data-cat="furniture" role="tab">🪑 Mobiliario</button>
+          <button class="decor-tab-btn" data-cat="tech" role="tab">💻 Tecnología</button>
+          <button class="decor-tab-btn" data-cat="decor" role="tab">🪴 Decoración &amp; Arte</button>
+          <button class="decor-tab-btn" data-cat="breakroom" role="tab">☕ Cocina &amp; Mascotas</button>
+          <button class="decor-tab-btn" data-cat="agents" role="tab">👤 Reubicar Agentes</button>
+        </nav>
+
+        <div id="decor-items-container" class="decor-items-grid" role="list"></div>
+
+        <div class="decor-tray-footer">
+          <div class="decor-hints">
+            <span class="decor-hint-chip"><kbd>Clic + Arrastre</kbd> Mover elemento</span>
+            <span class="decor-hint-chip"><kbd>R</kbd> Rotar orientación</span>
+            <span class="decor-hint-chip"><kbd>Supr</kbd> / <kbd>Backspace</kbd> Eliminar</span>
+            <span class="decor-hint-chip"><kbd>Esc</kbd> Deseleccionar</span>
+          </div>
+          <div id="decor-selection-info" class="decor-selection-info">
+            Ningún elemento seleccionado
+          </div>
+        </div>
+      </div>
+
+      <!-- Telemetry Accordion Drawer (Collapsible) -->
+      <div id="telemetry-drawer" class="hidden" role="region" aria-label="Panel de telemetría detallada">
+        <div class="drawer-header">
+          <span>📊 TELEMETRÍA DETALLADA DEL SISTEMA</span>
+          <button id="btn-close-telemetry" class="pixel-btn icon">✕</button>
+        </div>
+        <div class="drawer-body">
+          <div class="telemetry-grid">
+            <div class="telemetry-card">
+              <h4>CONSUMO DE TOKENS</h4>
+              <div id="telemetry-token-breakdown">In: 0 | Out: 0 | Total: 0</div>
+            </div>
+            <div class="telemetry-card">
+              <h4>DISTRIBUCIÓN DE MODELOS</h4>
+              <div id="telemetry-model-info">Gemini 3.5 Flash (Rate-Limited, 0 Cost)</div>
+            </div>
+            <div class="telemetry-card">
+              <h4>AGENTES Y CHECKPOINTS</h4>
+              <div id="telemetry-agents-active">15 roles coordinados por LangGraph StateGraph</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Modal overlay (File Edit & Brownfield Audit) -->
+      <div id="modal-overlay" class="hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+        <div id="modal-container">
+          <div id="modal-header">
+            <span id="modal-title"></span>
+            <button id="btn-close-modal" class="pixel-btn icon" aria-label="Cerrar">✕</button>
+          </div>
+          <div id="modal-body"></div>
+          <div id="modal-footer"></div>
+        </div>
+      </div>
+
+    </div><!-- /#tab-office -->
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PESTAÑA 2: 💬 Interaction & Pipeline
+    ────────────────────────────────────────────────────────────── -->
+    <div id="tab-interaction" class="tab-pane hidden flex flex-col gap-4">
+      
+      <!-- Top Row: Request from Boss & Active Pipeline -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- 1. Consola "Request from Boss" (5 Cols) -->
+        <section class="lg:col-span-5 bg-[#111827] border border-[#1f2937] rounded-xl p-4 flex flex-col gap-3 shadow-lg">
+          <div class="flex items-center justify-between border-b border-[#1f2937] pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="text-base" aria-hidden="true">👔</span>
+              <h2 class="font-semibold text-white text-sm tracking-wide">Request from Boss</h2>
+            </div>
+            <span class="text-[11px] font-mono text-cyan-400 bg-cyan-950/60 px-2 py-0.5 rounded border border-cyan-500/30">Zero-Touch PLG</span>
+          </div>
+
+          <div class="flex flex-col gap-2">
+            <label for="project-idea-input" class="text-xs text-slate-400 font-medium">Idea Inicial o Mandato de Negocio:</label>
+            <textarea id="project-idea-input" rows="4" 
+              placeholder="Crear Micro-SaaS de conversión de audio a texto 100% Zero-Touch con Stripe..."
+              class="w-full bg-[#0b0f19] border border-[#1f2937] rounded-lg p-3 text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 font-mono resize-none"></textarea>
+          </div>
+
+          <div class="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <label for="project-id-input" class="text-slate-400 mb-1 block">ID Proyecto (Opcional):</label>
+              <input type="text" id="project-id-input" placeholder="proj_autonext" 
+                class="w-full bg-[#0b0f19] border border-[#1f2937] rounded p-2 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500">
+            </div>
+            <div>
+              <label for="dash-interaction-project-select" class="text-slate-400 mb-1 block">Proyectos Existentes:</label>
+              <select id="dash-interaction-project-select" class="w-full bg-[#0b0f19] border border-[#1f2937] rounded p-2 text-slate-200 font-mono text-xs focus:outline-none focus:border-cyan-500">
+                <option value="">-- Nuevo Proyecto --</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <div class="flex items-center gap-3 text-xs text-slate-400">
+              <label class="flex items-center gap-1.5 cursor-pointer">
+                <input type="checkbox" id="check-mock-llm" class="rounded bg-slate-800 border-slate-700 text-cyan-500 focus:ring-0">
+                <span>Modo Rápido / Mock</span>
+              </label>
+            </div>
+            <button id="btn-launch-factory" class="px-5 py-2.5 rounded-lg bg-gradient-to-r from-cyan-500 to-emerald-500 hover:from-cyan-400 hover:to-emerald-400 text-slate-950 font-bold text-xs tracking-wider uppercase transition shadow-md shadow-cyan-950 flex items-center gap-2">
+              <span>🚀 Launch Factory</span>
+            </button>
+          </div>
+        </section>
+
+        <!-- 2. Barra Desplegable `🔄 Request Pipeline` (7 Cols) -->
+        <section class="lg:col-span-7 bg-[#111827] border border-[#1f2937] rounded-xl p-4 flex flex-col gap-3 shadow-lg">
+          <div class="flex items-center justify-between border-b border-[#1f2937] pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="text-base" aria-hidden="true">🔄</span>
+              <h2 class="font-semibold text-white text-sm tracking-wide">Request Pipeline</h2>
+            </div>
+            <button id="pipeline-toggle-btn" class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 border border-slate-700 text-slate-300 hover:text-white transition flex items-center gap-1">
+              <span id="pipeline-active-badge">0 active ▼</span>
+            </button>
+          </div>
+
+          <!-- Pipeline Horizontal Stages -->
+          <div id="pipeline-stages-container" class="py-2 overflow-x-auto custom-scrollbar">
+            <div class="flex items-center justify-between min-w-[680px] gap-1.5 text-xs font-mono">
+              
+              <!-- Etapa 1 -->
+              <div id="stage-received" class="pipeline-step flex-1 bg-[#0b0f19] border border-[#1f2937] rounded-lg p-2.5 flex flex-col items-center text-center transition">
+                <span class="text-base mb-1">📥</span>
+                <span class="font-semibold text-slate-300">Received</span>
+                <span class="text-[10px] text-slate-500 status-tag">IDLE</span>
+              </div>
+              <span class="text-slate-600 font-bold text-xs">➔</span>
+
+              <!-- Etapa 2 -->
+              <div id="stage-ceo-charter" class="pipeline-step flex-1 bg-[#0b0f19] border border-[#1f2937] rounded-lg p-2.5 flex flex-col items-center text-center transition">
+                <span class="text-base mb-1">👔</span>
+                <span class="font-semibold text-slate-300">CEO Charter</span>
+                <span class="text-[10px] text-slate-500 status-tag">PENDING</span>
+              </div>
+              <span class="text-slate-600 font-bold text-xs">➔</span>
+
+              <!-- Etapa 3 -->
+              <div id="stage-pm-design" class="pipeline-step flex-1 bg-[#0b0f19] border border-[#1f2937] rounded-lg p-2.5 flex flex-col items-center text-center transition">
+                <span class="text-base mb-1">📐</span>
+                <span class="font-semibold text-slate-300">PM &amp; Design</span>
+                <span class="text-[10px] text-slate-500 status-tag">PENDING</span>
+              </div>
+              <span class="text-slate-600 font-bold text-xs">➔</span>
+
+              <!-- Etapa 4 -->
+              <div id="stage-coding" class="pipeline-step flex-1 bg-[#0b0f19] border border-[#1f2937] rounded-lg p-2.5 flex flex-col items-center text-center transition">
+                <span class="text-base mb-1">⚡</span>
+                <span class="font-semibold text-slate-300">Coding</span>
+                <span class="text-[10px] text-slate-500 status-tag">PENDING</span>
+              </div>
+              <span class="text-slate-600 font-bold text-xs">➔</span>
+
+              <!-- Etapa 5 -->
+              <div id="stage-qa-ciso" class="pipeline-step flex-1 bg-[#0b0f19] border border-[#1f2937] rounded-lg p-2.5 flex flex-col items-center text-center transition">
+                <span class="text-base mb-1">🛡️</span>
+                <span class="font-semibold text-slate-300">QA &amp; CISO</span>
+                <span class="text-[10px] text-slate-500 status-tag">PENDING</span>
+              </div>
+              <span class="text-slate-600 font-bold text-xs">➔</span>
+
+              <!-- Etapa 6 -->
+              <div id="stage-growth-docs" class="pipeline-step flex-1 bg-[#0b0f19] border border-[#1f2937] rounded-lg p-2.5 flex flex-col items-center text-center transition">
+                <span class="text-base mb-1">🚀</span>
+                <span class="font-semibold text-slate-300">Growth &amp; Docs</span>
+                <span class="text-[10px] text-slate-500 status-tag">PENDING</span>
+              </div>
+              <span class="text-slate-600 font-bold text-xs">➔</span>
+
+              <!-- Etapa 7 -->
+              <div id="stage-ceo-signoff" class="pipeline-step flex-1 bg-[#0b0f19] border border-[#1f2937] rounded-lg p-2.5 flex flex-col items-center text-center transition">
+                <span class="text-base mb-1">✅</span>
+                <span class="font-semibold text-slate-300">CEO Signoff</span>
+                <span class="text-[10px] text-slate-500 status-tag">PENDING</span>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Mini Resumen del Pipeline -->
+          <div class="flex items-center justify-between text-xs text-slate-400 font-mono pt-1">
+            <span id="pipeline-info-text">Selecciona un proyecto para cargar el historial de ejecución.</span>
+            <span id="pipeline-step-counter" class="text-cyan-400 font-semibold">Paso 0/7</span>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- 3. Consola en Vivo `Activity Log` -->
+      <section class="bg-[#111827] border border-[#1f2937] rounded-xl flex flex-col shadow-lg overflow-hidden">
+        <div class="p-3.5 border-b border-[#1f2937] flex items-center justify-between flex-wrap gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-base" aria-hidden="true">📡</span>
+            <h2 class="font-semibold text-white text-sm">Activity Log</h2>
+            <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-950 text-emerald-400 border border-emerald-800">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 live-dot"></span> LIVE
+            </span>
+            <span id="log-events-count" class="text-xs font-mono text-slate-400">0 events ▼</span>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <button id="btn-clear-logs" title="Limpiar registro visual" class="text-xs px-2.5 py-1 rounded bg-[#0b0f19] border border-[#1f2937] text-slate-400 hover:text-white transition">
+              🗑️ Limpiar
+            </button>
+          </div>
+        </div>
+
+        <!-- Feed en Vivo (Cronológico Inverso) -->
+        <div id="activity-log-stream" class="p-3 flex flex-col gap-2 max-h-[500px] overflow-y-auto custom-scrollbar font-mono text-xs">
+          <!-- Items generados dinámicamente -->
+        </div>
+
+        <!-- Barra Inferior de Filtros por Color -->
+        <div class="border-t border-[#1f2937] p-2.5 bg-[#0b0f19] flex flex-wrap items-center justify-between gap-2 text-xs font-mono">
+          <div class="flex items-center gap-1.5 flex-wrap">
+            <span class="text-slate-500 mr-1 text-[11px]">FILTRAR:</span>
+            <button class="filter-btn px-2.5 py-1 rounded bg-slate-800 text-white border border-cyan-500/50 font-medium" data-filter="all">
+              Todos
+            </button>
+            <button class="filter-btn px-2.5 py-1 rounded bg-[#111827] text-emerald-400 border border-emerald-900/50 hover:bg-emerald-950/40" data-filter="user">
+              🟢 User
+            </button>
+            <button class="filter-btn px-2.5 py-1 rounded bg-[#111827] text-blue-400 border border-blue-900/50 hover:bg-blue-950/40" data-filter="tool">
+              🔵 Tool
+            </button>
+            <button class="filter-btn px-2.5 py-1 rounded bg-[#111827] text-purple-400 border border-purple-900/50 hover:bg-purple-950/40" data-filter="response">
+              🟣 Response
+            </button>
+            <button class="filter-btn px-2.5 py-1 rounded bg-[#111827] text-amber-400 border border-amber-900/50 hover:bg-amber-950/40" data-filter="delegate">
+              ⚡ Delegate
+            </button>
+            <button class="filter-btn px-2.5 py-1 rounded bg-[#111827] text-teal-400 border border-teal-900/50 hover:bg-teal-950/40" data-filter="done">
+              ✅ Done (<span id="done-counter">0</span>)
+            </button>
+          </div>
+
+          <div class="text-[11px] text-slate-500">
+            WebSocket: <span id="ws-status" class="text-emerald-400">Conectado</span>
+          </div>
+        </div>
+
+      </section>
+
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PESTAÑA 2: 🧠 Agent Thoughts (Razonamiento Real en Vivo)
+    ────────────────────────────────────────────────────────────── -->
+    <div id="tab-thoughts" class="tab-pane hidden flex flex-col gap-4">
+      <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-5 shadow-lg flex flex-col gap-4">
+        
+        <!-- Header & Filtros -->
+        <div class="flex flex-wrap items-center justify-between border-b border-[#1f2937] pb-3 gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🧠</span>
+            <div>
+              <h2 class="text-base font-bold text-white">Agent Deliberation &amp; Internal Thoughts Stream</h2>
+              <p class="text-xs text-slate-400">Cadenas de razonamiento, deliberaciones ejecutivas del CEO y decisiones técnicas de los agentes.</p>
+            </div>
+          </div>
+          
+          <!-- Filtros de Thoughts -->
+          <div class="flex items-center gap-2 text-xs font-mono">
+            <select id="thoughts-project-select" class="bg-[#0b0f19] border border-[#1f2937] rounded px-3 py-1.5 text-slate-200">
+              <option value="">Todos los Proyectos</option>
+            </select>
+            <select id="thoughts-agent-select" class="bg-[#0b0f19] border border-[#1f2937] rounded px-3 py-1.5 text-slate-200">
+              <option value="">Todos los Agentes</option>
+            </select>
+            <button id="btn-refresh-thoughts" class="px-3 py-1.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 hover:bg-cyan-900 transition">
+              ↻ Actualizar
+            </button>
+          </div>
+        </div>
+
+        <!-- Thoughts Feed Container -->
+        <div id="agent-thoughts-stream" class="flex flex-col gap-3 max-h-[650px] overflow-y-auto custom-scrollbar pr-1">
+          <div class="p-4 text-center text-slate-500 font-mono text-xs">Cargando pensamientos de los agentes...</div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PESTAÑA 3: 📊 Agent Usage & Stats (Métricas por Agente)
+    ────────────────────────────────────────────────────────────── -->
+    <div id="tab-usage" class="tab-pane hidden flex flex-col gap-4">
+      
+      <!-- Top Metrics Bar -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow">
+          <span class="text-xs text-slate-400 font-mono">TOTAL AGENTS CONFIG</span>
+          <div id="stats-total-agents" class="text-2xl font-bold text-white mt-1">15</div>
+          <span class="text-xs text-emerald-400 font-mono">15/15 Agentes Activos</span>
+        </div>
+        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow">
+          <span class="text-xs text-slate-400 font-mono">TOTAL CONVERSATIONS</span>
+          <div id="stats-total-tasks" class="text-2xl font-bold text-cyan-400 mt-1">...</div>
+          <span class="text-xs text-slate-400 font-mono">Pasos en SQLite</span>
+        </div>
+        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow">
+          <span class="text-xs text-slate-400 font-mono">AVG LATENCY / STEP</span>
+          <div id="stats-avg-latency" class="text-2xl font-bold text-amber-400 mt-1">...</div>
+          <span class="text-xs text-slate-400 font-mono">Duración promedio</span>
+        </div>
+        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow">
+          <span class="text-xs text-slate-400 font-mono">CIRCUIT BREAKERS</span>
+          <div id="stats-tripped-breakers" class="text-2xl font-bold text-emerald-400 mt-1">...</div>
+          <span class="text-xs text-slate-400 font-mono">Bloqueos de ciclo</span>
+        </div>
+      </div>
+
+      <!-- Agent Grid -->
+      <section class="bg-[#111827] border border-[#1f2937] rounded-xl p-5 shadow-lg flex flex-col gap-4">
+        <div class="flex items-center justify-between border-b border-[#1f2937] pb-3">
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <span>👥</span> Matriz Operativa de Agentes (Carga &amp; Aprobación)
+          </h2>
+          <span class="text-xs font-mono text-cyan-400">Datos consolidados de SQLite</span>
+        </div>
+
+        <div id="agent-stats-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
+          <!-- Agentes inyectados dinámicamente -->
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PESTAÑA 4: 💰 Token & Cost Monitor
+    ────────────────────────────────────────────────────────────── -->
+    <div id="tab-tokens" class="tab-pane hidden flex flex-col gap-4">
+      
+      <!-- Summary Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-center font-mono">
+        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
+          <span class="text-xs text-slate-400">Tokens Entrada (Prompt):</span>
+          <div id="cost-tokens-in" class="text-xl font-bold text-slate-200 mt-1">...</div>
+        </div>
+        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
+          <span class="text-xs text-slate-400">Tokens Salida (Completion):</span>
+          <div id="cost-tokens-out" class="text-xl font-bold text-cyan-400 mt-1">...</div>
+        </div>
+        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
+          <span class="text-xs text-slate-400">Coste Total LLM:</span>
+          <div id="cost-total-usd" class="text-xl font-bold text-amber-400 mt-1">...</div>
+        </div>
+        <div class="bg-[#111827] border border-emerald-500/40 rounded-xl p-4 bg-emerald-950/20">
+          <span class="text-xs text-emerald-300 font-semibold">Ahorro Estimado:</span>
+          <div id="cost-saved-usd" class="text-xl font-bold text-emerald-400 mt-1">...</div>
+        </div>
+      </div>
+
+      <!-- Tabla de Consumo por Agente & Pricing Tiers -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Breakdown por Agente (7 Cols) -->
+        <section class="lg:col-span-7 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
+          <h3 class="text-sm font-bold text-white flex items-center gap-2 border-b border-[#1f2937] pb-2 font-mono">
+            <span>📊</span> Consumo y Coste de Tokens por Agente
+          </h3>
+          <div class="overflow-x-auto custom-scrollbar">
+            <table class="w-full text-left text-xs font-mono">
+              <thead class="bg-[#0b0f19] text-slate-400 border-b border-[#1f2937]">
+                <tr>
+                  <th class="p-2">Agente</th>
+                  <th class="p-2">Tokens</th>
+                  <th class="p-2">% Total</th>
+                  <th class="p-2">Coste USD</th>
+                </tr>
+              </thead>
+              <tbody id="agent-cost-tbody" class="divide-y divide-[#1f2937] text-slate-300">
+                <!-- Filas inyectadas dinámicamente -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Pricing Tiers & Unit Economics (5 Cols) -->
+        <section class="lg:col-span-5 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
+          <h3 class="text-sm font-bold text-white flex items-center gap-2 border-b border-[#1f2937] pb-2 font-mono">
+            <span>🛡️</span> Zero-Touch Unit Economics (Stripe + COGS)
+          </h3>
+          <p class="text-xs text-slate-400">
+            Regla de Gobernanza CEO: Margen neto &gt;= 80% tras comisión Stripe (2.9% + $0.30) y COGS.
+          </p>
+          <div id="pricing-tiers-list" class="flex flex-col gap-2 font-mono text-xs">
+            <!-- Tiers inyectados dinámicamente -->
+          </div>
+        </section>
+
+      </div>
+
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PESTAÑA 5: 🛡️ Security & Circuit Breakers (Gobernanza CISO)
+    ────────────────────────────────────────────────────────────── -->
+    <div id="tab-security" class="tab-pane hidden flex flex-col gap-4">
+      
+      <!-- Top Status Banner -->
+      <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-5 shadow-lg flex flex-col gap-3">
+        <div class="flex items-center justify-between border-b border-[#1f2937] pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">🛡️</span>
+            <div>
+              <h2 class="text-base font-bold text-white">CISO CyberShield &amp; Circuit Breaker Matrix</h2>
+              <p class="text-xs text-slate-400">Prevención de bucles infinitos, aislamiento RGPD y veto ejecutivo automático.</p>
+            </div>
+          </div>
+          <span id="security-shield-badge" class="text-xs font-mono px-3 py-1 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold">
+            SHIELD ACTIVE
+          </span>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono text-xs">
+          <div class="p-3 rounded bg-[#0b0f19] border border-[#1f2937]">
+            <div class="text-slate-400 mb-1">Límite Máximo de Iteraciones:</div>
+            <div class="text-cyan-400 font-bold text-sm">3 Loops (Anti-Bucle)</div>
+            <span class="text-[10px] text-slate-500">Escala a END tras 3 vetos consecutivos</span>
+          </div>
+          <div class="p-3 rounded bg-[#0b0f19] border border-[#1f2937]">
+            <div class="text-slate-400 mb-1">Doctrina Zero-Touch Compliance:</div>
+            <div id="sec-zero-touch-status" class="text-emerald-400 font-bold text-sm">100% CUMPLIDO</div>
+            <span class="text-[10px] text-slate-500">Cero comerciales / autoservicio total</span>
+          </div>
+          <div class="p-3 rounded bg-[#0b0f19] border border-[#1f2937]">
+            <div class="text-slate-400 mb-1">Privacidad RGPD &amp; EU AI Act:</div>
+            <div id="sec-gdpr-status" class="text-emerald-400 font-bold text-sm">ENFORCED BY-DESIGN</div>
+            <span class="text-[10px] text-slate-500">Aislamiento por tenant y minimización</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Monitored Projects & Security Log -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Circuit Breakers por Proyecto (5 Cols) -->
+        <section class="lg:col-span-5 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
+          <h3 class="text-sm font-bold text-white flex items-center gap-2 border-b border-[#1f2937] pb-2 font-mono">
+            <span>⚡</span> Proyectos Monitoreados (Estado de Breakers)
+          </h3>
+          <div id="circuit-breakers-container" class="flex flex-col gap-2 max-h-[450px] overflow-y-auto custom-scrollbar font-mono text-xs">
+            <!-- Items inyectados dinámicamente -->
+          </div>
+        </section>
+
+        <!-- Registro de Eventos de Seguridad y Vetos (7 Cols) -->
+        <section class="lg:col-span-7 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
+          <h3 class="text-sm font-bold text-white flex items-center gap-2 border-b border-[#1f2937] pb-2 font-mono">
+            <span>🚨</span> Audit Trail de Seguridad &amp; Reworks CISO / QA
+          </h3>
+          <div id="security-events-container" class="flex flex-col gap-2 max-h-[450px] overflow-y-auto custom-scrollbar font-mono text-xs">
+            <!-- Eventos inyectados dinámicamente -->
+          </div>
+        </section>
+
+      </div>
+
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PESTAÑA 6: 🗄️ Database & Artifacts (Inspector SQLite & Files)
+    ────────────────────────────────────────────────────────────── -->
+    <div id="tab-database" class="tab-pane hidden flex flex-col gap-4">
+      
+      <!-- Sub-Tabs: 1. SQLite DB Explorer / 2. Workspaces Artifacts -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        
+        <!-- Sección 1: Explorador de Base de Datos SQLite (6 Cols) -->
+        <section class="lg:col-span-6 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
+          <div class="flex items-center justify-between border-b border-[#1f2937] pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="text-base">🗄️</span>
+              <h3 class="font-bold text-white text-sm">SQLite Database Inspector</h3>
+            </div>
+            <span class="text-[11px] font-mono text-slate-400">office_data.sqlite</span>
+          </div>
+
+          <!-- Selector de Tablas y Filtro -->
+          <div class="flex flex-wrap items-center gap-2 text-xs font-mono">
+            <select id="db-table-select" class="bg-[#0b0f19] border border-[#1f2937] rounded p-2 text-slate-200 focus:outline-none focus:border-cyan-500">
+              <option value="agent_conversations">agent_conversations</option>
+              <option value="agent_emails">agent_emails</option>
+              <option value="chat_sessions">chat_sessions</option>
+              <option value="brownfield_audits">brownfield_audits</option>
+            </select>
+            <input type="text" id="db-search-input" placeholder="Buscar en tabla..." class="bg-[#0b0f19] border border-[#1f2937] rounded p-2 text-slate-200 flex-1 focus:outline-none focus:border-cyan-500">
+            <button id="btn-db-refresh" class="px-3 py-2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 hover:bg-cyan-900 transition">
+              ↻
+            </button>
+          </div>
+
+          <!-- Visor de Tabla de Datos -->
+          <div class="overflow-x-auto custom-scrollbar border border-[#1f2937] rounded-lg max-h-[500px]">
+            <table class="w-full text-left text-xs font-mono">
+              <thead id="db-table-head" class="bg-[#0b0f19] text-slate-400 sticky top-0 border-b border-[#1f2937]">
+                <!-- Cabeceras generadas -->
+              </thead>
+              <tbody id="db-table-body" class="divide-y divide-[#1f2937] text-slate-300">
+                <!-- Registros generados -->
+              </tbody>
+            </table>
+          </div>
+          <div id="db-table-footer" class="text-[11px] font-mono text-slate-500 flex justify-between">
+            <span>Registros cargados: <strong id="db-rows-count" class="text-slate-300">0</strong></span>
+          </div>
+        </section>
+
+        <!-- Sección 2: Explorador de Artefactos de Proyecto (6 Cols) -->
+        <section class="lg:col-span-6 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
+          <div class="flex items-center justify-between border-b border-[#1f2937] pb-2.5">
+            <div class="flex items-center gap-2">
+              <span class="text-base">📁</span>
+              <h3 class="font-bold text-white text-sm">Project Workspace Artifacts</h3>
+            </div>
+            <select id="artifacts-project-select" class="bg-[#0b0f19] border border-[#1f2937] rounded px-2.5 py-1 text-xs text-slate-200 font-mono">
+              <option value="">Selecciona un Proyecto...</option>
+            </select>
+          </div>
+
+          <!-- Split: File Tree + Preview Pane -->
+          <div class="grid grid-cols-1 md:grid-cols-5 gap-3">
+            
+            <!-- Lista de Archivos (2 Cols) -->
+            <div class="md:col-span-2 border border-[#1f2937] rounded-lg p-2 bg-[#0b0f19] max-h-[500px] overflow-y-auto custom-scrollbar flex flex-col gap-1 text-xs font-mono" id="artifacts-file-list">
+              <div class="p-3 text-slate-500 text-center">Selecciona un proyecto arriba.</div>
+            </div>
+
+            <!-- Preview Pane (3 Cols) -->
+            <div class="md:col-span-3 border border-[#1f2937] rounded-lg bg-[#0b0f19] flex flex-col max-h-[500px] overflow-hidden">
+              <div class="p-2 border-b border-[#1f2937] bg-[#111827] flex items-center justify-between text-xs font-mono">
+                <span id="preview-filename" class="text-cyan-400 font-semibold truncate">Ningún archivo seleccionado</span>
+                <span id="preview-filesize" class="text-slate-500 text-[10px]"></span>
+              </div>
+              <pre id="preview-content" class="p-3 text-xs font-mono text-slate-300 overflow-auto custom-scrollbar flex-1 whitespace-pre-wrap">Haz clic en un archivo del listado para previsualizar su contenido (JSON, Markdown, código).</pre>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- Modal para Inspección Detallada de Thoughts -->
+  <div id="thought-modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-[#111827] border border-[#1f2937] rounded-xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl overflow-hidden font-mono text-xs">
+      <div class="p-4 border-b border-[#1f2937] flex items-center justify-between bg-[#0b0f19]">
+        <div class="flex items-center gap-2">
+          <span class="text-lg">🧠</span>
+          <span id="modal-agent-title" class="font-bold text-white text-sm">Inspección de Razonamiento</span>
+        </div>
+        <button id="modal-close-btn" class="text-slate-400 hover:text-white text-base">✕</button>
+      </div>
+      <div class="p-4 overflow-y-auto custom-scrollbar flex flex-col gap-3 text-slate-300">
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 p-2.5 rounded bg-[#0b0f19] border border-[#1f2937]">
+          <div><span class="text-slate-500">Proyecto:</span> <span id="modal-project" class="text-cyan-400 font-semibold"></span></div>
+          <div><span class="text-slate-500">Paso:</span> <span id="modal-step" class="text-slate-200"></span></div>
+          <div><span class="text-slate-500">Veredicto:</span> <span id="modal-verdict" class="font-bold"></span></div>
+          <div><span class="text-slate-500">Tokens:</span> <span id="modal-tokens" class="text-amber-400"></span></div>
+        </div>
+        <div>
+          <span class="text-slate-400 font-bold block mb-1">System Prompt / Rol:</span>
+          <pre id="modal-sys-prompt" class="p-2.5 rounded bg-[#0b0f19] border border-[#1f2937] text-slate-400 max-h-36 overflow-y-auto whitespace-pre-wrap"></pre>
+        </div>
+        <div>
+          <span class="text-slate-400 font-bold block mb-1">User Payload / Instrucción:</span>
+          <pre id="modal-payload" class="p-2.5 rounded bg-[#0b0f19] border border-[#1f2937] text-slate-300 max-h-36 overflow-y-auto whitespace-pre-wrap"></pre>
+        </div>
+        <div>
+          <span class="text-cyan-400 font-bold block mb-1">Respuesta Raw del LLM / Decisión:</span>
+          <pre id="modal-response" class="p-3 rounded bg-[#0b0f19] border border-cyan-900/40 text-slate-200 max-h-56 overflow-y-auto whitespace-pre-wrap"></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/static/js/main.js"></script>
+  <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

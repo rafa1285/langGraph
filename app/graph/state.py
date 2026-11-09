@@ -54,6 +54,11 @@ class SoftwareFactoryState(TypedDict):
     status_qa_ui_ux: NotRequired[DeliverableStatus]
     current_status: NotRequired[DeliverableStatus]
     halt_reason: str | None
+    version_iteracion: NotRequired[int]
+    status_ceo: NotRequired[DeliverableStatus]
+    ceo_blocked: NotRequired[bool]
+    ceo_culprit: NotRequired[AgentID | None]
+    zero_touch_violations: NotRequired[list[str]]
     retry_counts: Annotated[dict[str, int], merge_retry_counts]
     execution_history: Annotated[list[StepExecutionRecord], append_execution_records]
 
@@ -95,6 +100,11 @@ def create_initial_state(
         "ciso_culprit": None,
         "current_status": DeliverableStatus.PENDIENTE,
         "halt_reason": None,
+        "version_iteracion": 1,
+        "status_ceo": DeliverableStatus.PENDIENTE,
+        "ceo_blocked": False,
+        "ceo_culprit": None,
+        "zero_touch_violations": [],
         "retry_counts": {
             "qa_php": 0,
             "qa_python": 0,

@@ -20,14 +20,27 @@ class AgentOutputParser:
 
     @classmethod
     def _resolve_ciso_culprit(cls, target_text: str) -> AgentID:
-        """Determine culprit agent ID for CISO security blocks based on target text."""
+        """Determine culprit agent ID based on target text."""
         lower_target = target_text.lower()
+        for member in AgentID:
+            if member.value in lower_target:
+                return member
         if any(k in lower_target for k in ("agente 03", "agente_03", "03", "laravel", "php")):
             return AgentID.AGENTE_03_LARAVEL
         if any(k in lower_target for k in ("agente 04", "agente_04", "04", "fastapi", "python")):
             return AgentID.AGENTE_04_FASTAPI
+        if any(k in lower_target for k in ("agente 05", "agente_05", "05", "qa php")):
+            return AgentID.AGENTE_05_QA_PHP
+        if any(k in lower_target for k in ("agente 06", "agente_06", "06", "qa python")):
+            return AgentID.AGENTE_06_QA_PYTHON
         if any(k in lower_target for k in ("agente 07", "agente_07", "07", "devops", "docker")):
             return AgentID.AGENTE_07_DEVOPS
+        if any(k in lower_target for k in ("agente 10", "agente_10", "10", "ciso", "security")):
+            return AgentID.AGENTE_10_CISO
+        if any(k in lower_target for k in ("agente 12", "agente_12", "12", "marketing")):
+            return AgentID.AGENTE_12_MARKETING
+        if any(k in lower_target for k in ("agente 13", "agente_13", "13", "sales")):
+            return AgentID.AGENTE_13_SALES_ANALYTICS
         return AgentID.AGENTE_07_DEVOPS
 
     @classmethod
@@ -41,9 +54,13 @@ class AgentOutputParser:
                 return member
 
         # 2. Contextual shorthand mapping by keywords and emitting agent
+        if "REWORK" in clean_upper:
+            return DeliverableStatus.LANZAMIENTO_BLOQUEADO_REWORK
         if "RECHAZADO" in clean_upper:
             return DeliverableStatus.RECHAZADO_PARA_REFACTOR
         if "BLOQUEADO" in clean_upper:
+            if agent_id == AgentID.AGENTE_00_CEO:
+                return DeliverableStatus.LANZAMIENTO_BLOQUEADO_REWORK
             return DeliverableStatus.BLOQUEADO_POR_CIBERSEGURIDAD
         if "BLINDADO" in clean_upper:
             return DeliverableStatus.BLINDADO_APTO_PRODUCCION
@@ -115,6 +132,15 @@ class AgentOutputParser:
 
         match agent_id:
             case AgentID.AGENTE_00_CEO:
+                if any(k in text_upper for k in ("BLOQUEADO", "REWORK", "CIRCUIT_BREAKER_ACTIVO")):
+                    return RoutingHeader(
+                        origen=agent_id.value,
+                        destino_siguiente=AgentID.AGENTE_10_CISO.value,
+                        estado_entregable=DeliverableStatus.LANZAMIENTO_BLOQUEADO_REWORK,
+                        veredicto="RECHAZADO",
+                        puntuacion=0,
+                        culpable_detectado=AgentID.AGENTE_10_CISO,
+                    )
                 if any(
                     k in text_upper
                     for k in ("LANZAMIENTO", "ACTA", "CIERRE", "CISO", "SIGNOFF", "AUTORIZADO")
@@ -401,6 +427,13 @@ class AgentOutputParser:
                 DeliverableStatus.LANZAMIENTO_AUTORIZADO,
             ):
                 veredicto = "APROBADO"
+            elif veredicto is None and estado_entregable in (
+                DeliverableStatus.LANZAMIENTO_BLOQUEADO_REWORK,
+                DeliverableStatus.RECHAZADO_PARA_REFACTOR,
+                DeliverableStatus.RECHAZADO_PARA_REFACTOR_UI_UX,
+                DeliverableStatus.BLOQUEADO_POR_CIBERSEGURIDAD,
+            ):
+                veredicto = "RECHAZADO"
 
             puntuacion_raw = normalized_dict.get("puntuacion") or normalized_dict.get("score")
             puntuacion: int | None = None
@@ -429,7 +462,7 @@ class AgentOutputParser:
             ):
                 culpable_detectado = cls._resolve_ciso_culprit(culpable_raw)
 
-            # d) For AGENTE_10_CISO when blocked, determine culprit automatically
+            # d) For AGENTE_10_CISO or AGENTE_00_CEO when blocked, determine culprit automatically
             # from destino_siguiente
             if (
                 agent_id == AgentID.AGENTE_10_CISO
@@ -438,6 +471,11 @@ class AgentOutputParser:
                 culpable_detectado = cls._resolve_ciso_culprit(destino_siguiente)
                 if not destino_siguiente or destino_siguiente.lower() in ("null", "none"):
                     destino_siguiente = culpable_detectado.value
+            elif (
+                agent_id == AgentID.AGENTE_00_CEO
+                and estado_entregable == DeliverableStatus.LANZAMIENTO_BLOQUEADO_REWORK
+            ):
+                culpable_detectado = cls._resolve_ciso_culprit(destino_siguiente)
 
             return RoutingHeader(
                 origen=origen,

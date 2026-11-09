@@ -10,6 +10,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
 from app.api.routes_office import router as office_router
+from app.api.routes_telemetry import router as telemetry_router
 from app.core.config import settings
 from app.services.llm_gateway import GeminiLLMGateway, MockLLMGateway
 from app.services.orchestrator_service import OrchestratorService
@@ -23,6 +24,11 @@ _STATIC_DIR: Path = Path(__file__).parent / "static"
 async def _serve_spa() -> FileResponse:
     """Serve the AgentOffice 2D Pixel Art single-page application."""
     return FileResponse(str(_STATIC_DIR / "index.html"))
+
+
+async def _serve_dashboard() -> FileResponse:
+    """Serve the AgentOffice Operations & Telemetry Dashboard."""
+    return FileResponse(str(_STATIC_DIR / "dashboard.html"))
 
 
 @asynccontextmanager
@@ -74,6 +80,9 @@ def create_app() -> FastAPI:
     # Office UI routes (agent status, chat — Phase 2+)
     application.include_router(office_router)
 
+    # Telemetry, Agent Thoughts & Operations Dashboard routes
+    application.include_router(telemetry_router)
+
     # Serve the 2D Pixel Art SPA when the static directory is present
     if _STATIC_DIR.exists():
         application.mount(
@@ -83,6 +92,18 @@ def create_app() -> FastAPI:
         )
         application.add_api_route(
             "/",
+            _serve_dashboard,
+            methods=["GET"],
+            include_in_schema=False,
+        )
+        application.add_api_route(
+            "/dashboard",
+            _serve_dashboard,
+            methods=["GET"],
+            include_in_schema=False,
+        )
+        application.add_api_route(
+            "/office",
             _serve_spa,
             methods=["GET"],
             include_in_schema=False,

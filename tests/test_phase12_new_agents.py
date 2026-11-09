@@ -473,3 +473,83 @@ async def test_sales_analytics_emits_bi_artifacts_and_materializer(
     assert "CREATE VIEW IF NOT EXISTS v_unit_economics_kpi" in sql_text
 
 
+@pytest.mark.asyncio
+async def test_ceo_prompt_governance_mode3_and_executive_comms() -> None:
+    """Verify CEO prompt contains RGPD/EU AI Act, Mode 3 veto, and executive comms artifact."""
+    loader = PromptLoader()
+    prompt_ceo = await loader.load_prompt(AgentID.AGENTE_00_CEO)
+
+    # 1. Verify Governance Rules
+    assert "RGPD" in prompt_ceo or "GDPR" in prompt_ceo
+    assert "EU AI Act" in prompt_ceo or "EU AI ACT" in prompt_ceo
+    assert "Aislamiento por Tenant" in prompt_ceo or "Minimización" in prompt_ceo
+
+    # 2. Verify Mode 3 definition in prompt
+    assert "MODO 3" in prompt_ceo
+    assert "LANZAMIENTO_BLOQUEADO_REWORK" in prompt_ceo
+    assert "CIRCUIT_BREAKER_ACTIVO" in prompt_ceo
+    assert "BLOCKED_REQUIRES_REWORK" in prompt_ceo
+
+    # 3. Verify Executive Comms Artifact in prompt
+    assert "config/executive_comms.json" in prompt_ceo
+    assert "notion_page" in prompt_ceo
+    assert "email_notification" in prompt_ceo
+    assert "STRATEGIC_CHARTER_PAGE" in prompt_ceo
+    assert "RELEASE_AUDIT_ADR" in prompt_ceo
+    assert "CIRCUIT_BREAKER_ALERT" in prompt_ceo
+
+    # 4. Verify Output Parser parses Mode 3 header correctly
+    mock_mode3_output = """---
+id_proyecto: "proj_test_veto"
+version_iteracion: 2
+agente_emisor: "agente_00_ceo"
+agente_receptor: "agente_10_ciso"
+estado: "LANZAMIENTO_BLOQUEADO_REWORK"
+estado_global: "CIRCUIT_BREAKER_ACTIVO"
+prioridad: "CRITICAL"
+timestamp: "2026-11-06T12:00:00Z"
+---
+
+# VETO EJECUTIVO Y DEVOLUCIÓN POR INCUMPLIMIENTO
+Se detectaron vulnerabilidades críticas abiertas en CISO.
+
+```json
+// filepath: config/release_manifest.json
+{
+  "release_status": "BLOCKED_REQUIRES_REWORK",
+  "zero_touch_compliance": false,
+  "security_shield_verified": false,
+  "circuit_breaker_triggered": true,
+  "blocking_reasons": ["Vulnerabilidad crítica SSRF no resuelta"],
+  "culprit_agent": "agente_10_ciso",
+  "required_remediation": "Aplicar IP-Pinning estricto"
+}
+```
+
+```json
+// filepath: config/executive_comms.json
+{
+  "notion_page": {
+    "template": "CIRCUIT_BREAKER_ALERT",
+    "title": "ALERTA: Lanzamiento Bloqueado — proj_test_veto",
+    "status": "BLOQUEADO_REWORK",
+    "summary_callout": "Veto ejecutivo activado por CISO.",
+    "markdown_body": "# Dictamen de Veto"
+  },
+  "email_notification": {
+    "send": true,
+    "type": "CRITICAL_ESCALATION",
+    "subject": "[CRITICAL] Veto Ejecutivo en proj_test_veto",
+    "body_text": "Lanzamiento bloqueado por CISO."
+  }
+}
+```
+"""
+    header = AgentOutputParser.parse_routing_header(AgentID.AGENTE_00_CEO, mock_mode3_output)
+    assert header.estado_entregable == DeliverableStatus.LANZAMIENTO_BLOQUEADO_REWORK
+    assert header.destino_siguiente == AgentID.AGENTE_10_CISO.value
+    assert header.veredicto == "RECHAZADO"
+    assert header.culpable_detectado == AgentID.AGENTE_10_CISO
+
+
+

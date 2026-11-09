@@ -437,6 +437,25 @@ Auditoría completada para Ingeniería, CISO, Documentación, Marketing y Ventas
   ]
 }
 ```
+
+```json
+// filepath: config/executive_comms.json
+{
+  "notion_page": {
+    "template": "RELEASE_AUDIT_ADR",
+    "title": "Acta de Lanzamiento a Produccion",
+    "status": "COMPLETADO_PRODUCCION",
+    "summary_callout": "Ciclo completo de software completado al 100%. Lanzamiento autorizado.",
+    "markdown_body": "# Dictamen de Cierre\\nAuditoria superada en todas las areas."
+  },
+  "email_notification": {
+    "send": true,
+    "type": "FOUNDER_DIGEST",
+    "subject": "[RELEASE] Lanzamiento Autorizado a Produccion",
+    "body_text": "El proyecto cumple 100% de requisitos zero-touch y ciberseguridad."
+  }
+}
+```
 """
                 return """---
 id_proyecto: "<ID_DEL_PROYECTO>"
@@ -497,6 +516,25 @@ Plataforma SaaS moderna de verificación y saneamiento de datos 100% autoservici
     "free_demo_rate_limit_per_ip_hour": 10,
     "sha256_deduplication_zero_cost": true,
     "auto_suspend_on_margin_below_pct": 50.0
+  }
+}
+```
+
+```json
+// filepath: config/executive_comms.json
+{
+  "notion_page": {
+    "template": "STRATEGIC_CHARTER_PAGE",
+    "title": "Business Charter — Zero-Touch Micro-SaaS",
+    "status": "EN_EJECUCION",
+    "summary_callout": "Business Charter Zero-Touch definido y transmitido a PM.",
+    "markdown_body": "# Business Charter\\nEstrategia y pricing inicial 100% autoservicio."
+  },
+  "email_notification": {
+    "send": true,
+    "type": "FOUNDER_DIGEST",
+    "subject": "[Charter] Nuevo Proyecto Iniciado",
+    "body_text": "El Business Charter ha sido establecido sin comerciales ni soporte humano."
   }
 }
 ```

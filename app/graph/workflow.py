@@ -9,6 +9,7 @@ from langgraph.graph.state import CompiledStateGraph
 from app.graph.nodes import FactoryNodes
 from app.graph.router import (
     route_after_architect,
+    route_after_ceo_signoff,
     route_after_ciso,
     route_after_qa_php,
     route_after_qa_python,
@@ -34,6 +35,7 @@ __all__ = [
     "NODE_CEO_SIGNOFF",
     "compile_factory_graph",
     "route_after_architect",
+    "route_after_ceo_signoff",
     "route_after_ciso",
     "route_after_qa_php",
     "route_after_qa_python",
@@ -142,10 +144,10 @@ def compile_factory_graph(
     # 10. CISO conditional multi-directional routing
     builder.add_conditional_edges(AgentID.AGENTE_10_CISO.value, route_after_ciso)
 
-    # 11. Terminal sequence: Docs -> Marketing -> Sales Analytics -> CEO Signoff -> END
+    # 11. Terminal sequence: Docs -> Marketing -> Sales Analytics -> CEO Signoff -> END/Rework
     builder.add_edge(AgentID.AGENTE_08_DOCS.value, AgentID.AGENTE_12_MARKETING.value)
     builder.add_edge(AgentID.AGENTE_12_MARKETING.value, AgentID.AGENTE_13_SALES_ANALYTICS.value)
     builder.add_edge(AgentID.AGENTE_13_SALES_ANALYTICS.value, NODE_CEO_SIGNOFF)
-    builder.add_edge(NODE_CEO_SIGNOFF, END)
+    builder.add_conditional_edges(NODE_CEO_SIGNOFF, route_after_ceo_signoff)
 
     return builder.compile(checkpointer=checkpointer)

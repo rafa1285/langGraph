@@ -98,3 +98,27 @@ def route_after_ciso(state: SoftwareFactoryState) -> str:
         return AgentID.AGENTE_07_DEVOPS.value
 
     return AgentID.AGENTE_08_DOCS.value
+
+
+def route_after_ceo_signoff(state: SoftwareFactoryState) -> str:
+    """Route CEO signoff: END on approval or iteration limit (>=3), else loop back to culprit."""
+    if state.get("ceo_approved", False):
+        return END
+
+    version = state.get("version_iteracion", 1)
+    if version >= 3:
+        return END
+
+    if (
+        state.get("ceo_blocked")
+        or state.get("status_ceo") == DeliverableStatus.LANZAMIENTO_BLOQUEADO_REWORK
+    ):
+        culprit = state.get("ceo_culprit")
+        if culprit:
+            val = culprit.value if isinstance(culprit, AgentID) else str(culprit)
+            for member in AgentID:
+                if member.value == val:
+                    return member.value
+        return END
+
+    return END

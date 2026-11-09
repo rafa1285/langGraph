@@ -29,6 +29,8 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: str = "dummy-key-for-tests"
     USE_MOCK_LLM: bool = False
     DEFAULT_LLM_MODEL: str = "gemini-3.5-flash"
+    LLM_INPUT_COST_PER_MILLION: float = 0.35
+    LLM_OUTPUT_COST_PER_MILLION: float = 1.05
     AGENT_MODEL_OVERRIDES: dict[str, str] = {}
     RATE_LIMIT_DELAY_SECONDS: float = 4.0
     MAX_RETRIES_PER_GATE: int = 3
@@ -38,6 +40,10 @@ class Settings(BaseSettings):
     PROMPTS_DIR: str = "prompts"
     NOTION_API_KEY: str | None = None
     NOTION_PARENT_PAGE_ID: str | None = None
+    NOTION_CEO_DATABASE_ID: str | None = None
+    RESEND_API_KEY: str | None = None
+    FOUNDER_ALERT_EMAIL: str | None = None
+    TAVILY_API_KEY: str | None = None
     NOTION_MCP_ENABLED: bool = False
     REAL_MAIL_ENABLED: bool = False
     SMTP_HOST: str = "smtp.strato.com"

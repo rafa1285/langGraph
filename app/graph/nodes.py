@@ -1,6 +1,8 @@
 """Node implementations for the LangGraph software factory."""
 
+import json
 import logging
+import re
 import time
 from datetime import UTC, datetime
 from uuid import uuid4
@@ -21,6 +23,13 @@ from app.services.office_store import OfficeStore
 from app.services.output_parser import AgentOutputParser
 from app.services.prompt_loader import PromptLoader
 from app.services.workspace_writer import WorkspaceWriter
+from app.tools.ceo_tools import (
+    auto_fix_tier_margins,
+    extract_ceo_artifacts,
+    scan_zero_touch_compliance,
+    sync_ceo_executive_comms,
+    verify_unit_economics_math,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -86,6 +95,25 @@ Plataforma SaaS moderna de verificación y saneamiento de datos 100% autoservici
   }
 }
 ```
+
+```json
+// filepath: config/executive_comms.json
+{
+  "notion_page": {
+    "template": "STRATEGIC_CHARTER_PAGE",
+    "title": "Business Charter — Zero-Touch Micro-SaaS",
+    "status": "EN_EJECUCION",
+    "summary_callout": "Business Charter Zero-Touch definido y transmitido a PM.",
+    "markdown_body": "# Business Charter\\nEstrategia y pricing inicial 100% autoservicio."
+  },
+  "email_notification": {
+    "send": true,
+    "type": "FOUNDER_DIGEST",
+    "subject": "[Charter] Nuevo Proyecto Iniciado",
+    "body_text": "El Business Charter ha sido establecido sin comerciales ni soporte humano."
+  }
+}
+```
 """
 
 FALLBACK_CEO_SIGNOFF = """---
@@ -126,6 +154,25 @@ Auditoría completada para Ingeniería, CISO, Documentación, Marketing y Ventas
     "agente_12_marketing",
     "agente_13_sales_analytics"
   ]
+}
+```
+
+```json
+// filepath: config/executive_comms.json
+{
+  "notion_page": {
+    "template": "RELEASE_AUDIT_ADR",
+    "title": "Acta de Lanzamiento a Produccion",
+    "status": "COMPLETADO_PRODUCCION",
+    "summary_callout": "Ciclo completo de software completado al 100%. Lanzamiento autorizado.",
+    "markdown_body": "# Dictamen de Cierre\\nAuditoria superada en todas las areas."
+  },
+  "email_notification": {
+    "send": true,
+    "type": "FOUNDER_DIGEST",
+    "subject": "[RELEASE] Lanzamiento Autorizado a Produccion",
+    "body_text": "El proyecto cumple 100% de requisitos zero-touch y ciberseguridad."
+  }
 }
 ```
 """
@@ -1052,8 +1099,55 @@ class FactoryNodes:
         )
         if not raw_output or "config/business_charter.json" not in raw_output:
             raw_output = FALLBACK_CEO_CHARTER
+
+        # 1. Extract artifacts using extract_ceo_artifacts
+        artifacts = extract_ceo_artifacts(raw_output)
+        charter_json = artifacts.get("business_charter")
+        comms_json = artifacts.get("executive_comms")
+
+        # 2. Verify unit economics math and auto-fix if deficient (< 80% net margin)
+        if charter_json:
+            math_audit = verify_unit_economics_math(charter_json)
+            if not math_audit.get("valid", True) or any(
+                t.get("net_margin_pct", 0.0) < 80.0
+                for t in math_audit.get("tiers_audit", [])
+            ):
+                fixed_charter = auto_fix_tier_margins(charter_json)
+                fixed_json_str = json.dumps(fixed_charter, indent=2)
+                m = re.search(
+                    r"(//\s*filepath:\s*config/business_charter\.json\s*[\r\n]+)\{.*?\}(?=\s*```|\s*$)",
+                    raw_output,
+                    flags=re.DOTALL,
+                )
+                if m:
+                    raw_output = (
+                        raw_output[:m.start(1)]
+                        + f"// filepath: config/business_charter.json\n{fixed_json_str}\n"
+                        + raw_output[m.end():]
+                    )
+
+        # 3. Synchronize executive comms
+        if not comms_json:
+            comms_json = {
+                "notion_page": {
+                    "template": "STRATEGIC_CHARTER_PAGE",
+                    "title": f"Business Charter — {state.get('project_id', 'Micro-SaaS')}",
+                    "status": "EN_EJECUCION",
+                    "summary_callout": "Business Charter 100% Zero-Touch inicializado.",
+                    "markdown_body": raw_output[:1900],
+                },
+                "email_notification": {
+                    "send": False,
+                    "type": "FOUNDER_DIGEST",
+                    "subject": f"[Charter] Proyecto {state.get('project_id', '')} Inicializado",
+                    "body_text": f"Charter definido para {state.get('project_id', '')}.",
+                },
+            }
+        sync_ceo_executive_comms(comms_json)
+
         return {
             "ceo_charter": raw_output,
+            "version_iteracion": state.get("version_iteracion", 1),
             "execution_history": [record],
         }
 
@@ -1061,7 +1155,41 @@ class FactoryNodes:
 
     async def ceo_signoff_node(self, state: SoftwareFactoryState) -> dict[str, object]:
         """Node for Agent 00 (CEO Closing): Audits entire pipeline and authorizes launch."""
+        # 1. Scan Marketing/Sales/UI deliverables for Zero-Touch compliance
+        deliverables_to_scan: list[tuple[str, str, AgentID]] = [
+            ("marketing_spec", state.get("marketing_spec", ""), AgentID.AGENTE_12_MARKETING),
+            (
+                "sales_analytics_spec",
+                state.get("sales_analytics_spec", ""),
+                AgentID.AGENTE_13_SALES_ANALYTICS,
+            ),
+            ("estrategia_growth", state.get("estrategia_growth", ""), AgentID.AGENTE_09_GROWTH),
+            ("ui_ux_spec", state.get("ui_ux_spec", ""), AgentID.AGENTE_11_UI_UX),
+        ]
+        detected_violations: list[str] = []
+        infringing_agent: AgentID | None = None
+        for name, text, agent in deliverables_to_scan:
+            if text:
+                scan_res = scan_zero_touch_compliance(text)
+                if not scan_res.get("compliant", True):
+                    terms = scan_res.get("detected_forbidden_terms", [])
+                    detected_violations.extend([f"{t} (en {name})" for t in terms])
+                    if not infringing_agent:
+                        infringing_agent = agent
+
+        # 2. Build closing payload incorporating zero-touch scan results
         closing_payload = _build_ceo_signoff_payload(state)
+        if detected_violations:
+            infringing_name = infringing_agent.value if infringing_agent else "Desconocido"
+            closing_payload += (
+                "\n\n## 8. ALERTA ZERO-TOUCH: Términos Prohibidos Detectados\n"
+                "- Violaciones detectadas:\n"
+                + "\n".join(f"  * {v}" for v in detected_violations)
+                + f"\n- Agente infractor identificado: {infringing_name}\n"
+                "- Acción requerida: Activar MODO 3 (LANZAMIENTO_BLOQUEADO_REWORK)."
+            )
+
+        # 3. Execute agent step
         raw_output, status, _dest, record = await self._execute_agent_step(
             AgentID.AGENTE_00_CEO,
             state,
@@ -1070,10 +1198,97 @@ class FactoryNodes:
         if not raw_output or "config/release_manifest.json" not in raw_output:
             raw_output = FALLBACK_CEO_SIGNOFF
             status = DeliverableStatus.LANZAMIENTO_AUTORIZADO
-        approved = status == DeliverableStatus.LANZAMIENTO_AUTORIZADO
+
+        current_version = state.get("version_iteracion", 1)
+        retry_counts = dict(state.get("retry_counts", {}))
+        circuit_breaker_active = any(
+            r >= settings.MAX_RETRIES_PER_GATE for r in retry_counts.values()
+        ) or state.get("status_ciso") == DeliverableStatus.BLOQUEADO_POR_CIBERSEGURIDAD
+
+        is_blocked = (
+            status == DeliverableStatus.LANZAMIENTO_BLOQUEADO_REWORK
+            or bool(detected_violations)
+            or (circuit_breaker_active and status != DeliverableStatus.LANZAMIENTO_AUTORIZADO)
+        )
+
+        if detected_violations and current_version < 3:
+            status = DeliverableStatus.LANZAMIENTO_BLOQUEADO_REWORK
+            is_blocked = True
+
+        artifacts = extract_ceo_artifacts(raw_output)
+        comms_json = artifacts.get("executive_comms")
+
+        halt_reason = state.get("halt_reason")
+        if is_blocked:
+            if current_version < 3:
+                next_version = current_version + 1
+                ceo_blocked = True
+                approved = False
+                status = DeliverableStatus.LANZAMIENTO_BLOQUEADO_REWORK
+                parsed_header = AgentOutputParser.parse_routing_header(
+                    AgentID.AGENTE_00_CEO, raw_output
+                )
+                culprit = (
+                    parsed_header.culpable_detectado
+                    if parsed_header and parsed_header.culpable_detectado
+                    else (infringing_agent or state.get("ciso_culprit") or AgentID.AGENTE_10_CISO)
+                )
+                halt_reason = (
+                    f"Lanzamiento bloqueado por CEO (iteración {current_version}) hacia "
+                    f"{culprit.value}."
+                )
+            else:
+                next_version = current_version
+                ceo_blocked = False
+                approved = False
+                culprit = None
+                halt_reason = (
+                    f"Lanzamiento abortado tras {current_version} iteraciones sin resolución "
+                    f"(escalado crítico)."
+                )
+                if comms_json and "email_notification" in comms_json:
+                    comms_json["email_notification"]["type"] = "CRITICAL_ESCALATION"
+                    comms_json["email_notification"]["send"] = True
+                    comms_json["email_notification"]["subject"] = (
+                        f"[CRITICAL ESCALATION] Proyecto {state.get('project_id', '')} Bloqueado "
+                        f"en Iteración {current_version}"
+                    )
+        else:
+            next_version = current_version
+            ceo_blocked = False
+            approved = True
+            culprit = None
+
+        if not comms_json:
+            comms_json = {
+                "notion_page": {
+                    "template": "CIRCUIT_BREAKER_ALERT" if is_blocked else "RELEASE_AUDIT_ADR",
+                    "title": f"Cierre Proyecto: {state.get('project_id', '')}",
+                    "status": "BLOQUEADO_REWORK" if is_blocked else "COMPLETADO_PRODUCCION",
+                    "summary_callout": "Dictamen ejecutivo de lanzamiento.",
+                    "markdown_body": raw_output[:1900],
+                },
+                "email_notification": {
+                    "send": True,
+                    "type": "CRITICAL_ESCALATION" if is_blocked else "FOUNDER_DIGEST",
+                    "subject": (
+                        f"[{'CRITICAL' if is_blocked else 'RELEASE'}] {state.get('project_id', '')}"
+                    ),
+                    "body_text": f"Estado de cierre: {status.value}.",
+                },
+            }
+
+        sync_ceo_executive_comms(comms_json)
+
         return {
             "ceo_signoff": raw_output,
             "ceo_approved": approved,
+            "status_ceo": status,
+            "ceo_blocked": ceo_blocked,
+            "ceo_culprit": culprit,
+            "version_iteracion": next_version,
+            "zero_touch_violations": detected_violations,
+            "halt_reason": halt_reason,
             "execution_history": [record],
         }
 

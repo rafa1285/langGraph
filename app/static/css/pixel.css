@@ -43,15 +43,40 @@
 
 html, body {
   width: 100%;
-  height: 100%;
+  min-height: 100%;
   background: var(--bg-base);
   color: #f1f5f9;
-  font-family: var(--font-mono);
-  font-size: 11px;
   line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  width: 100vw;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  position: relative;
   overflow: hidden;
   user-select: none;
-  -webkit-font-smoothing: antialiased;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+#tab-office {
+  user-select: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+#tab-office input,
+#tab-office textarea,
+#tab-office select,
+#tab-office pre,
+#tab-office code,
+#tab-office #activity-terminal,
+#tab-office #logs-list,
+#tab-office #file-viewer-content {
+  user-select: text;
 }
 
 /* ── CRT Scanline Overlay ─────────────────────────────────────────────────── */
@@ -172,8 +197,8 @@ html, body {
   color: var(--accent-green);
   font-weight: 700;
 }
-#kpi-cost .kpi-val { color: var(--accent-gold); }
-#kpi-health .kpi-val { color: var(--accent-cyan); }
+#kpi-cost .kpi-val, #office-kpi-cost .kpi-val { color: var(--accent-gold); }
+#kpi-health .kpi-val, #office-kpi-health .kpi-val { color: var(--accent-cyan); }
 
 /* Mode Toggle */
 #mode-selector {
@@ -183,6 +208,7 @@ html, body {
   border: 1px solid var(--border-cyber);
   padding: 3px;
   border-radius: 5px;
+  flex-shrink: 0;
 }
 .mode-btn {
   background: transparent;
@@ -205,15 +231,25 @@ html, body {
 /* Action Launch Controls */
 #hud-action-controls {
   flex: 1;
-  max-width: 480px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  max-width: 750px;
+  width: 100%;
 }
 .project-controls {
   display: none;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
+  width: 100%;
+  justify-content: center;
 }
 .project-controls.active {
   display: flex;
+}
+#idea-input {
+  flex: 1;
+  max-width: 650px;
 }
 .pixel-input {
   flex: 1;
@@ -299,15 +335,29 @@ html, body {
   color: #94a3b8;
 }
 
+#office-sub-toolbar {
+  height: var(--hud-h);
+  background: rgba(10, 15, 29, 0.98);
+  border-bottom: 2px solid var(--border-cyber);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 20px;
+  gap: 16px;
+  width: 100%;
+  z-index: 20;
+  backdrop-filter: blur(10px);
+}
+
 /* ═══════════════════════════════════════════════════════════════════════════════
    2. MAIN COMMAND CENTER LAYOUT (Viewport + Right Ops Panel)
    ═══════════════════════════════════════════════════════════════════════════════ */
-#main-layout {
+#main-layout, #office-main-layout {
   flex: 1;
   display: flex;
   position: relative;
   overflow: hidden;
-  height: calc(100vh - var(--hud-h) - var(--dock-h));
+  min-height: 0;
 }
 
 /* ── Office Viewport (Aspect-Ratio Locked Centered Framing) ───────────────── */
@@ -323,18 +373,16 @@ html, body {
   padding: 16px 20px;
 }
 
-/* Camera Controls (Floating in Top-Left) */
+/* Camera Controls (Vertical exterior toolbar outside canvas) */
 #camera-controls {
-  position: absolute;
-  top: 16px;
-  left: 16px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   z-index: 40;
+  flex-shrink: 0;
 }
 #camera-controls .pixel-btn {
-  background: rgba(15, 23, 42, 0.85);
+  background: rgba(15, 23, 42, 0.9);
   border: 1px solid var(--border-cyber);
   backdrop-filter: blur(4px);
 }
@@ -999,14 +1047,17 @@ html, body {
   border-top: 2px solid var(--border-cyber);
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  gap: 14px;
   padding: 0 16px;
   z-index: 50;
   backdrop-filter: blur(8px);
 }
 .dock-actions {
   display: flex;
-  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
 }
 .dock-actions .pixel-btn {
   font-size: 11px;
@@ -1104,6 +1155,12 @@ html, body {
   box-shadow: 0 6px 20px rgba(250, 204, 21, 0.4);
   z-index: 40;
   transition: transform 0.15s, box-shadow 0.15s;
+}
+#tab-office #fab-chat {
+  position: absolute;
+}
+#tab-office.hidden #fab-chat {
+  display: none !important;
 }
 #fab-chat:hover {
   transform: scale(1.08);

@@ -1556,6 +1556,26 @@ export function initOffice() {
   _initPipelineStepper();
   _loadProjectList();
   _setupHUDControls();
+  _pollLiveTelemetry();
+  setInterval(_pollLiveTelemetry, 4000);
+}
+
+async function _pollLiveTelemetry() {
+  try {
+    const res = await fetch('/api/v1/telemetry/kpis');
+    if (!res.ok) return;
+    const data = await res.json();
+    const tokensEl = $id('kpi-tokens-val');
+    if (tokensEl) tokensEl.textContent = data.total_tokens.toLocaleString();
+    const costEl = $id('kpi-cost-val');
+    if (costEl) costEl.textContent = `$${data.estimated_cost_usd.toFixed(2)}`;
+    const healthEl = $id('kpi-health-val');
+    if (healthEl) healthEl.textContent = `${data.health_score}%`;
+    const tasksEl = $id('kpi-tasks-val');
+    if (tasksEl) tasksEl.textContent = `${data.agents_ready}/${data.agents_total}`;
+  } catch (e) {
+    // Graceful fallback
+  }
 }
 
 async function _loadProjectList() {
