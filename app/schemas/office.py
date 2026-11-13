@@ -30,6 +30,7 @@ class AgentConversationRecord(BaseModel):
     duration_ms: int
     estimated_tokens_in: int
     estimated_tokens_out: int
+    is_visible: int = 1
     created_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 

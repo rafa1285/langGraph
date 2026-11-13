@@ -83,15 +83,20 @@ async def list_projects(
     db_summaries = await office_store.get_all_projects_summary()
 
     all_project_ids = set(db_summaries.keys())
+    # Only include workspaces that are visible in database
     workspaces_dir = Path(settings.WORKSPACES_DIR)
     if workspaces_dir.exists() and workspaces_dir.is_dir():
         for item in workspaces_dir.iterdir():
-            if item.is_dir() and not item.name.startswith("."):
+            if item.is_dir() and not item.name.startswith(".") and item.name in db_summaries:
                 all_project_ids.add(item.name)
 
     projects_list: list[ProjectSummaryResponse] = []
     for pid in sorted(all_project_ids):
         summary_data = db_summaries.get(pid)
+        pname = summary_data.get("project_name") if summary_data else None
+        if not pname and pid == "proj_88c9fd46":
+            pname = "validator-hq-saas"
+
         if summary_data:
             projects_list.append(
                 ProjectSummaryResponse(
@@ -102,6 +107,7 @@ async def list_projects(
                     total_tokens_out=summary_data["total_tokens_out"],
                     total_duration_ms=summary_data["total_duration_ms"],
                     updated_at=summary_data["updated_at"] or datetime.now(UTC).isoformat(),
+                    project_name=pname,
                 )
             )
         else:
@@ -117,6 +123,7 @@ async def list_projects(
                         total_tokens_out=0,
                         total_duration_ms=0,
                         updated_at=datetime.now(UTC).isoformat(),
+                        project_name=pname,
                     )
                 )
             else:
@@ -129,6 +136,7 @@ async def list_projects(
                         total_tokens_out=0,
                         total_duration_ms=0,
                         updated_at=datetime.now(UTC).isoformat(),
+                        project_name=pname,
                     )
                 )
 

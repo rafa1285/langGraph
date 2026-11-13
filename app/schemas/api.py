@@ -78,6 +78,7 @@ class ProjectSummaryResponse(BaseModel):
     total_tokens_out: int
     total_duration_ms: int
     updated_at: str
+    project_name: str | None = None
 
 
 class ProjectsListResponse(BaseModel):

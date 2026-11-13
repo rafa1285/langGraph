@@ -29,7 +29,7 @@
 
   /* Dimensions */
   --hud-h:            54px;
-  --dock-h:           44px;
+  --dock-h:           0px;
   --ops-w:            320px;
   --panel-w:          430px;
 }
@@ -238,14 +238,14 @@ html, body {
   width: 100%;
 }
 .project-controls {
-  display: none;
+  display: none !important;
+}
+.project-controls.active {
+  display: flex !important;
   align-items: center;
   gap: 8px;
   width: 100%;
   justify-content: center;
-}
-.project-controls.active {
-  display: flex;
 }
 #idea-input {
   flex: 1;
@@ -326,13 +326,85 @@ html, body {
 #project-selector {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
   flex-shrink: 0;
+  position: relative;
 }
 .pixel-label {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   color: #94a3b8;
+  letter-spacing: 0.5px;
+}
+.pixel-project-trigger {
+  font-family: var(--font-mono);
+  outline: none;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s ease;
+}
+.pixel-project-trigger:hover {
+  background: #0d1527;
+  border-color: rgba(6, 182, 212, 0.8) !important;
+}
+#project-dropdown-overlay {
+  background-color: #070b14 !important;
+  border: 1px solid #1e293b !important;
+  border-top: 1px solid rgba(6, 182, 212, 0.7) !important;
+  box-shadow: 0 18px 45px rgba(0, 0, 0, 0.98), 0 0 20px rgba(6, 182, 212, 0.25) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  opacity: 1 !important;
+  animation: dropdownFadeIn 0.15s ease-out;
+}
+#project-overlay-list {
+  max-height: 285px !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: #0891b2 #060b17;
+}
+#project-overlay-list::-webkit-scrollbar {
+  width: 6px;
+}
+#project-overlay-list::-webkit-scrollbar-track {
+  background: #040813;
+  border-radius: 4px;
+}
+#project-overlay-list::-webkit-scrollbar-thumb {
+  background: #0891b2;
+  border-radius: 4px;
+  border: 1px solid rgba(6, 182, 212, 0.4);
+}
+#project-overlay-list::-webkit-scrollbar-thumb:hover {
+  background: #06b6d4;
+  box-shadow: 0 0 8px rgba(6, 182, 212, 0.8);
+}
+@keyframes dropdownFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.project-card {
+  background-color: #0c1425 !important;
+  border: 1px solid #1e293b !important;
+  transition: all 0.15s ease;
+}
+.project-card:hover {
+  background-color: #121f3a !important;
+  border-color: rgba(6, 182, 212, 0.8) !important;
+  transform: translateX(2px);
+}
+.project-card.active {
+  background-color: #09283e !important;
+  border-color: #06b6d4 !important;
+  box-shadow: 0 0 12px rgba(6, 182, 212, 0.3) !important;
 }
 
 #office-sub-toolbar {
@@ -1042,16 +1114,7 @@ html, body {
    4. BOTTOM COMMAND DOCK & TELEMETRY ACCORDION
    ═══════════════════════════════════════════════════════════════════════════════ */
 #bottom-command-dock {
-  height: var(--dock-h);
-  background: rgba(10, 15, 29, 0.98);
-  border-top: 2px solid var(--border-cyber);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 0 16px;
-  z-index: 50;
-  backdrop-filter: blur(8px);
+  display: none !important;
 }
 .dock-actions {
   display: flex;
@@ -1136,25 +1199,24 @@ html, body {
   margin-bottom: 6px;
 }
 
-/* Floating Action Button (FAB) */
+/* Floating Action Button (FAB) Cyber-Chat */
 #fab-chat {
   position: fixed;
-  bottom: calc(var(--dock-h) + 16px);
-  right: calc(var(--ops-w) + 16px);
+  bottom: 20px;
+  right: calc(var(--ops-w) + 20px);
   width: 48px;
   height: 48px;
-  background: #facc15;
-  color: #000;
-  border: 2px solid #000;
-  border-radius: 50%;
-  font-size: 20px;
+  background: linear-gradient(135deg, #0b1528 0%, #050a16 100%);
+  color: #06b6d4;
+  border: 1.5px solid #06b6d4;
+  border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  box-shadow: 0 6px 20px rgba(250, 204, 21, 0.4);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.8), 0 0 16px rgba(6, 182, 212, 0.35);
   z-index: 40;
-  transition: transform 0.15s, box-shadow 0.15s;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s, border-color 0.2s;
 }
 #tab-office #fab-chat {
   position: absolute;
@@ -1163,8 +1225,12 @@ html, body {
   display: none !important;
 }
 #fab-chat:hover {
-  transform: scale(1.08);
-  box-shadow: 0 8px 24px rgba(250, 204, 21, 0.6);
+  transform: translateY(-2px) scale(1.08);
+  border-color: #38bdf8;
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.95), 0 0 25px rgba(6, 182, 212, 0.6);
+}
+#fab-chat:active {
+  transform: translateY(0) scale(0.98);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
@@ -1442,7 +1508,7 @@ html, body {
 
 #decor-tray {
   position: absolute;
-  bottom: calc(var(--dock-h) + 10px);
+  bottom: 16px;
   left: 20px;
   right: calc(var(--ops-w) + 20px);
   max-width: 860px;

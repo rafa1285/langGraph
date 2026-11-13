@@ -56,6 +56,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     await orchestrator.initialize()
     app.state.orchestrator = orchestrator
 
+    # Initialize Dashboard Real-Time Streaming Service
+    from app.services.dashboard_service import dashboard_stream_service
+    dashboard_stream_service.set_orchestrator(orchestrator)
+    app.state.dashboard_service = dashboard_stream_service
+
     yield
 
     # 3. Clean up connections on shutdown

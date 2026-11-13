@@ -198,3 +198,28 @@ async def test_api_brownfield_endpoints(brownfield_env: dict[str, Any]) -> None:
     # 4. Unknown audit returns 404
     missing_resp = await client.get("/api/v1/office/brownfield/bf_inexistente/audit")
     assert missing_resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_brownfield_depth_surface_vs_deep(brownfield_env: dict[str, Any]) -> None:
+    """Verify that both surface and deep audit requests execute and record their depth level."""
+    client: AsyncClient = brownfield_env["client"]
+
+    # Surface audit
+    res_surface = await client.post(
+        "/api/v1/office/brownfield/audit",
+        json={"repo_url": "https://github.com/acme/quick-check", "depth": "surface"},
+    )
+    assert res_surface.status_code == 200
+    data_surface = res_surface.json()
+    assert data_surface["depth"] == "surface"
+
+    # Deep audit
+    res_deep = await client.post(
+        "/api/v1/office/brownfield/audit",
+        json={"repo_url": "https://github.com/acme/deep-check", "depth": "deep"},
+    )
+    assert res_deep.status_code == 200
+    data_deep = res_deep.json()
+    assert data_deep["depth"] == "deep"
+

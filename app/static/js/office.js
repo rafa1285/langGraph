@@ -1578,19 +1578,217 @@ async function _pollLiveTelemetry() {
   }
 }
 
-async function _loadProjectList() {
-  const select = /** @type {HTMLSelectElement|null} */ ($id('project-select'));
-  if (!select) return;
+function _resetPipelineStepper() {
+  PIPELINE_STEPS.forEach((step) => {
+    const node = $id(`stepper-node-${step.id}`);
+    const stateLabel = $id(`stepper-state-${step.id}`);
+    if (node && stateLabel) {
+      node.classList.remove('active', 'done');
+      stateLabel.textContent = 'PENDIENTE';
+    }
+  });
+  const activeStatus = $id('stepper-active-status');
+  if (activeStatus) activeStatus.textContent = 'ESPERANDO';
+}
+
+async function _syncPipelineWithProject(statusData) {
+  if (!statusData) return;
+  const history = statusData.execution_history || [];
+  const completedAgents = new Set(history.map((h) => h.agent_id));
+
+  let deliverables = {};
+  try {
+    deliverables = await API.getProjectDeliverables(statusData.project_id);
+  } catch (_) {}
+
+  PIPELINE_STEPS.forEach((step) => {
+    const node = $id(`stepper-node-${step.id}`);
+    const stateLabel = $id(`stepper-state-${step.id}`);
+    if (!node || !stateLabel) return;
+
+    let isDone = completedAgents.has(step.agentId);
+    if (!isDone) {
+      if (step.id === 'step-ceo-charter' && (deliverables.ceo_charter || deliverables.pre_sdd_doc)) isDone = true;
+      if (step.id === 'step-uiux' && deliverables.ui_ux_spec) isDone = true;
+      if (step.id === 'step-uiux-qa' && deliverables.ui_ux_spec) isDone = true;
+      if (step.id === 'step-mktg' && deliverables.marketing_spec) isDone = true;
+      if (step.id === 'step-sales' && deliverables.sales_analytics_spec) isDone = true;
+      if (step.id === 'step-signoff' && deliverables.ceo_signoff) isDone = true;
+    }
+    if (statusData.pasos_completados >= 15) {
+      isDone = true;
+    }
+
+    node.classList.remove('active', 'done');
+    if (isDone) {
+      node.classList.add('done');
+      stateLabel.textContent = 'COMPLETADO ✓';
+    } else {
+      stateLabel.textContent = 'PENDIENTE';
+    }
+  });
+
+  const activeStatus = $id('stepper-active-status');
+  if (activeStatus) {
+    activeStatus.textContent = statusData.pasos_completados
+      ? `LISTO (${statusData.pasos_completados} PASOS)`
+      : 'LISTO';
+  }
+}
+
+/** @type {Array<Object>} */
+let _cachedProjectList = [];
+
+function _updateProjectTrigger(pid) {
+  const triggerText = $id('project-trigger-text');
+  const triggerDot = $id('project-trigger-dot');
+  if (!triggerText || !triggerDot) return;
+
+  if (!pid) {
+    triggerText.textContent = '— NINGUNO —';
+    triggerText.className = 'truncate text-[11px] font-bold text-slate-400';
+    triggerDot.className = 'w-2 h-2 rounded-full bg-slate-500 flex-shrink-0';
+    return;
+  }
+
+  const proj = _cachedProjectList.find((p) => (p.project_id || p.id) === pid);
+  const name = proj?.project_name || (pid === 'proj_88c9fd46' ? 'validator-hq-saas' : pid);
+
+  triggerText.textContent = name;
+  triggerText.className = 'truncate text-[11px] font-bold text-slate-100';
+  triggerDot.className = 'w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,0.8)] flex-shrink-0';
+}
+
+function _renderProjectOverlayList() {
+  const listContainer = $id('project-overlay-list');
+  const countBadge = $id('project-overlay-count');
+  if (!listContainer) return;
+
+  if (countBadge) countBadge.textContent = String(_cachedProjectList.length);
+  listContainer.innerHTML = '';
+
+  if (_cachedProjectList.length === 0) {
+    listContainer.innerHTML = '<div class="p-3 text-center text-slate-500 text-[11px]">No se encontraron proyectos activos.</div>';
+    return;
+  }
+
+  _cachedProjectList.forEach((proj) => {
+    const pid = proj.project_id || proj.id;
+    const name = proj.project_name || (pid === 'proj_88c9fd46' ? 'validator-hq-saas' : pid);
+    const status = proj.current_status || 'IDLE';
+    const isActive = pid === _activeProjectId;
+    const totalTokens = ((proj.total_tokens_in || 0) + (proj.total_tokens_out || 0)).toLocaleString();
+
+    const card = document.createElement('div');
+    card.className = `project-card p-2.5 rounded border cursor-pointer transition-all flex flex-col gap-1 ${
+      isActive
+        ? 'active border-cyan-400 bg-[#09283e]'
+        : 'border-[#1e293b] bg-[#0c1425] hover:bg-[#121f3a]'
+    }`;
+    card.style.backgroundColor = isActive ? '#09283e' : '#0c1425';
+    card.style.border = isActive ? '1px solid #06b6d4' : '1px solid #1e293b';
+
+    card.innerHTML = `
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-1.5 min-w-0 max-w-[240px]">
+          <span class="text-xs flex-shrink-0">${pid.startsWith('bf_') ? '🛡️' : '🚀'}</span>
+          <span class="font-bold text-slate-100 text-xs truncate" title="${_esc(name)}">${_esc(name)}</span>
+        </div>
+        ${
+          isActive
+            ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-950 text-emerald-400 border border-emerald-700 flex-shrink-0">ACTIVO ✓</span>'
+            : '<span class="text-[9px] text-slate-400 hover:text-cyan-300 flex-shrink-0 font-sans">Seleccionar</span>'
+        }
+      </div>
+      <div class="flex items-center justify-between text-[10px] font-mono">
+        <span class="text-cyan-400 font-semibold">${_esc(pid)}</span>
+        <span class="text-amber-300 font-medium">${_esc(status)}</span>
+      </div>
+      <div class="flex items-center justify-between text-[9px] text-slate-400 pt-1 border-t border-[#1e293b]">
+        <span>Pasos: ${proj.steps_completed ?? 0}</span>
+        <span>${totalTokens} tokens</span>
+      </div>
+    `;
+
+    card.addEventListener('click', () => {
+      _selectProject(pid);
+      $id('project-dropdown-overlay')?.classList.add('hidden');
+    });
+
+    listContainer.appendChild(card);
+  });
+}
+
+async function _selectProject(pid) {
+  _activeProjectId = pid || null;
+  window._activeProjectId = _activeProjectId;
+  document.dispatchEvent(new CustomEvent('project:selected', { detail: { projectId: _activeProjectId } }));
+
+  _updateProjectTrigger(_activeProjectId);
+  _renderProjectOverlayList();
+
+  const nativeSelect = /** @type {HTMLSelectElement|null} */ ($id('project-select'));
+  if (nativeSelect) nativeSelect.value = _activeProjectId || '';
+
+  if (!_activeProjectId) {
+    _resetPipelineStepper();
+    appendActivityLog({ level: 'info', source: 'PROJECT', message: 'Ningún proyecto seleccionado.' });
+    return;
+  }
+
+  appendActivityLog({ level: 'info', source: 'PROJECT', message: `Proyecto activo: ${_activeProjectId}` });
 
   try {
-    const projects = await API.listProjects();
-    select.innerHTML = '<option value="">— NINGUNO —</option>';
-    projects.forEach((proj) => {
-      const opt = document.createElement('option');
-      opt.value = proj.id ?? proj.project_id;
-      opt.textContent = `${proj.id ?? proj.project_id}`;
-      select.appendChild(opt);
-    });
+    const statusData = await API.getProjectStatus(_activeProjectId);
+    await _syncPipelineWithProject(statusData);
+  } catch (err) {
+    console.warn('Error loading project status for pipeline:', err);
+  }
+
+  ['dash-interaction-project-select', 'thoughts-project-select', 'artifacts-project-select'].forEach((id) => {
+    const el = /** @type {HTMLSelectElement|null} */ ($id(id));
+    if (el && el.value !== _activeProjectId) {
+      if (Array.from(el.options).some((o) => o.value === _activeProjectId)) {
+        el.value = _activeProjectId;
+        el.dispatchEvent(new Event('change'));
+      }
+    }
+  });
+}
+
+async function _loadProjectList() {
+  const select = /** @type {HTMLSelectElement|null} */ ($id('project-select'));
+
+  try {
+    const res = await API.listProjects();
+    _cachedProjectList = Array.isArray(res) ? res : (res?.projects || []);
+    const prevVal = _activeProjectId || select?.value;
+
+    if (select) {
+      select.innerHTML = '<option value="">— NINGUNO —</option>';
+      _cachedProjectList.forEach((proj) => {
+        const pid = proj.project_id || proj.id;
+        if (!pid) return;
+        const opt = document.createElement('option');
+        opt.value = pid;
+        const name = proj.project_name || (pid === 'proj_88c9fd46' ? 'validator-hq-saas' : null);
+        const label = name ? `${name} (${pid})` : pid;
+        const status = proj.current_status ? ` • ${proj.current_status}` : '';
+        opt.textContent = `${label}${status}`;
+        select.appendChild(opt);
+      });
+    }
+
+    _renderProjectOverlayList();
+
+    if (prevVal && _cachedProjectList.some((p) => (p.project_id || p.id) === prevVal)) {
+      _selectProject(prevVal);
+    } else if (_cachedProjectList.length > 0) {
+      const defaultPid = _cachedProjectList[0].project_id || _cachedProjectList[0].id;
+      _selectProject(defaultPid);
+    } else {
+      _selectProject(null);
+    }
   } catch (e) {
     console.warn('Error loading projects:', e);
   }
@@ -1614,15 +1812,76 @@ function _setupHUDControls() {
     });
   });
 
-  $id('project-select')?.addEventListener('change', (e) => {
-    const val = /** @type {HTMLSelectElement} */ (e.target).value;
-    _activeProjectId = val || null;
-    if (_activeProjectId) {
-      appendActivityLog({ level: 'info', source: 'PROJECT', message: `Proyecto seleccionado: ${_activeProjectId}` });
+  // Project Dropdown Trigger & Overlay Event Listeners
+  const triggerBtn = $id('project-dropdown-trigger');
+  const dropdownOverlay = $id('project-dropdown-overlay');
+
+  triggerBtn?.addEventListener('click', (e) => {
+    e.stopPropagation();
+    dropdownOverlay?.classList.toggle('hidden');
+    const isExpanded = !dropdownOverlay?.classList.contains('hidden');
+    triggerBtn.setAttribute('aria-expanded', String(isExpanded));
+  });
+
+  $id('btn-project-deselect')?.addEventListener('click', () => {
+    _selectProject(null);
+    dropdownOverlay?.classList.add('hidden');
+    triggerBtn?.setAttribute('aria-expanded', 'false');
+  });
+
+  document.addEventListener('click', (e) => {
+    const container = $id('project-dropdown-container');
+    if (container && !container.contains(/** @type {Node} */ (e.target))) {
+      dropdownOverlay?.classList.add('hidden');
+      triggerBtn?.setAttribute('aria-expanded', 'false');
     }
   });
 
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && dropdownOverlay && !dropdownOverlay.classList.contains('hidden')) {
+      dropdownOverlay.classList.add('hidden');
+      triggerBtn?.setAttribute('aria-expanded', 'false');
+    }
+  });
+
+  if (window.location.search.includes('show_dropdown=1')) {
+    setTimeout(() => {
+      dropdownOverlay?.classList.remove('hidden');
+      triggerBtn?.setAttribute('aria-expanded', 'true');
+    }, 400);
+  }
+
+  $id('project-select')?.addEventListener('change', (e) => {
+    const val = /** @type {HTMLSelectElement} */ (e.target).value;
+    _selectProject(val);
+  });
+
   $id('btn-refresh-projects')?.addEventListener('click', _loadProjectList);
+
+  $id('btn-resume')?.addEventListener('click', async () => {
+    if (!_activeProjectId) {
+      appendActivityLog({ level: 'warn', source: 'RESUME', message: 'Selecciona un proyecto primero para reanudar.' });
+      return;
+    }
+    const btn = /** @type {HTMLButtonElement|null} */ ($id('btn-resume'));
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ REANUDANDO...';
+    }
+    appendActivityLog({ level: 'info', source: 'RESUME', message: `Reanudando proyecto ${_activeProjectId}...` });
+    try {
+      const res = await API.resumeProject(_activeProjectId);
+      appendActivityLog({ level: 'success', source: 'RESUME', message: `Proyecto ${_activeProjectId} reanudado: ${res.status || 'OK'}` });
+      await _selectProject(_activeProjectId);
+    } catch (err) {
+      appendActivityLog({ level: 'error', source: 'RESUME', message: `Error al reanudar proyecto: ${err.message}` });
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '⏭ REANUDAR';
+      }
+    }
+  });
 
   $id('btn-launch')?.addEventListener('click', async () => {
     const input = /** @type {HTMLInputElement|null} */ ($id('idea-input'));
@@ -1640,6 +1899,60 @@ function _setupHUDControls() {
       }
     } catch (err) {
       appendActivityLog({ level: 'error', source: 'LAUNCH', message: `Error al crear proyecto: ${err.message}` });
+    }
+  });
+
+  $id('btn-audit')?.addEventListener('click', async () => {
+    const repoInput = /** @type {HTMLInputElement|null} */ ($id('repo-url-input'));
+    const depthSelect = /** @type {HTMLSelectElement|null} */ ($id('audit-depth'));
+    const auditBtn = /** @type {HTMLButtonElement|null} */ ($id('btn-audit'));
+
+    if (!repoInput || !repoInput.value.trim()) {
+      appendActivityLog({ level: 'warn', source: 'BROWNFIELD', message: 'Por favor, introduce una URL de repositorio GitHub válida.' });
+      return;
+    }
+
+    const repoUrl = repoInput.value.trim();
+    const depth = depthSelect ? depthSelect.value : 'deep';
+    const depthLabel = depth === 'surface' ? '⚡ RÁPIDO' : '🔬 PROFUNDO';
+
+    appendActivityLog({
+      level: 'info',
+      source: 'BROWNFIELD',
+      message: `Iniciando auditoría ${depthLabel} en: ${repoUrl}`
+    });
+
+    if (auditBtn) {
+      auditBtn.disabled = true;
+      auditBtn.textContent = '⏳ AUDITANDO...';
+    }
+
+    try {
+      const res = await API.startBrownfieldAudit(repoUrl, 'main', depth);
+      if (res && res.project_id) {
+        _activeProjectId = res.project_id;
+        await _loadProjectList();
+        const sel = /** @type {HTMLSelectElement|null} */ ($id('project-select'));
+        if (sel) sel.value = res.project_id;
+
+        const health = res.health_score ?? 'N/A';
+        const critCount = res.critical_findings ? res.critical_findings.length : 0;
+        const warnCount = res.warnings ? res.warnings.length : 0;
+        appendActivityLog({
+          level: 'success',
+          source: 'BROWNFIELD',
+          message: `Auditoría completada (${depthLabel}). ID: ${res.project_id} | Salud: ${health}/100 | Críticos: ${critCount} | Advertencias: ${warnCount}`
+        });
+      } else {
+        appendActivityLog({ level: 'success', source: 'BROWNFIELD', message: 'Auditoría completada exitosamente.' });
+      }
+    } catch (err) {
+      appendActivityLog({ level: 'error', source: 'BROWNFIELD', message: `Error en auditoría GitHub: ${err.message}` });
+    } finally {
+      if (auditBtn) {
+        auditBtn.disabled = false;
+        auditBtn.textContent = '🔍 AUDITAR';
+      }
     }
   });
 }

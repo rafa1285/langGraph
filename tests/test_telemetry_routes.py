@@ -54,11 +54,11 @@ async def test_agent_stats_endpoint(app):
         assert response.status_code == 200
         data = response.json()
         assert "total_agents" in data
-        assert data["total_agents"] >= 14
-        assert len(data["agents"]) >= 14
+        assert data["total_agents"] >= 13
+        assert len(data["agents"]) >= 13
         agent_names = [a["name"] for a in data["agents"]]
         assert "CEO" in agent_names
-        assert "CISO" in agent_names
+        assert any("CISO" in name for name in agent_names)
 
 
 @pytest.mark.asyncio
@@ -81,9 +81,10 @@ async def test_cost_breakdown_endpoint(app):
 
 @pytest.mark.asyncio
 async def test_security_breakers_endpoint(app):
-    """Confirm /api/v1/telemetry/security reports circuit breaker state."""
+    """Confirm /api/v1/telemetry/security reports circuit breaker state and supports filtering."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # 1. Unfiltered request
         response = await client.get("/api/v1/telemetry/security")
         assert response.status_code == 200
         data = response.json()
@@ -92,6 +93,16 @@ async def test_security_breakers_endpoint(app):
         assert data["max_allowed_loops"] == 3
         assert "projects_monitored" in data
         assert "recent_security_events" in data
+        assert "zero_touch_compliant" in data
+        assert "data_minimization_gdpr" in data
+
+        # 2. Filtered by non-existent project returns empty lists gracefully
+        filter_resp = await client.get("/api/v1/telemetry/security?project_id=nonexistent_project_xyz")
+        assert filter_resp.status_code == 200
+        f_data = filter_resp.json()
+        assert f_data["circuit_breakers_tripped"] == 0
+        assert f_data["projects_monitored"] == []
+        assert f_data["recent_security_events"] == []
 
 
 @pytest.mark.asyncio

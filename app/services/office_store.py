@@ -28,6 +28,9 @@ class OfficeStore:
         """Initialize database tables and indexes if they do not already exist."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         async with aiosqlite.connect(str(self.db_path)) as db:
+            await db.execute("PRAGMA journal_mode = WAL;")
+            await db.execute("PRAGMA synchronous = NORMAL;")
+            await db.execute("PRAGMA busy_timeout = 5000;")
             await db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS agent_conversations (
@@ -45,10 +48,16 @@ class OfficeStore:
                     duration_ms INTEGER NOT NULL,
                     estimated_tokens_in INTEGER NOT NULL,
                     estimated_tokens_out INTEGER NOT NULL,
+                    is_visible INTEGER NOT NULL DEFAULT 1,
                     created_at TEXT NOT NULL
                 );
                 """
             )
+            # Ensure is_visible column exists on existing databases
+            async with db.execute("PRAGMA table_info(agent_conversations);") as cur:
+                existing_cols = [r[1] for r in await cur.fetchall()]
+                if "is_visible" not in existing_cols:
+                    await db.execute("ALTER TABLE agent_conversations ADD COLUMN is_visible INTEGER NOT NULL DEFAULT 1;")
             await db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS agent_emails (
@@ -123,8 +132,8 @@ class OfficeStore:
                     id, project_id, step_number, agent_id, system_prompt,
                     user_payload, raw_response, status, verdict, score,
                     culprit, duration_ms, estimated_tokens_in,
-                    estimated_tokens_out, created_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                    estimated_tokens_out, is_visible, created_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
                 """,
                 (
                     str(record.id),
@@ -141,6 +150,7 @@ class OfficeStore:
                     record.duration_ms,
                     record.estimated_tokens_in,
                     record.estimated_tokens_out,
+                    record.is_visible,
                     record.created_at.isoformat(),
                 ),
             )
@@ -156,30 +166,47 @@ class OfficeStore:
         query = (
             "SELECT id, project_id, step_number, agent_id, system_prompt, "
             "user_payload, raw_response, status, verdict, score, culprit, "
-            "duration_ms, estimated_tokens_in, estimated_tokens_out, created_at "
+            "duration_ms, estimated_tokens_in, estimated_tokens_out, created_at, "
+            "COALESCE(is_visible, 1) "
             "FROM agent_conversations WHERE project_id = ?"
         )
         params: list[str] = [project_id]
         if agent_id is not None:
             query += " AND agent_id = ?"
             params.append(agent_id.value)
-        query += " ORDER BY step_number ASC, created_at ASC"
+        query += " ORDER BY created_at ASC, step_number ASC"
 
         records: list[AgentConversationRecord] = []
         async with aiosqlite.connect(str(self.db_path)) as db:
             async with db.execute(query, params) as cursor:
                 rows = await cursor.fetchall()
                 for row in rows:
+                    try:
+                        rec_id = UUID(str(row[0]))
+                    except (ValueError, TypeError):
+                        import uuid as _uuid
+                        rec_id = _uuid.uuid4()
+
+                    try:
+                        aid = AgentID(row[3])
+                    except ValueError:
+                        aid = AgentID.AGENTE_00_CEO
+
+                    try:
+                        st_val = DeliverableStatus(row[7])
+                    except ValueError:
+                        st_val = DeliverableStatus.PENDIENTE
+
                     records.append(
                         AgentConversationRecord(
-                            id=UUID(row[0]),
+                            id=rec_id,
                             project_id=row[1],
                             step_number=row[2],
-                            agent_id=AgentID(row[3]),
+                            agent_id=aid,
                             system_prompt=row[4],
                             user_payload=row[5],
                             raw_response=row[6],
-                            status=DeliverableStatus(row[7]),
+                            status=st_val,
                             verdict=row[8],
                             score=row[9],
                             culprit=row[10],
@@ -187,6 +214,7 @@ class OfficeStore:
                             estimated_tokens_in=row[12],
                             estimated_tokens_out=row[13],
                             created_at=row[14],
+                            is_visible=int(row[15]),
                         )
                     )
         return records
@@ -258,7 +286,7 @@ class OfficeStore:
         if unread_only:
             query += " AND is_read = 0"
 
-        query += " ORDER BY step_number ASC, created_at ASC"
+        query += " ORDER BY created_at ASC, step_number ASC"
 
         emails: list[AgentEmailRecord] = []
         async with aiosqlite.connect(str(self.db_path)) as db:
@@ -330,13 +358,16 @@ class OfficeStore:
         telemetry_query = (
             "SELECT project_id, COUNT(id), COALESCE(SUM(duration_ms), 0), "
             "COALESCE(SUM(estimated_tokens_in), 0), COALESCE(SUM(estimated_tokens_out), 0), "
-            "MAX(created_at) FROM agent_conversations GROUP BY project_id"
+            "MAX(created_at) FROM agent_conversations WHERE is_visible = 1 GROUP BY project_id"
         )
         status_query = (
-            "SELECT project_id, status FROM agent_conversations "
-            "ORDER BY step_number ASC, created_at ASC"
+            "SELECT project_id, status FROM agent_conversations WHERE is_visible = 1 "
+            "ORDER BY created_at ASC, step_number ASC"
         )
-        email_projects_query = "SELECT DISTINCT project_id FROM agent_emails"
+        email_projects_query = (
+            "SELECT DISTINCT project_id FROM agent_emails "
+            "WHERE project_id IN (SELECT DISTINCT project_id FROM agent_conversations WHERE is_visible = 1)"
+        )
 
         summaries: dict[str, dict[str, Any]] = {}
         async with aiosqlite.connect(str(self.db_path)) as db:
@@ -353,8 +384,15 @@ class OfficeStore:
                     }
             async with db.execute(status_query) as cursor:
                 for row in await cursor.fetchall():
-                    if row[0] in summaries:
-                        summaries[row[0]]["current_status"] = row[1]
+                    pid, st = row[0], row[1]
+                    if pid in summaries:
+                        prev = summaries[pid].get("current_status")
+                        if prev in ("LANZAMIENTO_AUTORIZADO", "CICLO_DE_SOFTWARE_COMPLETADO_100") and st not in (
+                            "LANZAMIENTO_AUTORIZADO",
+                            "CICLO_DE_SOFTWARE_COMPLETADO_100",
+                        ):
+                            continue
+                        summaries[pid]["current_status"] = st
             async with db.execute(email_projects_query) as cursor:
                 for row in await cursor.fetchall():
                     pid = row[0]
@@ -368,6 +406,24 @@ class OfficeStore:
                             "updated_at": "",
                             "current_status": "PENDIENTE",
                         }
+            try:
+                bf_query = "SELECT project_id, repo_url, status, updated_at FROM brownfield_audits"
+                async with db.execute(bf_query) as cursor:
+                    for row in await cursor.fetchall():
+                        pid = row[0]
+                        if pid not in summaries:
+                            summaries[pid] = {
+                                "project_id": pid,
+                                "steps_completed": 1,
+                                "total_duration_ms": 0,
+                                "total_tokens_in": 0,
+                                "total_tokens_out": 0,
+                                "updated_at": row[3] or "",
+                                "current_status": row[2] or "AUDITED",
+                                "project_name": row[1],
+                            }
+            except Exception:
+                pass
         return summaries
 
     async def save_chat_turn(

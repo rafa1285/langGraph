@@ -99,16 +99,13 @@ async def test_main_root_serves_dashboard_and_contains_no_fake_numbers(
     assert 'id="pipeline-stepper-widget"' in html
     assert 'id="activity-log-widget"' in html
 
-    # Bottom Command Dock & Drawers
-    # Tarea 4: Footer centered, system status texts removed
-    assert 'id="bottom-command-dock"' in html
+    # Top Sub-toolbar Files Button (Moved from bottom dock)
+    assert 'id="btn-top-files"' in html
+    assert "ARCHIVOS" in html
+
+    # Bottom Command Dock removed per UI streamline, drawers preserved
+    assert 'id="bottom-command-dock"' not in html
     assert 'dock-system-info' not in html
-    assert 'SIN CONEXIÓN' not in html
-    assert 'id="dock-btn-files"' in html
-    assert 'id="dock-btn-chat"' in html
-    assert 'id="dock-btn-telemetry"' in html
-    assert 'id="dock-btn-decor"' in html
-    assert 'id="dock-btn-brownfield"' in html
     assert 'id="side-panel"' in html
     assert 'id="decor-tray"' in html
     assert 'id="telemetry-drawer"' in html

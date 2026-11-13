@@ -86,6 +86,7 @@ class BrownfieldService:
         repo: str,
         branch: str,
         auth_token: str | None = None,
+        depth: str = "deep",
     ) -> dict[str, Any]:
         """Fetch repository metadata, languages, file tree, and key manifests via GitHub API."""
         token = auth_token or self.github_token
@@ -136,8 +137,9 @@ class BrownfieldService:
             except Exception as e:
                 logger.warning("No se pudo obtener árbol de archivos: %s", e)
 
-            # 4. Key manifests
-            candidates = [p for p in tree_paths if any(p.endswith(m) for m in _KEY_MANIFESTS)][:8]
+            # 4. Key manifests (scoped by audit depth: 3 for surface, 10 for deep)
+            manifest_limit = 3 if depth == "surface" else 10
+            candidates = [p for p in tree_paths if any(p.endswith(m) for m in _KEY_MANIFESTS)][:manifest_limit]
             for file_path in candidates:
                 try:
                     r_file = await client.get(
@@ -148,7 +150,8 @@ class BrownfieldService:
                         if content_b64:
                             raw_bytes = base64.b64decode(content_b64)
                             decoded = raw_bytes.decode("utf-8", errors="replace")
-                            data["manifests"][file_path] = decoded[:3000]
+                            max_chars = 1500 if depth == "surface" else 3000
+                            data["manifests"][file_path] = decoded[:max_chars]
                 except Exception:
                     pass
 
@@ -175,7 +178,7 @@ class BrownfieldService:
         """Run read-only diagnosis with CISO and Architect, generating an executive report."""
         owner, repo = parse_github_url(request.repo_url)
         repo_data = await self._fetch_repo_data(
-            owner, repo, request.branch, auth_token=request.auth_token
+            owner, repo, request.branch, auth_token=request.auth_token, depth=request.depth
         )
 
         tree = repo_data.get("tree", [])
@@ -186,22 +189,37 @@ class BrownfieldService:
             f"=== {name} ===\n{content}" for name, content in manifests.items()
         )
 
+        is_surface = request.depth == "surface"
+        tree_limit_ciso = 30 if is_surface else 100
+        tree_limit_arch = 40 if is_surface else 120
+
         # ── CISO Diagnosis ───────────────────────────────────────────────────
-        ciso_prompt = (
-            "Eres el CISO (Chief Information Security Officer) en MODO DIAGNÓSTICO.\n"
-            "Tu tarea es AUDITAR la seguridad del repositorio (sin modificar código).\n"
-            "Analiza dependencias, contenedores, credenciales y buenas prácticas.\n"
-            "NO incluyas bloque YAML.\n"
-            "Proporciona:\n"
-            "1. Puntuación de Seguridad (formato: 'Puntuación: XX / 100')\n"
-            "2. Dictamen ejecutivo de riesgos.\n"
-            "3. Lista de vulnerabilidades o debilidades encontradas.\n"
-            "4. Recomendaciones prioritarias de seguridad."
-        )
+        if is_surface:
+            ciso_prompt = (
+                "Eres el CISO en MODO DIAGNÓSTICO RÁPIDO (SURFACE AUDIT).\n"
+                "Realiza un análisis preliminar de riesgos evidentes y dependencias raíz (sin modificar código).\n"
+                "NO incluyas bloque YAML.\n"
+                "Proporciona de forma concisa:\n"
+                "1. Puntuación de Seguridad (formato: 'Puntuación: XX / 100')\n"
+                "2. Riesgos críticos inmediatos detectados.\n"
+                "3. Recomendación ágil de viabilidad de seguridad."
+            )
+        else:
+            ciso_prompt = (
+                "Eres el CISO (Chief Information Security Officer) en MODO DIAGNÓSTICO PROFUNDO (DEEP AUDIT).\n"
+                "Tu tarea es AUDITAR minuciosamente la seguridad del repositorio (sin modificar código).\n"
+                "Analiza árbol de archivos, dependencias, contenedores, credenciales, vectores SAST y buenas prácticas.\n"
+                "NO incluyas bloque YAML.\n"
+                "Proporciona:\n"
+                "1. Puntuación de Seguridad (formato: 'Puntuación: XX / 100')\n"
+                "2. Dictamen ejecutivo de riesgos y vectores de ataque.\n"
+                "3. Lista detallada de vulnerabilidades o debilidades encontradas.\n"
+                "4. Recomendaciones prioritarias de remediación y endurecimiento (hardening)."
+            )
 
         ciso_payload = (
-            f"REPOSITORIO: {owner}/{repo} (Rama: {request.branch})\n"
-            f"ÁRBOL DE ARCHIVOS:\n" + "\n".join(tree[:60]) + "\n\n"
+            f"REPOSITORIO: {owner}/{repo} (Rama: {request.branch}, Profundidad: {request.depth.upper()})\n"
+            f"ÁRBOL DE ARCHIVOS ({len(tree[:tree_limit_ciso])} examinados):\n" + "\n".join(tree[:tree_limit_ciso]) + "\n\n"
             f"ARCHIVOS DE CONFIGURACIÓN Y DEPENDENCIAS:\n{manifest_summary}"
         )
 
@@ -219,21 +237,32 @@ class BrownfieldService:
         )
 
         # ── Architect Diagnosis ───────────────────────────────────────────────
-        arch_prompt = (
-            "Eres el Arquitecto de Software Principal en MODO DIAGNÓSTICO BROWNFIELD.\n"
-            "Tu tarea es evaluar la arquitectura técnica, modularidad y deuda técnica.\n"
-            "NO incluyas bloque YAML.\n"
-            "Proporciona:\n"
-            "1. Puntuación de Arquitectura (formato: 'Puntuación: XX / 100')\n"
-            "2. Dictamen técnico de estructura y calidad.\n"
-            "3. Anti-patrones o deuda técnica identificada.\n"
-            "4. Recomendaciones de refactorización para la siguiente fase."
-        )
+        if is_surface:
+            arch_prompt = (
+                "Eres el Arquitecto de Software Principal en MODO DIAGNÓSTICO RÁPIDO (SURFACE AUDIT).\n"
+                "Evalúa de forma ágil la estructura básica del stack y modularidad técnica.\n"
+                "NO incluyas bloque YAML.\n"
+                "Proporciona de forma concisa:\n"
+                "1. Puntuación de Arquitectura (formato: 'Puntuación: XX / 100')\n"
+                "2. Dictamen de adecuación al stack objetivo.\n"
+                "3. Principales recomendaciones de modernización."
+            )
+        else:
+            arch_prompt = (
+                "Eres el Arquitecto de Software Principal en MODO DIAGNÓSTICO PROFUNDO (DEEP AUDIT).\n"
+                "Tu tarea es evaluar exhaustivamente la arquitectura técnica, acoplamiento, modularidad y deuda técnica.\n"
+                "NO incluyas bloque YAML.\n"
+                "Proporciona:\n"
+                "1. Puntuación de Arquitectura (formato: 'Puntuación: XX / 100')\n"
+                "2. Dictamen técnico detallado de estructura, cohesión y calidad de código.\n"
+                "3. Anti-patrones, código espagueti o deuda técnica identificada.\n"
+                "4. Plan estructurado de refactorización para la siguiente fase."
+            )
 
         arch_payload = (
-            f"REPOSITORIO: {owner}/{repo} (Rama: {request.branch})\n"
+            f"REPOSITORIO: {owner}/{repo} (Rama: {request.branch}, Profundidad: {request.depth.upper()})\n"
             f"LENGUAJES: {list(languages.keys())}\n"
-            f"ÁRBOL DE ARCHIVOS:\n" + "\n".join(tree[:80]) + "\n\n"
+            f"ÁRBOL DE ARCHIVOS ({len(tree[:tree_limit_arch])} examinados):\n" + "\n".join(tree[:tree_limit_arch]) + "\n\n"
             f"MANIFESTS DETECTADOS:\n{manifest_summary}"
         )
 

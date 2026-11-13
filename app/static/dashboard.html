@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Fira+Code:wght@400;600&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/pixel.css">
+  <link rel="stylesheet" href="/static/css/pixel.css?v=2.7.0">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -81,9 +81,9 @@
             AgentOffice — AI Factory Dashboard
           </h1>
         </div>
-        <span class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-500/40">
-          <span class="w-2 h-2 rounded-full bg-emerald-400 live-dot"></span>
-          LIVE
+        <span id="live-connection-badge" class="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-500/40 transition-colors duration-300" title="Conexión en tiempo real activa">
+          <span id="live-connection-dot" class="w-2 h-2 rounded-full bg-emerald-400 live-dot"></span>
+          <span id="live-connection-text">LIVE</span>
         </span>
       </div>
 
@@ -167,7 +167,7 @@
         <div class="flex-1 flex flex-col min-w-0 border-r border-[#1e293b] relative overflow-hidden">
           
           <!-- Sub-barra superior de controles (Reparto armónico: Modo a la izquierda, Prompt fluido al centro, Proyectos a la derecha) -->
-          <div id="office-sub-toolbar" class="bg-[#0a0f1d] border-b border-[#1e293b] flex-shrink-0 z-20" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 10px 20px;" role="toolbar" aria-label="Controles de simulación y lanzamiento">
+          <div id="office-sub-toolbar" class="bg-[#0a0f1d] border-b border-[#1e293b] flex-shrink-0 z-20" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 10px 24px;" role="toolbar" aria-label="Controles de simulación y lanzamiento">
 
             <!-- Izquierda: Mode Toggle (Tamaño Fijo) -->
             <nav id="mode-selector" class="flex-shrink-0" aria-label="Modo de trabajo">
@@ -176,7 +176,7 @@
             </nav>
 
             <!-- Centro: Action Launch Controls (Expansión Fluida y Centrada) -->
-            <div id="hud-action-controls" class="flex-1 flex justify-center items-center max-w-[750px] w-full mx-2">
+            <div id="hud-action-controls" class="flex-1 flex justify-center items-center max-w-[700px] w-full mx-3">
               <!-- Greenfield Controls -->
               <div id="greenfield-controls" class="project-controls active flex items-center gap-2 w-full justify-center" role="form" aria-label="Lanzar nuevo proyecto">
                 <input type="text" id="idea-input" class="pixel-input flex-1 max-w-[650px]"
@@ -188,7 +188,7 @@
               </div>
 
               <!-- Brownfield Controls -->
-              <div id="brownfield-controls" class="project-controls flex items-center gap-2 w-full justify-center" role="form" aria-label="Auditar proyecto GitHub">
+              <div id="brownfield-controls" class="project-controls items-center gap-2 w-full justify-center" role="form" aria-label="Auditar proyecto GitHub">
                 <input type="text" id="repo-url-input" class="pixel-input flex-1 max-w-[500px]"
                        placeholder="https://github.com/owner/repo"
                        aria-label="URL del repositorio GitHub">
@@ -202,14 +202,63 @@
               </div>
             </div>
 
-            <!-- Derecha: Project Selector & Resume (Alineados al borde derecho) -->
-            <div id="project-selector" class="flex items-center gap-2 flex-shrink-0">
-              <label for="project-select" class="pixel-label">PROYECTO:</label>
-              <select id="project-select" class="pixel-select" aria-label="Proyecto activo">
+            <!-- Derecha: Project Selector & Resume (Alineados al borde derecho con margen protegido) -->
+            <div id="project-selector" class="flex items-center gap-2.5 flex-shrink-0 relative">
+              <button id="btn-top-files" class="pixel-btn secondary flex-shrink-0 flex items-center gap-1.5" title="Abrir explorador de archivos y código del proyecto" style="border-color: #06b6d4; color: #a5f3fc;">
+                <span style="font-size: 13px;">📁</span> ARCHIVOS &amp; CÓDIGO
+              </button>
+
+              <span class="pixel-label">PROYECTO:</span>
+
+              <!-- Custom Cyber-Dropdown Container (Ancho Fijo Estable de 230px) -->
+              <div class="relative" id="project-dropdown-container">
+                <button id="project-dropdown-trigger" 
+                        type="button" 
+                        class="pixel-project-trigger flex items-center justify-between px-3 py-1.5 bg-[#070b14] border border-[#223554] hover:border-cyan-400 rounded text-slate-200 text-xs font-mono"
+                        style="width: 230px; min-width: 230px; max-width: 230px; height: 32px;"
+                        aria-haspopup="true"
+                        aria-expanded="false"
+                        title="Seleccionar proyecto activo">
+                  <div class="flex items-center gap-2 min-w-0 overflow-hidden">
+                    <span id="project-trigger-dot" class="w-2 h-2 rounded-full bg-slate-500 flex-shrink-0"></span>
+                    <span id="project-trigger-text" class="truncate text-[11px] font-bold text-slate-200">— NINGUNO —</span>
+                  </div>
+                  <span class="text-[9px] text-cyan-400 ml-1.5 flex-shrink-0 select-none">▼</span>
+                </button>
+
+                <!-- Menú Desplegable Sobrepuesto (Overlay Flotante 100% Opaco y Recuadro Definido) -->
+                <div id="project-dropdown-overlay" 
+                     class="hidden absolute right-0 top-full mt-2 rounded-lg p-3.5 z-50 font-mono bg-[#080d1a] border border-cyan-500/60 shadow-2xl"
+                     style="width: 380px; background-color: #080d1a !important; border: 1.5px solid #06b6d4 !important; box-shadow: 0 20px 50px rgba(0, 0, 0, 0.98), 0 0 25px rgba(6, 182, 212, 0.35) !important; border-radius: 8px;">
+                  
+                  <div class="flex items-center justify-between pb-2 mb-2.5 text-[11px]" style="border-bottom: 1px solid #1e293b;">
+                    <div class="flex items-center gap-1.5 font-bold text-cyan-300 tracking-wider">
+                      <span>📦</span>
+                      <span>PROYECTOS ENCONTRADOS</span>
+                    </div>
+                    <span id="project-overlay-count" class="px-2 py-0.5 rounded text-[10px] text-cyan-400 font-bold" style="background-color: #0c1a2e; border: 1px solid #0e7490;">0</span>
+                  </div>
+
+                  <div id="project-overlay-list" class="flex flex-col gap-1.5 overflow-y-auto" style="max-height: 285px; overflow-y: auto; overflow-x: hidden; padding-right: 4px;">
+                    <!-- Cards de proyectos generadas dinámicamente -->
+                  </div>
+
+                  <div class="pt-2 mt-2 flex items-center justify-between text-[10px] text-slate-400" style="border-top: 1px solid #1e293b;">
+                    <span class="text-slate-500">Selecciona para activar</span>
+                    <button id="btn-project-deselect" type="button" class="text-slate-400 hover:text-rose-400 underline transition-colors">
+                      — Desmarcar —
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <button id="btn-refresh-projects" class="pixel-btn icon" title="Recargar proyectos disponibles" aria-label="Recargar proyectos">↺</button>
+              <button id="btn-resume" class="pixel-btn secondary flex-shrink-0" title="Reanudar proyecto pausado">⏭ REANUDAR</button>
+
+              <!-- Native select hidden for compatibility -->
+              <select id="project-select" class="hidden" aria-hidden="true" tabindex="-1">
                 <option value="">— NINGUNO —</option>
               </select>
-              <button id="btn-refresh-projects" class="pixel-btn icon" title="Recargar proyectos">↺</button>
-              <button id="btn-resume" class="pixel-btn secondary" title="Reanudar proyecto pausado">⏯ REANUDAR</button>
             </div>
 
           </div><!-- /#office-sub-toolbar -->
@@ -329,33 +378,18 @@
           </div>
         </aside><!-- /#side-panel -->
 
-        <!-- Floating Action Button for Quick Chat -->
-        <button id="fab-chat" class="pixel-fab" title="Abrir chat con agente" aria-label="Chat interactivo">
-          💬
+        <!-- Floating Action Button for Quick Chat (Cyberpunk AI Terminal Trigger) -->
+        <button id="fab-chat" class="pixel-fab" title="Abrir canal de chat interactivo" aria-label="Chat interactivo">
+          <div class="relative flex items-center justify-center">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#06b6d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z" fill="rgba(6, 182, 212, 0.15)"></path>
+              <path d="M8 11.5h.01M12 11.5h.01M16 11.5h.01" stroke="#38bdf8" stroke-width="2.5" stroke-linecap="round"></path>
+            </svg>
+            <span class="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 rounded-full bg-emerald-400 border border-[#080d1a] shadow-[0_0_8px_#34d399]" title="Comms Online"></span>
+          </div>
         </button>
 
       </div><!-- /#office-main-layout -->
-
-      <!-- Barra Inferior (Bottom Modular Command Dock Centrado) -->
-      <footer id="bottom-command-dock" role="toolbar" aria-label="Barra de herramientas de comando" style="display: flex; justify-content: center; align-items: center; gap: 14px;">
-        <div class="dock-actions flex items-center justify-center gap-3.5">
-          <button id="dock-btn-files" class="pixel-btn secondary" title="Abrir explorador de código y entregables">
-            📁 ARCHIVOS &amp; CÓDIGO
-          </button>
-          <button id="dock-btn-chat" class="pixel-btn secondary" title="Abrir conversación directa">
-            💬 CHAT 1-A-1
-          </button>
-          <button id="dock-btn-telemetry" class="pixel-btn secondary" title="Ver telemetría detallada de tokens y latencias">
-            📊 TELEMETRÍA
-          </button>
-          <button id="dock-btn-decor" class="pixel-btn secondary" title="Modo Decoración: agregar y mover muebles, plantas y puestos">
-            🎨 DECORAR OFICINA
-          </button>
-          <button id="dock-btn-brownfield" class="pixel-btn secondary" title="Auditar repositorio GitHub con CISO y Arquitecto">
-            🛡️ AUDITAR GITHUB
-          </button>
-        </div>
-      </footer>
 
       <!-- Decoration & Office Designer Tray (Collapsible) -->
       <div id="decor-tray" class="hidden" role="toolbar" aria-label="Bandeja de decoración de la oficina">
@@ -616,7 +650,7 @@
           </div>
 
           <div class="text-[11px] text-slate-500">
-            WebSocket: <span id="ws-status" class="text-emerald-400">Conectado</span>
+            Stream: <span id="ws-status" class="text-emerald-400">Conectado (SSE)</span>
           </div>
         </div>
 
@@ -625,38 +659,138 @@
     </div>
 
     <!-- ─────────────────────────────────────────────────────────────
-         PESTAÑA 2: 🧠 Agent Thoughts (Razonamiento Real en Vivo)
+         PESTAÑA 2: 🧠 Agent Thoughts (Razonamiento Real & Entregables de 13 Agentes)
     ────────────────────────────────────────────────────────────── -->
     <div id="tab-thoughts" class="tab-pane hidden flex flex-col gap-4">
-      <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-5 shadow-lg flex flex-col gap-4">
+      <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 sm:p-5 shadow-lg flex flex-col gap-3 min-h-[calc(100vh-160px)]">
         
-        <!-- Header & Filtros -->
-        <div class="flex flex-wrap items-center justify-between border-b border-[#1f2937] pb-3 gap-3">
+        <!-- Header & Controles -->
+        <div class="flex flex-wrap items-center justify-between border-b border-[#1f2937] pb-3 gap-3 shrink-0">
           <div class="flex items-center gap-2">
             <span class="text-xl">🧠</span>
             <div>
               <h2 class="text-base font-bold text-white">Agent Deliberation &amp; Internal Thoughts Stream</h2>
-              <p class="text-xs text-slate-400">Cadenas de razonamiento, deliberaciones ejecutivas del CEO y decisiones técnicas de los agentes.</p>
+              <p class="text-xs text-slate-400">Inspecciona a fondo el razonamiento, metadatos YAML y entregables completos generados por los 13 agentes.</p>
             </div>
           </div>
           
-          <!-- Filtros de Thoughts -->
           <div class="flex items-center gap-2 text-xs font-mono">
-            <select id="thoughts-project-select" class="bg-[#0b0f19] border border-[#1f2937] rounded px-3 py-1.5 text-slate-200">
-              <option value="">Todos los Proyectos</option>
+            <label class="text-slate-400">Proyecto:</label>
+            <select id="thoughts-project-select" class="bg-[#0b0f19] border border-[#1f2937] rounded px-3 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500">
+              <option value="">Cargando proyectos...</option>
             </select>
-            <select id="thoughts-agent-select" class="bg-[#0b0f19] border border-[#1f2937] rounded px-3 py-1.5 text-slate-200">
-              <option value="">Todos los Agentes</option>
-            </select>
-            <button id="btn-refresh-thoughts" class="px-3 py-1.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 hover:bg-cyan-900 transition">
-              ↻ Actualizar
+            <button id="btn-refresh-thoughts" class="px-3 py-1.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 hover:bg-cyan-900 transition flex items-center gap-1.5">
+              <span>🔄</span> Actualizar
             </button>
           </div>
         </div>
 
-        <!-- Thoughts Feed Container -->
-        <div id="agent-thoughts-stream" class="flex flex-col gap-3 max-h-[650px] overflow-y-auto custom-scrollbar pr-1">
-          <div class="p-4 text-center text-slate-500 font-mono text-xs">Cargando pensamientos de los agentes...</div>
+        <!-- Panel Dividido (Split Layout) a Pantalla Completa -->
+        <div id="agent-thoughts-stream" class="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-[640px]">
+          
+          <!-- Columna Izquierda: Selector Lateral de los 13 Agentes Oficiales (Aprovecha altura completa) -->
+          <div class="lg:col-span-4 xl:col-span-3 bg-[#0b0f19] border border-[#1f2937] rounded-xl p-3 flex flex-col gap-2 h-full shadow-inner">
+            <div class="flex items-center justify-between border-b border-[#1f2937] pb-2 px-1 shrink-0">
+              <span class="text-xs font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5 font-mono">
+                <span>🤖</span> Agentes Oficiales (13)
+              </span>
+              <span id="thoughts-count-badge" class="text-[10px] font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 px-2 py-0.5 rounded-full">
+                0 entregables
+              </span>
+            </div>
+            
+            <!-- Lista de Píldoras Verticales de los 13 Agentes con altura flexible para evitar scroll innecesario -->
+            <div id="thoughts-agent-pills" class="flex flex-col gap-1 overflow-y-auto flex-1 custom-scrollbar pr-1">
+              <!-- Inyectado dinámicamente -->
+            </div>
+          </div>
+
+          <!-- Columna Derecha: Panel Dividido (Metadatos YAML + Visor de Entregable) -->
+          <div class="lg:col-span-8 xl:col-span-9 flex flex-col gap-3 h-full">
+            
+            <!-- Barra de selección de iteración/paso si el agente tiene múltiples entregables -->
+            <div id="thoughts-step-selector-bar" class="hidden flex items-center gap-2 bg-[#0b0f19] border border-[#1f2937] rounded-lg p-2 text-xs font-mono shrink-0">
+              <span class="text-slate-400 font-bold">Iteración / Paso:</span>
+              <div id="thoughts-step-pills" class="flex flex-wrap items-center gap-1.5">
+                <!-- Pasos del agente -->
+              </div>
+            </div>
+
+            <!-- Panel Superior: Metadatos YAML Extraídos (Con botón para plegar/desplegar) -->
+            <div class="bg-[#0b0f19] border border-[#1f2937] rounded-xl p-3.5 flex flex-col gap-2.5 shadow-inner shrink-0">
+              <div class="flex items-center justify-between border-b border-[#1f2937] pb-1.5">
+                <button id="btn-toggle-yaml-meta" type="button" class="text-xs font-bold text-cyan-400 flex items-center gap-1.5 font-mono hover:text-cyan-300 transition cursor-pointer select-none">
+                  <span id="yaml-meta-chevron" class="text-[10px] text-cyan-400 font-mono transition-transform duration-200">▼</span>
+                  <span>⚙️</span> METADATOS YAML EXTRAÍDOS
+                </button>
+                <span id="thought-meta-agent-badge" class="text-xs font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                  Selecciona un agente
+                </span>
+              </div>
+
+              <div id="thought-yaml-meta-grid" class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono transition-all">
+                <div class="bg-[#111827] border border-[#1f2937] p-2 rounded">
+                  <div class="text-[10px] text-slate-500 uppercase">id_proyecto</div>
+                  <div id="yaml-meta-proyecto" class="text-cyan-300 font-semibold truncate">-</div>
+                </div>
+                <div class="bg-[#111827] border border-[#1f2937] p-2 rounded">
+                  <div class="text-[10px] text-slate-500 uppercase">version_iteracion</div>
+                  <div id="yaml-meta-iteracion" class="text-amber-400 font-semibold">-</div>
+                </div>
+                <div class="bg-[#111827] border border-[#1f2937] p-2 rounded">
+                  <div class="text-[10px] text-slate-500 uppercase">agente_emisor</div>
+                  <div id="yaml-meta-emisor" class="text-emerald-400 font-semibold truncate">-</div>
+                </div>
+                <div class="bg-[#111827] border border-[#1f2937] p-2 rounded">
+                  <div class="text-[10px] text-slate-500 uppercase">agente_receptor</div>
+                  <div id="yaml-meta-receptor" class="text-purple-400 font-semibold truncate">-</div>
+                </div>
+                <div class="bg-[#111827] border border-[#1f2937] p-2 rounded">
+                  <div class="text-[10px] text-slate-500 uppercase">estado</div>
+                  <div id="yaml-meta-estado" class="text-cyan-300 font-semibold truncate">-</div>
+                </div>
+                <div class="bg-[#111827] border border-[#1f2937] p-2 rounded">
+                  <div class="text-[10px] text-slate-500 uppercase">prioridad</div>
+                  <div id="yaml-meta-prioridad" class="text-amber-300 font-semibold">-</div>
+                </div>
+                <div class="bg-[#111827] border border-[#1f2937] p-2 rounded col-span-2">
+                  <div class="text-[10px] text-slate-500 uppercase">timestamp</div>
+                  <div id="yaml-meta-timestamp" class="text-slate-300 font-semibold truncate">-</div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Panel Inferior: Visor de Entregable con Apartados Plegables -->
+            <div class="bg-[#0b0f19] border border-[#1f2937] rounded-xl p-3.5 flex flex-col gap-2.5 flex-1 min-h-[420px]">
+              <div class="flex items-center justify-between border-b border-[#1f2937] pb-2 shrink-0 gap-2 flex-wrap">
+                <div class="flex items-center gap-2">
+                  <span class="text-xs font-bold text-slate-300 flex items-center gap-1.5 font-mono">
+                    <span>📄</span> ENTREGABLE &amp; DOCUMENTACIÓN
+                  </span>
+                  <span id="thought-doc-title" class="text-[11px] font-mono text-cyan-400"></span>
+                </div>
+                <div class="flex items-center gap-1.5 font-mono text-xs">
+                  <button id="btn-expand-all-sections" type="button" class="px-2.5 py-1 rounded bg-[#111827] hover:bg-slate-800 text-slate-300 hover:text-white border border-[#1f2937] text-[11px] transition flex items-center gap-1" title="Desplegar todos los apartados">
+                    <span>⬇️</span> Desplegar Todo
+                  </button>
+                  <button id="btn-collapse-all-sections" type="button" class="px-2.5 py-1 rounded bg-[#111827] hover:bg-slate-800 text-slate-300 hover:text-white border border-[#1f2937] text-[11px] transition flex items-center gap-1" title="Plegar todos los apartados">
+                    <span>⬆️</span> Plegar Todo
+                  </button>
+                  <button id="btn-copy-thought-output" class="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-xs transition flex items-center gap-1.5 font-bold">
+                    <span>📋</span> Copy Output
+                  </button>
+                </div>
+              </div>
+
+              <!-- Contenedor del Documento Markdown con Apartados Acordeón Plegables -->
+              <div id="thought-markdown-viewer" class="p-3 rounded-lg bg-[#080c14] border border-[#1f2937] flex-1 min-h-[360px] overflow-y-auto custom-scrollbar flex flex-col gap-2.5 font-mono text-xs">
+                <div class="text-center text-slate-500 py-12">
+                  Selecciona un agente de la lista lateral para visualizar sus metadatos y entregable Markdown.
+                </div>
+              </div>
+            </div>
+
+          </div>
         </div>
 
       </div>
@@ -667,41 +801,65 @@
     ────────────────────────────────────────────────────────────── -->
     <div id="tab-usage" class="tab-pane hidden flex flex-col gap-4">
       
-      <!-- Top Metrics Bar -->
+      <!-- Top Metrics Bar: KPIs de Rendimiento del Grafo -->
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow">
-          <span class="text-xs text-slate-400 font-mono">TOTAL AGENTS CONFIG</span>
-          <div id="stats-total-agents" class="text-2xl font-bold text-white mt-1">15</div>
-          <span class="text-xs text-emerald-400 font-mono">15/15 Agentes Activos</span>
-        </div>
-        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow">
-          <span class="text-xs text-slate-400 font-mono">TOTAL CONVERSATIONS</span>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400 font-mono">TOTAL NODOS EJECUTADOS</span>
+            <span class="text-sm">⚡</span>
+          </div>
           <div id="stats-total-tasks" class="text-2xl font-bold text-cyan-400 mt-1">...</div>
-          <span class="text-xs text-slate-400 font-mono">Pasos en SQLite</span>
+          <span class="text-xs text-slate-400 font-mono">Nodos en LangGraph</span>
         </div>
         <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow">
-          <span class="text-xs text-slate-400 font-mono">AVG LATENCY / STEP</span>
-          <div id="stats-avg-latency" class="text-2xl font-bold text-amber-400 mt-1">...</div>
-          <span class="text-xs text-slate-400 font-mono">Duración promedio</span>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400 font-mono">ITERACIÓN ACTUAL</span>
+            <span class="text-sm">🔄</span>
+          </div>
+          <div id="stats-current-iteration" class="text-2xl font-bold text-amber-400 mt-1">v1</div>
+          <span class="text-xs text-slate-400 font-mono">version_iteracion</span>
         </div>
         <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow">
-          <span class="text-xs text-slate-400 font-mono">CIRCUIT BREAKERS</span>
-          <div id="stats-tripped-breakers" class="text-2xl font-bold text-emerald-400 mt-1">...</div>
-          <span class="text-xs text-slate-400 font-mono">Bloqueos de ciclo</span>
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400 font-mono">TIEMPO MEDIO / NODO</span>
+            <span class="text-sm">⏱️</span>
+          </div>
+          <div id="stats-avg-latency" class="text-2xl font-bold text-white mt-1">...</div>
+          <span class="text-xs text-slate-400 font-mono">Latencia por ejecución</span>
+        </div>
+        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400 font-mono">TASA ÉXITO QA</span>
+            <span class="text-sm">🛡️</span>
+          </div>
+          <div id="stats-qa-success" class="text-2xl font-bold text-emerald-400 mt-1">...</div>
+          <span class="text-xs text-emerald-400/80 font-mono">05_qa_php + 06_qa_python</span>
         </div>
       </div>
 
-      <!-- Agent Grid -->
+      <!-- Agent Grid: Grid de Tarjetas de los 13 Agentes -->
       <section class="bg-[#111827] border border-[#1f2937] rounded-xl p-5 shadow-lg flex flex-col gap-4">
-        <div class="flex items-center justify-between border-b border-[#1f2937] pb-3">
-          <h2 class="text-base font-bold text-white flex items-center gap-2">
-            <span>👥</span> Matriz Operativa de Agentes (Carga &amp; Aprobación)
-          </h2>
-          <span class="text-xs font-mono text-cyan-400">Datos consolidados de SQLite</span>
+        <div class="flex flex-wrap items-center justify-between border-b border-[#1f2937] pb-3 gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">📊</span>
+            <div>
+              <h2 class="text-base font-bold text-white">Matriz Operativa de Agentes (13 Agentes Oficiales)</h2>
+              <p class="text-xs text-slate-400">Estado en vivo, invocaciones, consumo de tokens y peso relativo de cada agente en el proyecto.</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 text-xs font-mono">
+            <label class="text-slate-400">Proyecto:</label>
+            <select id="stats-project-select" class="bg-[#0b0f19] border border-[#1f2937] rounded px-3 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500">
+              <option value="">Cargando proyectos...</option>
+            </select>
+            <button id="btn-refresh-stats" class="px-3 py-1.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 hover:bg-cyan-900 transition flex items-center gap-1.5">
+              <span>🔄</span> Actualizar
+            </button>
+          </div>
         </div>
 
-        <div id="agent-stats-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3">
-          <!-- Agentes inyectados dinámicamente -->
+        <div id="agent-stats-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3.5">
+          <!-- Tarjetas inyectadas dinámicamente -->
         </div>
       </section>
 
@@ -712,23 +870,62 @@
     ────────────────────────────────────────────────────────────── -->
     <div id="tab-tokens" class="tab-pane hidden flex flex-col gap-4">
       
-      <!-- Summary Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-center font-mono">
-        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
-          <span class="text-xs text-slate-400">Tokens Entrada (Prompt):</span>
-          <div id="cost-tokens-in" class="text-xl font-bold text-slate-200 mt-1">...</div>
+      <!-- Top Header & Filter Controls -->
+      <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-wrap items-center justify-between gap-3">
+        <div class="flex items-center gap-2.5">
+          <span class="text-xl">💰</span>
+          <div>
+            <h2 class="text-base font-bold text-white">Monitor Financiero de Tokens &amp; Unit Economics</h2>
+            <p class="text-xs text-slate-400">Auditoría del gasto computacional de LLMs, distribución por especialista y validación de márgenes Stripe (&gt;= 80%).</p>
+          </div>
         </div>
-        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
-          <span class="text-xs text-slate-400">Tokens Salida (Completion):</span>
-          <div id="cost-tokens-out" class="text-xl font-bold text-cyan-400 mt-1">...</div>
+        <div class="flex items-center gap-2 text-xs font-mono">
+          <label class="text-slate-400" for="cost-project-select">Proyecto:</label>
+          <select id="cost-project-select" class="bg-[#0b0f19] border border-[#1f2937] rounded px-3 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500">
+            <option value="">Todos los Proyectos</option>
+          </select>
+          <button id="btn-refresh-cost" class="px-3 py-1.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 hover:bg-cyan-900 transition flex items-center gap-1.5 cursor-pointer">
+            <span>🔄</span> Actualizar
+          </button>
         </div>
-        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4">
-          <span class="text-xs text-slate-400">Coste Total LLM:</span>
-          <div id="cost-total-usd" class="text-xl font-bold text-amber-400 mt-1">...</div>
+      </div>
+
+      <!-- 4 Summary KPI Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 font-mono">
+        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400">TOKENS ENTRADA (PROMPT)</span>
+            <span class="text-sm">📥</span>
+          </div>
+          <div id="cost-tokens-in" class="text-2xl font-bold text-slate-200 mt-1">...</div>
+          <span class="text-[11px] text-slate-500 font-mono mt-1">Consultas y contexto enviado</span>
         </div>
-        <div class="bg-[#111827] border border-emerald-500/40 rounded-xl p-4 bg-emerald-950/20">
-          <span class="text-xs text-emerald-300 font-semibold">Ahorro Estimado:</span>
-          <div id="cost-saved-usd" class="text-xl font-bold text-emerald-400 mt-1">...</div>
+
+        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400">TOKENS SALIDA (COMPLETION)</span>
+            <span class="text-sm">📤</span>
+          </div>
+          <div id="cost-tokens-out" class="text-2xl font-bold text-cyan-400 mt-1">...</div>
+          <span class="text-[11px] text-slate-500 font-mono mt-1">Código y documentos generados</span>
+        </div>
+
+        <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-slate-400">COSTE TOTAL LLM</span>
+            <span class="text-sm">💰</span>
+          </div>
+          <div id="cost-total-usd" class="text-2xl font-bold text-amber-400 mt-1">...</div>
+          <span class="text-[11px] text-slate-500 font-mono mt-1">Inferencia Gemini Flash ($0.15/$0.60 1M)</span>
+        </div>
+
+        <div class="bg-[#111827] border border-emerald-500/40 rounded-xl p-4 shadow bg-emerald-950/20 flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-emerald-300 font-semibold">AHORRO ESTIMADO</span>
+            <span class="text-sm">💎</span>
+          </div>
+          <div id="cost-saved-usd" class="text-2xl font-bold text-emerald-400 mt-1">...</div>
+          <span class="text-[11px] text-emerald-500/80 font-mono mt-1">vs. Horas de desarrollo tradicional</span>
         </div>
       </div>
 
@@ -737,17 +934,20 @@
         
         <!-- Breakdown por Agente (7 Cols) -->
         <section class="lg:col-span-7 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
-          <h3 class="text-sm font-bold text-white flex items-center gap-2 border-b border-[#1f2937] pb-2 font-mono">
-            <span>📊</span> Consumo y Coste de Tokens por Agente
-          </h3>
+          <div class="flex items-center justify-between border-b border-[#1f2937] pb-2">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2 font-mono">
+              <span>📊</span> Consumo y Coste de Tokens por Especialista
+            </h3>
+            <span class="text-[10px] text-slate-400 font-mono bg-[#0b0f19] px-2 py-0.5 rounded border border-[#1f2937]">Ordenado por esfuerzo</span>
+          </div>
           <div class="overflow-x-auto custom-scrollbar">
             <table class="w-full text-left text-xs font-mono">
               <thead class="bg-[#0b0f19] text-slate-400 border-b border-[#1f2937]">
                 <tr>
-                  <th class="p-2">Agente</th>
-                  <th class="p-2">Tokens</th>
-                  <th class="p-2">% Total</th>
-                  <th class="p-2">Coste USD</th>
+                  <th class="p-2.5">Especialista</th>
+                  <th class="p-2.5">Tokens</th>
+                  <th class="p-2.5">% Total</th>
+                  <th class="p-2.5 text-right">Coste USD</th>
                 </tr>
               </thead>
               <tbody id="agent-cost-tbody" class="divide-y divide-[#1f2937] text-slate-300">
@@ -759,13 +959,16 @@
 
         <!-- Pricing Tiers & Unit Economics (5 Cols) -->
         <section class="lg:col-span-5 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
-          <h3 class="text-sm font-bold text-white flex items-center gap-2 border-b border-[#1f2937] pb-2 font-mono">
-            <span>🛡️</span> Zero-Touch Unit Economics (Stripe + COGS)
-          </h3>
+          <div class="flex items-center justify-between border-b border-[#1f2937] pb-2">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2 font-mono">
+              <span>🛡️</span> Zero-Touch Unit Economics (Stripe + COGS)
+            </h3>
+            <span class="text-[10px] text-emerald-400 font-mono bg-emerald-950/60 px-2 py-0.5 rounded border border-emerald-800 font-bold">Regla &gt;= 80%</span>
+          </div>
           <p class="text-xs text-slate-400">
-            Regla de Gobernanza CEO: Margen neto &gt;= 80% tras comisión Stripe (2.9% + $0.30) y COGS.
+            Gobernanza económica establecida por el CEO Charter: tras descontar comisión Stripe (2.9% + $0.30) y coste computacional COGS, cada plan debe retener &gt;= 80% de margen bruto.
           </p>
-          <div id="pricing-tiers-list" class="flex flex-col gap-2 font-mono text-xs">
+          <div id="pricing-tiers-list" class="flex flex-col gap-2.5 font-mono text-xs">
             <!-- Tiers inyectados dinámicamente -->
           </div>
         </section>
@@ -781,7 +984,7 @@
       
       <!-- Top Status Banner -->
       <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-5 shadow-lg flex flex-col gap-3">
-        <div class="flex items-center justify-between border-b border-[#1f2937] pb-3">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-[#1f2937] pb-3">
           <div class="flex items-center gap-2">
             <span class="text-xl">🛡️</span>
             <div>
@@ -789,9 +992,18 @@
               <p class="text-xs text-slate-400">Prevención de bucles infinitos, aislamiento RGPD y veto ejecutivo automático.</p>
             </div>
           </div>
-          <span id="security-shield-badge" class="text-xs font-mono px-3 py-1 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold">
-            SHIELD ACTIVE
-          </span>
+          <div class="flex items-center gap-2 text-xs font-mono flex-wrap">
+            <span id="security-shield-badge" class="px-3 py-1.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-bold tracking-wider">
+              SHIELD ACTIVE
+            </span>
+            <label class="text-slate-400 ml-2" for="sec-project-select">Proyecto:</label>
+            <select id="sec-project-select" class="bg-[#0b0f19] border border-[#1f2937] rounded px-3 py-1.5 text-slate-200 focus:outline-none focus:border-cyan-500">
+              <option value="">Todos los Proyectos</option>
+            </select>
+            <button id="btn-refresh-security" class="px-3 py-1.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-800 hover:bg-cyan-900 transition flex items-center gap-1.5 cursor-pointer">
+              <span>🔄</span> Actualizar
+            </button>
+          </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 font-mono text-xs">
@@ -818,20 +1030,26 @@
         
         <!-- Circuit Breakers por Proyecto (5 Cols) -->
         <section class="lg:col-span-5 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
-          <h3 class="text-sm font-bold text-white flex items-center gap-2 border-b border-[#1f2937] pb-2 font-mono">
-            <span>⚡</span> Proyectos Monitoreados (Estado de Breakers)
-          </h3>
-          <div id="circuit-breakers-container" class="flex flex-col gap-2 max-h-[450px] overflow-y-auto custom-scrollbar font-mono text-xs">
+          <div class="flex items-center justify-between border-b border-[#1f2937] pb-2 font-mono">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <span>⚡</span> Proyectos Monitoreados
+            </h3>
+            <span id="breakers-count-badge" class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">0 proyectos</span>
+          </div>
+          <div id="circuit-breakers-container" class="flex flex-col gap-2 max-h-[480px] overflow-y-auto custom-scrollbar font-mono text-xs">
             <!-- Items inyectados dinámicamente -->
           </div>
         </section>
 
         <!-- Registro de Eventos de Seguridad y Vetos (7 Cols) -->
         <section class="lg:col-span-7 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
-          <h3 class="text-sm font-bold text-white flex items-center gap-2 border-b border-[#1f2937] pb-2 font-mono">
-            <span>🚨</span> Audit Trail de Seguridad &amp; Reworks CISO / QA
-          </h3>
-          <div id="security-events-container" class="flex flex-col gap-2 max-h-[450px] overflow-y-auto custom-scrollbar font-mono text-xs">
+          <div class="flex items-center justify-between border-b border-[#1f2937] pb-2 font-mono">
+            <h3 class="text-sm font-bold text-white flex items-center gap-2">
+              <span>🚨</span> Audit Trail de Seguridad &amp; Reworks CISO / QA
+            </h3>
+            <span id="security-events-count-badge" class="text-[10px] px-2 py-0.5 rounded bg-slate-800 text-slate-300">0 eventos</span>
+          </div>
+          <div id="security-events-container" class="flex flex-col gap-2 max-h-[480px] overflow-y-auto custom-scrollbar font-mono text-xs">
             <!-- Eventos inyectados dinámicamente -->
           </div>
         </section>
@@ -883,8 +1101,17 @@
               </tbody>
             </table>
           </div>
-          <div id="db-table-footer" class="text-[11px] font-mono text-slate-500 flex justify-between">
-            <span>Registros cargados: <strong id="db-rows-count" class="text-slate-300">0</strong></span>
+          <div id="db-table-footer" class="text-[11px] font-mono text-slate-500 flex items-center justify-between pt-1">
+            <span>Registros: <strong id="db-rows-count" class="text-slate-300">0</strong></span>
+            <div class="flex items-center gap-1.5">
+              <button id="btn-db-prev" class="px-2 py-0.5 rounded bg-[#0b0f19] border border-[#1f2937] hover:bg-slate-800 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                ◀ Ant
+              </button>
+              <span id="db-page-info" class="text-slate-400 px-1">Pág. 1 / 1</span>
+              <button id="btn-db-next" class="px-2 py-0.5 rounded bg-[#0b0f19] border border-[#1f2937] hover:bg-slate-800 text-slate-300 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                Sig ▶
+              </button>
+            </div>
           </div>
         </section>
 
@@ -910,9 +1137,14 @@
 
             <!-- Preview Pane (3 Cols) -->
             <div class="md:col-span-3 border border-[#1f2937] rounded-lg bg-[#0b0f19] flex flex-col max-h-[500px] overflow-hidden">
-              <div class="p-2 border-b border-[#1f2937] bg-[#111827] flex items-center justify-between text-xs font-mono">
-                <span id="preview-filename" class="text-cyan-400 font-semibold truncate">Ningún archivo seleccionado</span>
-                <span id="preview-filesize" class="text-slate-500 text-[10px]"></span>
+              <div class="p-2 border-b border-[#1f2937] bg-[#111827] flex items-center justify-between text-xs font-mono gap-2">
+                <div class="flex items-center gap-1.5 truncate">
+                  <span id="preview-filename" class="text-cyan-400 font-semibold truncate">Ningún archivo seleccionado</span>
+                  <span id="preview-filesize" class="text-slate-500 text-[10px] shrink-0"></span>
+                </div>
+                <button id="btn-copy-artifact" class="px-2 py-0.5 rounded bg-[#0b0f19] hover:bg-slate-800 text-slate-300 hover:text-white border border-[#1f2937] text-[11px] transition flex items-center gap-1 shrink-0" title="Copiar contenido al portapapeles">
+                  <span>📋</span> Copiar
+                </button>
               </div>
               <pre id="preview-content" class="p-3 text-xs font-mono text-slate-300 overflow-auto custom-scrollbar flex-1 whitespace-pre-wrap">Haz clic en un archivo del listado para previsualizar su contenido (JSON, Markdown, código).</pre>
             </div>
@@ -959,7 +1191,7 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/main.js"></script>
-  <script src="/static/js/dashboard.js"></script>
+  <script type="module" src="/static/js/main.js?v=2.7.0"></script>
+  <script src="/static/js/dashboard.js?v=2.7.1"></script>
 </body>
 </html>

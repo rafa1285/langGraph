@@ -47,6 +47,7 @@ class DashboardTelemetryResponse(BaseModel):
     agents_ready_str: str = Field(..., description="Formatted status (e.g. 13/13 Agents Ready)")
     health_score: int = Field(..., description="System health score (0-100)")
     circuit_breakers_tripped: int = Field(..., description="Active circuit breakers")
+    server_status: str = Field(default="live", description="Real-time backend status (live/degraded/offline)")
     last_updated: str = Field(..., description="ISO 8601 timestamp")
 
 
@@ -72,6 +73,10 @@ class AgentThoughtItem(BaseModel):
     system_prompt: str
     user_payload: str
     culprit: str | None = None
+    frontmatter: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Metadatos YAML extraídos: id_proyecto, version_iteracion, agente_emisor, agente_receptor, estado, prioridad, timestamp",
+    )
 
 
 class ThoughtsListResponse(BaseModel):
@@ -100,6 +105,9 @@ class AgentStatItem(BaseModel):
     avg_duration_ms: int
     approval_rate: float
     rework_count: int
+    status_badge: str = Field(default="IDLE", description="Badge de estado en vivo: IDLE, WORKING, APPROVED, BLOCKED")
+    token_share_pct: float = Field(default=0.0, description="Porcentaje de peso de tokens sobre el total")
+    role_desc: str = Field(default="", description="Descripción funcional del rol del agente")
 
 
 class AgentStatsResponse(BaseModel):
@@ -109,6 +117,12 @@ class AgentStatsResponse(BaseModel):
 
     total_agents: int
     agents: list[AgentStatItem]
+    total_nodes_executed: int = Field(default=0, description="Total de nodos ejecutados en el grafo")
+    current_iteration: int = Field(default=1, description="Iteración actual del ciclo (version_iteracion)")
+    avg_node_duration_ms: int = Field(default=0, description="Tiempo medio por nodo en ms")
+    qa_success_rate: float = Field(default=100.0, description="Tasa de éxito de QA (% de aprobados de 05_qa_php y 06_qa_python)")
+    total_tokens: int = Field(default=0, description="Suma total de tokens generados en el proyecto")
+    project_id: str | None = Field(default=None, description="ID del proyecto analizado")
 
 
 class TierEconomics(BaseModel):
@@ -149,6 +163,7 @@ class CostBreakdownResponse(BaseModel):
     saved_usd: float
     by_agent: list[AgentCostItem]
     pricing_tiers: list[TierEconomics]
+    project_id: str | None = None
 
 
 class CircuitBreakerItem(BaseModel):
@@ -253,3 +268,43 @@ class ArtifactContentResponse(BaseModel):
     file_type: str
     size_bytes: int
     content: str
+
+
+class DashboardRunRequest(BaseModel):
+    """Payload to launch a LangGraph project run from Request from Boss."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    prompt: str = Field(..., description="Idea or mandate from boss")
+    id_proyecto: str | None = Field(default=None, description="Optional custom project ID")
+    mock: bool | None = Field(default=None, description="Run in mock/fast mode")
+
+
+class DashboardRunResponse(BaseModel):
+    """Response returned upon launching background project execution."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    project_id: str
+    status: str
+    message: str
+
+
+class DashboardStateResponse(BaseModel):
+    """Current snapshot of project progress in Request Pipeline and Activity Log."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    project_id: str
+    status: str
+    stage_index: int
+    stage_id: str
+    stage_name: str
+    current_node: str | None = None
+    events: list[dict[str, Any]]
+    tokens: int
+    cost: float
+    saved: float
+    health: int
+    pasos_completados: int
+
