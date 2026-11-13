@@ -88,6 +88,12 @@ def create_app() -> FastAPI:
     # Telemetry, Agent Thoughts & Operations Dashboard routes
     application.include_router(telemetry_router)
 
+    # WhatsApp Cloud API webhook routes (enabled via WHATSAPP_ENABLED=true)
+    if settings.WHATSAPP_ENABLED:
+        from app.api.routes_whatsapp import router as whatsapp_router  # noqa: PLC0415
+
+        application.include_router(whatsapp_router)
+
     # Serve the 2D Pixel Art SPA when the static directory is present
     if _STATIC_DIR.exists():
         application.mount(

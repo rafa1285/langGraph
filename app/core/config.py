@@ -61,6 +61,14 @@ class Settings(BaseSettings):
     LANGSMITH_PROJECT: str = "agentoffice"
     LANGSMITH_ENDPOINT: str = "https://eu.api.smith.langchain.com"
 
+    # --- WhatsApp Business API ---
+    WHATSAPP_PHONE_NUMBER_ID: str | None = None
+    WHATSAPP_ACCESS_TOKEN: str | None = None
+    WHATSAPP_VERIFY_TOKEN: str = "agentoffice_verify_2026"
+    WHATSAPP_APP_SECRET: str | None = None
+    WHATSAPP_ENABLED: bool = False
+    WHATSAPP_ALLOWED_PHONES: list[str] = []
+
     @field_validator("AGENT_MODEL_OVERRIDES", mode="before")
     @classmethod
     def parse_agent_overrides(cls, value: object) -> object:
