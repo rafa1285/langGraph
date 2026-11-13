@@ -50,6 +50,7 @@ _ALLOWED_DB_TABLES = {
     "agent_emails",
     "chat_sessions",
     "brownfield_audits",
+    "whatsapp_sessions",
 }
 
 # Official 13 agents of the LangGraph factory (in pipeline sequence)
@@ -388,6 +389,7 @@ async def get_agent_stats(
     max_iteration = 1
     qa_approvals = 0
     qa_total = 0
+    is_project_completed = False
 
     target_pid = project_id.strip() if isinstance(project_id, str) and project_id.strip() else None
 

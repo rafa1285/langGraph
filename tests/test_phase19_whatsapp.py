@@ -532,3 +532,127 @@ class TestWhatsAppOrchestrator:
         last_message = mock_wa.send_text_message.call_args_list[-1][0][1]
         assert "https://test-app.vercel.app" in last_message
         assert "Manual de usuario" in last_message
+
+
+# ---------------------------------------------------------------------------
+# WhatsApp Hub & Admin endpoints tests (Fase 6)
+# ---------------------------------------------------------------------------
+
+
+class TestWhatsAppAdminAndHub:
+    def test_get_status(self) -> None:
+        from fastapi import FastAPI
+        from app.api.routes_whatsapp import router
+
+        app = FastAPI()
+        app.include_router(router)
+        client = TestClient(app)
+
+        res = client.get("/api/v1/whatsapp/status")
+        assert res.status_code == 200
+        data = res.json()
+        assert "status" in data
+        assert "config" in data
+        assert data["config"]["webhook_path"] == "/webhook/whatsapp"
+
+    def test_save_config(self, tmp_path: Any) -> None:
+        from fastapi import FastAPI
+        from app.api.routes_whatsapp import router
+        from app.services.whatsapp_config_service import WhatsAppConfigService
+
+        test_env = tmp_path / ".env.test"
+        test_env.write_text("DEFAULT_LLM_MODEL=gemini-2.5-flash\n", encoding="utf-8")
+
+        app = FastAPI()
+        app.include_router(router)
+        client = TestClient(app)
+
+        with patch("app.api.routes_whatsapp._config_service", WhatsAppConfigService(env_path=test_env)):
+            payload = {
+                "phone_number_id": "test_pid_999",
+                "access_token": "EAATestToken123",
+                "verify_token": "custom_verify_token",
+                "app_secret": "my_app_secret",
+                "enabled": True,
+                "allowed_phones": ["+34600000000"],
+            }
+            res = client.post("/api/v1/whatsapp/config", json=payload)
+            assert res.status_code == 200
+            data = res.json()
+            assert data["status"] == "success"
+
+            # Check .env was written
+            content = test_env.read_text(encoding="utf-8")
+            assert "WHATSAPP_PHONE_NUMBER_ID=test_pid_999" in content
+            assert "WHATSAPP_ENABLED=true" in content
+
+    async def test_sessions_list_detail_and_reset(self, tmp_path: Any) -> None:
+        from fastapi import FastAPI
+        from app.api.routes_whatsapp import router
+        from app.services.session_store import WhatsAppSessionStore
+
+        db_path = str(tmp_path / "sessions_admin.sqlite")
+        store = WhatsAppSessionStore(db_path=db_path)
+        await store.upsert_session(
+            phone="+34611111111",
+            project_id="proj_admin_test",
+            phase="INTAKE",
+            conversation_history=[{"role": "user", "content": "Hola admin"}],
+        )
+
+        app = FastAPI()
+        app.include_router(router)
+        client = TestClient(app)
+
+        with patch("app.api.routes_whatsapp._session_store", store):
+            # List
+            res_list = client.get("/api/v1/whatsapp/sessions")
+            assert res_list.status_code == 200
+            sessions = res_list.json()
+            assert len(sessions) >= 1
+            assert sessions[0]["phone_number"] == "+34611111111"
+
+            # Detail
+            res_detail = client.get("/api/v1/whatsapp/sessions/+34611111111")
+            assert res_detail.status_code == 200
+            assert res_detail.json()["project_id"] == "proj_admin_test"
+
+            # Reset
+            res_reset = client.post("/api/v1/whatsapp/sessions/+34611111111/reset")
+            assert res_reset.status_code == 200
+            assert res_reset.json()["status"] == "success"
+
+            # Verify deleted
+            after_reset = await store.get_session("+34611111111")
+            assert after_reset is None
+
+    async def test_simulate_message(self, tmp_path: Any) -> None:
+        from fastapi import FastAPI
+        from app.api.routes_whatsapp import router
+        from app.services.session_store import WhatsAppSessionStore
+
+        db_path = str(tmp_path / "sessions_sim.sqlite")
+        store = WhatsAppSessionStore(db_path=db_path)
+
+        app = FastAPI()
+        app.include_router(router)
+        client = TestClient(app)
+
+        with patch("app.api.routes_whatsapp._session_store", store), \
+             patch("app.core.config.settings.USE_MOCK_LLM", True):
+            sim_payload = {
+                "phone": "+34622222222",
+                "text": "Quiero una app para un restaurante con carta digital",
+            }
+            res = client.post("/api/v1/whatsapp/simulate", json=sim_payload)
+            assert res.status_code == 200
+            data = res.json()
+            assert data["status"] == "success"
+            assert data["phone"] == "+34622222222"
+            assert len(data["reply"]) > 0
+
+            # Session was persisted
+            session = await store.get_session("+34622222222")
+            assert session is not None
+            assert len(session["conversation_history"]) == 2
+

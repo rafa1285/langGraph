@@ -75,6 +75,9 @@
       loadDatabaseTable();
       loadArtifactsProjectSelector();
     }
+    if (targetId === 'tab-whatsapp') {
+      loadWhatsAppHub();
+    }
   }
 
   navTabs.forEach(tab => {
@@ -1744,6 +1747,433 @@
     const sizes = ['B', 'KB', 'MB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  }
+
+  // =========================================================================
+  // 10. WhatsApp Hub & Management System
+  // =========================================================================
+
+  const waStatusBadge = document.getElementById('wa-status-badge');
+  const waKpiSessions = document.getElementById('wa-kpi-sessions');
+  const waBtnTestMeta = document.getElementById('wa-btn-test-meta');
+  const waDiagnosticAlert = document.getElementById('wa-diagnostic-alert');
+
+  const waConfigForm = document.getElementById('wa-config-form');
+  const waCfgEnabled = document.getElementById('wa-cfg-enabled');
+  const waCfgPhoneId = document.getElementById('wa-cfg-phone-id');
+  const waCfgToken = document.getElementById('wa-cfg-token');
+  const waBtnToggleToken = document.getElementById('wa-btn-toggle-token');
+  const waTokenStatusLabel = document.getElementById('wa-token-status-label');
+  const waCfgVerify = document.getElementById('wa-cfg-verify');
+  const waCfgSecret = document.getElementById('wa-cfg-secret');
+  const waCfgAllowed = document.getElementById('wa-cfg-allowed');
+  const waBtnSaveCfg = document.getElementById('wa-btn-save-cfg');
+  const waSaveStatus = document.getElementById('wa-save-status');
+
+  const waDisplayWebhookUrl = document.getElementById('wa-display-webhook-url');
+  const waBtnCopyUrl = document.getElementById('wa-btn-copy-url');
+  const waDisplayVerifyToken = document.getElementById('wa-display-verify-token');
+  const waBtnCopyToken = document.getElementById('wa-btn-copy-token');
+  const waBtnTestHandshake = document.getElementById('wa-btn-test-handshake');
+  const waHandshakeResult = document.getElementById('wa-handshake-result');
+
+  const waSimPhone = document.getElementById('wa-sim-phone');
+  const waSimText = document.getElementById('wa-sim-text');
+  const waBtnSimulate = document.getElementById('wa-btn-simulate');
+  const waBtnSimReset = document.getElementById('wa-btn-sim-reset');
+  const waSimBadge = document.getElementById('wa-sim-badge');
+  const waSimOutput = document.getElementById('wa-sim-output');
+
+  const waBtnRefreshSessions = document.getElementById('wa-btn-refresh-sessions');
+  const waSessionsTableBody = document.getElementById('wa-sessions-table-body');
+
+  async function loadWhatsAppHub() {
+    // 1. Set default Webhook URL based on window.location
+    if (waDisplayWebhookUrl) {
+      waDisplayWebhookUrl.value = `${window.location.origin}/webhook/whatsapp`;
+    }
+
+    // 2. Fetch Status & Config
+    try {
+      const resp = await fetch('/api/v1/whatsapp/status');
+      if (resp.ok) {
+        const data = await resp.json();
+        renderWhatsAppStatus(data);
+      }
+    } catch (err) {
+      console.warn('Error fetching WhatsApp status:', err);
+    }
+
+    // 3. Fetch Active Sessions
+    loadWhatsAppSessions();
+  }
+
+  function renderWhatsAppStatus(data) {
+    const config = data.config || {};
+    const isOnline = data.status === 'online';
+
+    // Status Badge
+    if (waStatusBadge) {
+      if (isOnline && config.has_access_token && config.phone_number_id) {
+        waStatusBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-950/80 text-emerald-400 border border-emerald-500/40';
+        waStatusBadge.innerHTML = '🟢 GATEWAY ACTIVO (Meta Cloud API)';
+      } else if (!isOnline) {
+        waStatusBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700';
+        waStatusBadge.innerHTML = '⚪ GATEWAY DESACTIVADO';
+      } else {
+        waStatusBadge.className = 'px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-950/80 text-amber-300 border border-amber-600/50';
+        waStatusBadge.innerHTML = '🟡 CREDENCIALES PENDIENTES';
+      }
+    }
+
+    // KPIs
+    if (waKpiSessions) {
+      waKpiSessions.textContent = config.active_sessions_count || '0';
+    }
+
+    // Form inputs
+    if (waCfgEnabled) waCfgEnabled.checked = !!config.enabled;
+    if (waCfgPhoneId && !waCfgPhoneId.value) waCfgPhoneId.value = config.phone_number_id || '';
+    if (waCfgVerify) waCfgVerify.value = config.verify_token || 'agentoffice_verify_2026';
+    if (waDisplayVerifyToken) waDisplayVerifyToken.value = config.verify_token || 'agentoffice_verify_2026';
+    if (waCfgAllowed && !waCfgAllowed.value) {
+      waCfgAllowed.value = (config.allowed_phones || []).join(', ');
+    }
+
+    if (waTokenStatusLabel) {
+      if (config.has_access_token) {
+        waTokenStatusLabel.innerHTML = `<span class="text-emerald-400 font-semibold">✓ ${config.access_token_masked}</span>`;
+      } else {
+        waTokenStatusLabel.innerHTML = '<span class="text-amber-400">Sin configurar</span>';
+      }
+    }
+  }
+
+  async function loadWhatsAppSessions() {
+    if (!waSessionsTableBody) return;
+    try {
+      const resp = await fetch('/api/v1/whatsapp/sessions');
+      if (!resp.ok) {
+        waSessionsTableBody.innerHTML = '<tr><td colspan="6" class="py-4 text-center text-slate-500">Error al cargar sesiones.</td></tr>';
+        return;
+      }
+      const sessions = await resp.json();
+      if (!sessions || sessions.length === 0) {
+        waSessionsTableBody.innerHTML = '<tr><td colspan="6" class="py-6 text-center text-slate-500">No hay sesiones activas de clientes aún. Usa el Sandbox arriba o envía un mensaje real.</td></tr>';
+        return;
+      }
+
+      waSessionsTableBody.innerHTML = sessions.map(s => {
+        let phaseColor = 'bg-slate-800 text-slate-300 border-slate-700';
+        if (s.phase === 'INTAKE') phaseColor = 'bg-cyan-950 text-cyan-300 border-cyan-700/60';
+        else if (s.phase === 'BUILDING') phaseColor = 'bg-amber-950 text-amber-300 border-amber-600/60';
+        else if (s.phase === 'DEPLOYING') phaseColor = 'bg-purple-950 text-purple-300 border-purple-600/60';
+        else if (s.phase === 'COMPLETED') phaseColor = 'bg-emerald-950 text-emerald-300 border-emerald-600/60';
+        else if (s.phase === 'ERROR') phaseColor = 'bg-rose-950 text-rose-300 border-rose-600/60';
+
+        const updatedStr = s.updated_at ? new Date(s.updated_at).toLocaleString() : '-';
+        const projectDisplay = s.project_id ? `<span class="text-cyan-400 font-semibold">${escapeHtml(s.project_id)}</span>` : '<span class="text-slate-500">En definición</span>';
+
+        return `
+          <tr class="hover:bg-slate-800/30 transition">
+            <td class="py-2.5 px-3 font-semibold text-white">${escapeHtml(s.phone_number)}</td>
+            <td class="py-2.5 px-3">
+              <span class="px-2 py-0.5 rounded text-[10px] font-bold border ${phaseColor}">${escapeHtml(s.phase)}</span>
+            </td>
+            <td class="py-2.5 px-3">${projectDisplay}</td>
+            <td class="py-2.5 px-3 text-center text-slate-300">${s.message_count || 0}</td>
+            <td class="py-2.5 px-3 text-slate-400 text-[11px]">${updatedStr}</td>
+            <td class="py-2.5 px-3 text-right">
+              <button onclick="window.viewWhatsAppSession('${escapeHtml(s.phone_number)}')" class="px-2 py-1 rounded bg-[#0b0f19] hover:bg-slate-800 text-cyan-300 border border-[#1f2937] text-[11px] mr-1">
+                Ver Chat
+              </button>
+              <button onclick="window.resetWhatsAppSession('${escapeHtml(s.phone_number)}')" class="px-2 py-1 rounded bg-rose-950/50 hover:bg-rose-900 text-rose-300 border border-rose-800/40 text-[11px]">
+                Reset
+              </button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    } catch (err) {
+      console.warn('Error loading sessions:', err);
+    }
+  }
+
+  // Window helper for row clicks
+  window.viewWhatsAppSession = async function(phone) {
+    try {
+      const resp = await fetch(`/api/v1/whatsapp/sessions/${encodeURIComponent(phone)}`);
+      if (!resp.ok) return;
+      const session = await resp.json();
+      if (waSimPhone) waSimPhone.value = phone;
+      if (waSimOutput) {
+        let historyText = `--- HISTORIAL DE SESIÓN (${phone}) ---\nFase: ${session.phase} | Proyecto: ${session.project_id || 'N/A'}\n\n`;
+        (session.conversation_history || []).forEach(m => {
+          const role = m.role === 'user' ? '👤 Usuario' : '🤖 Intake Agent';
+          historyText += `${role}:\n${m.content}\n\n`;
+        });
+        waSimOutput.textContent = historyText.trim();
+        waSimOutput.classList.remove('text-center', 'text-slate-500');
+        waSimOutput.classList.add('text-slate-200');
+      }
+    } catch (err) {
+      console.warn('Error viewing session:', err);
+    }
+  };
+
+  window.resetWhatsAppSession = async function(phone) {
+    if (!confirm(`¿Estás seguro de que deseas reiniciar la sesión de ${phone}?`)) return;
+    try {
+      const resp = await fetch(`/api/v1/whatsapp/sessions/${encodeURIComponent(phone)}/reset`, { method: 'POST' });
+      if (resp.ok) {
+        loadWhatsAppSessions();
+        if (waSimPhone && waSimPhone.value === phone && waSimOutput) {
+          waSimOutput.textContent = `Sesión reiniciada para ${phone}. Listo para una nueva idea.`;
+        }
+      }
+    } catch (err) {
+      console.warn('Error resetting session:', err);
+    }
+  };
+
+  // Toggle show/hide token
+  if (waBtnToggleToken && waCfgToken) {
+    waBtnToggleToken.addEventListener('click', () => {
+      if (waCfgToken.type === 'password') {
+        waCfgToken.type = 'text';
+        waBtnToggleToken.textContent = '🔒';
+      } else {
+        waCfgToken.type = 'password';
+        waBtnToggleToken.textContent = '👁️';
+      }
+    });
+  }
+
+  // Save Config Form
+  if (waConfigForm) {
+    waConfigForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (waBtnSaveCfg) {
+        waBtnSaveCfg.disabled = true;
+        waBtnSaveCfg.innerHTML = '<span>⏳</span> Guardando...';
+      }
+
+      const payload = {
+        enabled: waCfgEnabled ? waCfgEnabled.checked : false,
+        phone_number_id: waCfgPhoneId ? waCfgPhoneId.value.trim() : '',
+        access_token: waCfgToken ? waCfgToken.value.trim() : '',
+        verify_token: waCfgVerify ? waCfgVerify.value.trim() : 'agentoffice_verify_2026',
+        app_secret: waCfgSecret ? waCfgSecret.value.trim() : '',
+        allowed_phones: waCfgAllowed ? waCfgAllowed.value.split(',').map(p => p.trim()).filter(Boolean) : []
+      };
+
+      try {
+        const resp = await fetch('/api/v1/whatsapp/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        const resData = await resp.json();
+        if (resp.ok) {
+          if (waSaveStatus) {
+            waSaveStatus.textContent = '✅ Guardado correctamente en .env';
+            waSaveStatus.classList.remove('hidden', 'text-rose-400');
+            waSaveStatus.classList.add('text-emerald-400');
+            setTimeout(() => waSaveStatus.classList.add('hidden'), 4000);
+          }
+          loadWhatsAppHub();
+        } else {
+          throw new Error(resData.detail || 'Error al guardar');
+        }
+      } catch (err) {
+        if (waSaveStatus) {
+          waSaveStatus.textContent = `❌ ${err.message}`;
+          waSaveStatus.classList.remove('hidden', 'text-emerald-400');
+          waSaveStatus.classList.add('text-rose-400');
+        }
+      } finally {
+        if (waBtnSaveCfg) {
+          waBtnSaveCfg.disabled = false;
+          waBtnSaveCfg.innerHTML = '<span>💾</span> Guardar en .env y Aplicar';
+        }
+      }
+    });
+  }
+
+  // Test Meta Ping Button
+  if (waBtnTestMeta) {
+    waBtnTestMeta.addEventListener('click', async () => {
+      const origHtml = waBtnTestMeta.innerHTML;
+      waBtnTestMeta.innerHTML = '<span>⏳</span> Probando Meta...';
+      waBtnTestMeta.disabled = true;
+      if (waDiagnosticAlert) waDiagnosticAlert.classList.add('hidden');
+
+      try {
+        const resp = await fetch('/api/v1/whatsapp/status?test_meta=true');
+        const data = await resp.json();
+        const meta = data.meta_connectivity;
+
+        if (waDiagnosticAlert) {
+          waDiagnosticAlert.classList.remove('hidden');
+          if (meta && meta.connected) {
+            const d = meta.details || {};
+            waDiagnosticAlert.className = 'p-3.5 rounded-xl border border-emerald-500/40 bg-emerald-950/70 text-emerald-200 text-xs font-mono';
+            waDiagnosticAlert.innerHTML = `
+              <div class="font-bold text-emerald-300 flex items-center gap-2">
+                <span>✅</span> Conexión con Meta Graph API v21.0 Exitosa
+              </div>
+              <div class="mt-1 text-slate-300">
+                • <strong>Teléfono Registrado:</strong> ${escapeHtml(d.display_phone_number)} | <strong>Nombre:</strong> ${escapeHtml(d.verified_name)}<br>
+                • <strong>ID:</strong> ${escapeHtml(d.id)} | <strong>Calidad:</strong> ${escapeHtml(d.quality_rating)}
+              </div>
+            `;
+          } else {
+            const err = (meta && meta.error) || 'Fallo de conexión';
+            waDiagnosticAlert.className = 'p-3.5 rounded-xl border border-rose-500/40 bg-rose-950/70 text-rose-200 text-xs font-mono';
+            waDiagnosticAlert.innerHTML = `
+              <div class="font-bold text-rose-300 flex items-center gap-2">
+                <span>❌</span> No se pudo conectar con Meta
+              </div>
+              <div class="mt-1 text-slate-300">
+                ${escapeHtml(err)}<br>
+                <span class="text-[11px] text-slate-400">Verifica que el Phone Number ID y el Access Token sean válidos y no hayan caducado.</span>
+              </div>
+            `;
+          }
+        }
+      } catch (err) {
+        if (waDiagnosticAlert) {
+          waDiagnosticAlert.classList.remove('hidden');
+          waDiagnosticAlert.className = 'p-3.5 rounded-xl border border-rose-500/40 bg-rose-950/70 text-rose-200 text-xs font-mono';
+          waDiagnosticAlert.innerHTML = `❌ Error de red local: ${escapeHtml(err.message)}`;
+        }
+      } finally {
+        waBtnTestMeta.innerHTML = origHtml;
+        waBtnTestMeta.disabled = false;
+      }
+    });
+  }
+
+  // Copy URL and Token buttons
+  if (waBtnCopyUrl && waDisplayWebhookUrl) {
+    waBtnCopyUrl.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(waDisplayWebhookUrl.value);
+      waBtnCopyUrl.textContent = '✅';
+      setTimeout(() => waBtnCopyUrl.textContent = '📋', 2000);
+    });
+  }
+
+  if (waBtnCopyToken && waDisplayVerifyToken) {
+    waBtnCopyToken.addEventListener('click', async () => {
+      await navigator.clipboard.writeText(waDisplayVerifyToken.value);
+      waBtnCopyToken.textContent = '✅';
+      setTimeout(() => waBtnCopyToken.textContent = '📋', 2000);
+    });
+  }
+
+  // Test Handshake Local button
+  if (waBtnTestHandshake) {
+    waBtnTestHandshake.addEventListener('click', async () => {
+      const token = waDisplayVerifyToken ? waDisplayVerifyToken.value : 'agentoffice_verify_2026';
+      const challenge = '123456';
+      if (!waHandshakeResult) return;
+      waHandshakeResult.classList.remove('hidden');
+      waHandshakeResult.textContent = 'Ejecutando handshake GET /webhook/whatsapp...';
+
+      try {
+        const resp = await fetch(`/webhook/whatsapp?hub.mode=subscribe&hub.verify_token=${encodeURIComponent(token)}&hub.challenge=${challenge}`);
+        const text = await resp.text();
+        if (resp.ok && text.trim() === challenge) {
+          waHandshakeResult.className = 'text-[11px] font-mono p-2 rounded bg-emerald-950/60 border border-emerald-500/40 text-emerald-300';
+          waHandshakeResult.textContent = `✅ Handshake exitoso (HTTP 200). Meta validará este webhook correctamente.`;
+        } else {
+          waHandshakeResult.className = 'text-[11px] font-mono p-2 rounded bg-rose-950/60 border border-rose-500/40 text-rose-300';
+          waHandshakeResult.textContent = `❌ Error en handshake (HTTP ${resp.status}): ${text}`;
+        }
+      } catch (err) {
+        waHandshakeResult.className = 'text-[11px] font-mono p-2 rounded bg-rose-950/60 border border-rose-500/40 text-rose-300';
+        waHandshakeResult.textContent = `❌ Error: ${err.message}`;
+      }
+    });
+  }
+
+  // Simulate Message in Sandbox
+  if (waBtnSimulate) {
+    waBtnSimulate.addEventListener('click', async () => {
+      const phone = waSimPhone ? waSimPhone.value.trim() : '+34600123456';
+      const text = waSimText ? waSimText.value.trim() : '';
+      if (!text) {
+        alert('Por favor ingresa un mensaje para simular.');
+        return;
+      }
+
+      if (waSimBadge) {
+        waSimBadge.textContent = '⏳ Procesando con Intake Agent...';
+        waSimBadge.className = 'text-cyan-400 font-bold';
+      }
+      if (waSimOutput) {
+        waSimOutput.classList.remove('text-center', 'text-slate-500');
+        waSimOutput.classList.add('text-slate-300');
+        waSimOutput.textContent = `[Simulando mensaje de ${phone}]...\n"${text}"\n\nEsperando respuesta del Intake Agent...`;
+      }
+      waBtnSimulate.disabled = true;
+
+      try {
+        const resp = await fetch('/api/v1/whatsapp/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phone, text })
+        });
+        const data = await resp.json();
+        if (resp.ok) {
+          if (waSimBadge) {
+            const phase = data.session ? data.session.phase : 'OK';
+            waSimBadge.textContent = `Fase: ${phase}`;
+            waSimBadge.className = 'text-emerald-400 font-bold';
+          }
+          if (waSimOutput) {
+            waSimOutput.textContent = `🤖 Respuesta del Intake Agent:\n\n${data.reply || 'Mensaje procesado'}`;
+          }
+          if (waSimText) waSimText.value = '';
+          loadWhatsAppSessions();
+        } else {
+          throw new Error(data.detail || 'Error al simular');
+        }
+      } catch (err) {
+        if (waSimBadge) {
+          waSimBadge.textContent = 'Error';
+          waSimBadge.className = 'text-rose-400 font-bold';
+        }
+        if (waSimOutput) {
+          waSimOutput.textContent = `❌ Error en simulación: ${err.message}`;
+        }
+      } finally {
+        waBtnSimulate.disabled = false;
+      }
+    });
+  }
+
+  // Sim Reset button
+  if (waBtnSimReset) {
+    waBtnSimReset.addEventListener('click', async () => {
+      const phone = waSimPhone ? waSimPhone.value.trim() : '+34600123456';
+      if (!confirm(`¿Reiniciar conversación (/reset) para ${phone}?`)) return;
+      try {
+        const resp = await fetch(`/api/v1/whatsapp/sessions/${encodeURIComponent(phone)}/reset`, { method: 'POST' });
+        if (resp.ok) {
+          if (waSimOutput) {
+            waSimOutput.textContent = `🔄 Sesión reiniciada para ${phone}. Puedes empezar una nueva idea de proyecto.`;
+          }
+          loadWhatsAppSessions();
+        }
+      } catch (err) {
+        alert(`Error al reiniciar: ${err.message}`);
+      }
+    });
+  }
+
+  if (waBtnRefreshSessions) {
+    waBtnRefreshSessions.addEventListener('click', () => loadWhatsAppSessions());
   }
 
   // Deep linking: activate tab from URL query param (e.g. ?tab=tab-thoughts) or hash (e.g. #tab-thoughts)

@@ -147,6 +147,9 @@
       <button class="nav-tab px-4 py-2 rounded-t-lg transition flex items-center gap-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40" data-target="tab-database">
         <span>🗄️</span> Database &amp; Artifacts
       </button>
+      <button class="nav-tab px-4 py-2 rounded-t-lg transition flex items-center gap-2 border-b-2 border-transparent text-slate-400 hover:text-slate-200 hover:bg-slate-800/40" data-target="tab-whatsapp">
+        <span>📱</span> WhatsApp Hub
+      </button>
     </div>
   </nav>
 
@@ -1153,6 +1156,293 @@
         </section>
 
       </div>
+
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────────────
+         PESTAÑA 8: 📱 WhatsApp Hub & Gateway de Clientes
+    ────────────────────────────────────────────────────────────── -->
+    <div id="tab-whatsapp" class="tab-pane hidden flex flex-col gap-4">
+      
+      <!-- Banner de Estado Superior -->
+      <div class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-wrap items-center justify-between gap-4">
+        <div class="flex items-center gap-3">
+          <div class="w-10 h-10 rounded-lg bg-emerald-950/80 border border-emerald-500/40 flex items-center justify-center text-xl shrink-0">
+            <span>💬</span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <h2 class="text-base sm:text-lg font-bold text-white tracking-tight">WhatsApp Factory Hub</h2>
+              <span id="wa-status-badge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-800 text-slate-400 border border-slate-700">
+                ⚪ Comprobando...
+              </span>
+            </div>
+            <p class="text-xs text-slate-400 mt-0.5">
+              Pasarela de entrada conversacional (Meta Cloud API v21.0) para creación autónoma de proyectos vía chat.
+            </p>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-3 font-mono text-xs">
+          <div class="px-3 py-1.5 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-slate-300 flex items-center gap-2">
+            <span class="text-slate-500">Sesiones activas:</span>
+            <span id="wa-kpi-sessions" class="text-cyan-400 font-bold">0</span>
+          </div>
+          <button id="wa-btn-test-meta" class="px-3 py-1.5 rounded-lg bg-cyan-950 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 transition flex items-center gap-1.5 font-sans font-medium" title="Realiza un ping a Meta Graph API v21.0 con las credenciales actuales">
+            <span>🔄</span> Probar Ping Meta
+          </button>
+        </div>
+      </div>
+
+      <!-- Banner de Diagnóstico / Alertas Meta -->
+      <div id="wa-diagnostic-alert" class="hidden p-3.5 rounded-xl border text-xs font-mono transition-all"></div>
+
+      <!-- Grid de 2 Columnas: Configuración & Webhook Helper -->
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+        <!-- Columna Izquierda: Formulario de Configuración (7 Cols) -->
+        <section class="lg:col-span-7 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-4">
+          <div class="flex items-center justify-between border-b border-[#1f2937] pb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-base">⚙️</span>
+              <h3 class="font-bold text-white text-sm">Credenciales &amp; Parámetros (.env)</h3>
+            </div>
+            <span class="text-[11px] font-mono text-slate-400">Meta Cloud API</span>
+          </div>
+
+          <form id="wa-config-form" class="flex flex-col gap-3.5 text-xs">
+            <!-- Toggle Habilitar Pasarela -->
+            <div class="flex items-center justify-between p-3 rounded-lg bg-[#0b0f19] border border-[#1f2937]">
+              <div>
+                <label for="wa-cfg-enabled" class="font-semibold text-white block cursor-pointer">Activar Pasarela de WhatsApp</label>
+                <span class="text-[11px] text-slate-400">Si está inactiva, los webhooks entrantes no serán procesados.</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="wa-cfg-enabled" class="sr-only peer">
+                <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
+              </label>
+            </div>
+
+            <!-- Phone Number ID -->
+            <div>
+              <label for="wa-cfg-phone-id" class="font-medium text-slate-300 block mb-1">
+                Phone Number ID <span class="text-rose-400">*</span>
+              </label>
+              <input type="text" id="wa-cfg-phone-id" placeholder="ej: 104857291837461 (ID del número en Meta)" class="w-full px-3 py-2 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-white font-mono focus:border-cyan-500 focus:outline-none">
+              <span class="text-[10px] text-slate-500 mt-0.5 block">Obtenido de Meta for Developers &gt; WhatsApp &gt; Configuración de la API.</span>
+            </div>
+
+            <!-- Access Token -->
+            <div>
+              <div class="flex items-center justify-between mb-1">
+                <label for="wa-cfg-token" class="font-medium text-slate-300">
+                  Access Token (Meta Cloud API) <span class="text-rose-400">*</span>
+                </label>
+                <span id="wa-token-status-label" class="text-[10px] font-mono text-slate-400"></span>
+              </div>
+              <div class="relative">
+                <input type="password" id="wa-cfg-token" placeholder="EAA..." class="w-full px-3 py-2 pr-10 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-white font-mono focus:border-cyan-500 focus:outline-none">
+                <button type="button" id="wa-btn-toggle-token" class="absolute right-2.5 top-2 text-slate-400 hover:text-white" title="Mostrar/ocultar token">👁️</button>
+              </div>
+              <span class="text-[10px] text-slate-500 mt-0.5 block">Token temporal de 24h para pruebas, o token permanente de System User para producción.</span>
+            </div>
+
+            <!-- Verify Token & App Secret (2 cols) -->
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label for="wa-cfg-verify" class="font-medium text-slate-300 block mb-1">
+                  Webhook Verify Token
+                </label>
+                <input type="text" id="wa-cfg-verify" placeholder="agentoffice_verify_2026" class="w-full px-3 py-2 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-white font-mono focus:border-cyan-500 focus:outline-none">
+                <span class="text-[10px] text-slate-500 mt-0.5 block">Token secreto para el handshake inicial con Meta.</span>
+              </div>
+              <div>
+                <label for="wa-cfg-secret" class="font-medium text-slate-300 block mb-1">
+                  App Secret (Firma HMAC-SHA256)
+                </label>
+                <input type="password" id="wa-cfg-secret" placeholder="Opcional en dev / Clave en Meta" class="w-full px-3 py-2 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-white font-mono focus:border-cyan-500 focus:outline-none">
+                <span class="text-[10px] text-slate-500 mt-0.5 block">Verifica la cabecera X-Hub-Signature-256.</span>
+              </div>
+            </div>
+
+            <!-- Whitelist de Teléfonos -->
+            <div>
+              <label for="wa-cfg-allowed" class="font-medium text-slate-300 block mb-1">
+                Whitelist de Teléfonos Autorizados (Opcional)
+              </label>
+              <input type="text" id="wa-cfg-allowed" placeholder="+34600112233, +34699887766 (separados por coma)" class="w-full px-3 py-2 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-white font-mono focus:border-cyan-500 focus:outline-none">
+              <span class="text-[10px] text-slate-500 mt-0.5 block">Si está vacío, procesa mensajes de cualquier remitente.</span>
+            </div>
+
+            <!-- Botones de Acción -->
+            <div class="flex items-center justify-between pt-2">
+              <button type="submit" id="wa-btn-save-cfg" class="px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold transition flex items-center gap-1.5 shadow-md">
+                <span>💾</span> Guardar en .env y Aplicar
+              </button>
+              <span id="wa-save-status" class="text-xs font-mono text-emerald-400 hidden"></span>
+            </div>
+          </form>
+
+          <!-- Banner MCP Meta -->
+          <div class="mt-2 p-3 rounded-lg bg-cyan-950/40 border border-cyan-800/40 text-[11px] text-cyan-200 flex items-start gap-2.5">
+            <span class="text-base shrink-0">🤖</span>
+            <div>
+              <span class="font-bold block text-cyan-300">¿Quieres conectar vía MCP Server de Meta?</span>
+              Hemos añadido <code class="font-mono bg-cyan-900/60 px-1 py-0.5 rounded text-white">meta_whatsapp</code> a tu configuración MCP (<code class="font-mono text-slate-300">mcp_config.json</code>).
+              Puedes pedirle al agente en el chat de Antigravity que gestione las cuentas y números comerciales directamente usando el MCP oficial de Meta.
+            </div>
+          </div>
+        </section>
+
+        <!-- Columna Derecha: Asistente Webhook Meta & Guía Rápida (5 Cols) -->
+        <section class="lg:col-span-5 bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-4">
+          <div class="flex items-center justify-between border-b border-[#1f2937] pb-3">
+            <div class="flex items-center gap-2">
+              <span class="text-base">🔗</span>
+              <h3 class="font-bold text-white text-sm">Configuración de Webhook en Meta</h3>
+            </div>
+            <a href="https://developers.facebook.com/apps" target="_blank" rel="noopener noreferrer" class="text-xs text-cyan-400 hover:text-cyan-300 flex items-center gap-1 font-sans">
+              Consola Meta ↗
+            </a>
+          </div>
+
+          <div class="flex flex-col gap-3 text-xs">
+            <!-- URL de Callback -->
+            <div>
+              <label class="font-medium text-slate-300 block mb-1">URL de Callback (Endpoint Webhook)</label>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="wa-display-webhook-url" readonly class="w-full px-3 py-1.5 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-cyan-300 font-mono text-xs select-all">
+                <button type="button" id="wa-btn-copy-url" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shrink-0" title="Copiar URL">
+                  📋
+                </button>
+              </div>
+              <span class="text-[10px] text-slate-400 mt-1 block">
+                ⚠️ Para pruebas en localhost, expón tu puerto con <code class="bg-[#0b0f19] px-1 py-0.5 rounded text-amber-300 font-mono">ngrok http 8080</code> o <code class="bg-[#0b0f19] px-1 py-0.5 rounded text-amber-300 font-mono">cloudflared tunnel</code> y pega aquí la URL HTTPS pública.
+              </span>
+            </div>
+
+            <!-- Verify Token para Meta -->
+            <div>
+              <label class="font-medium text-slate-300 block mb-1">Verify Token para Meta</label>
+              <div class="flex items-center gap-1.5">
+                <input type="text" id="wa-display-verify-token" readonly class="w-full px-3 py-1.5 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-amber-300 font-mono text-xs select-all">
+                <button type="button" id="wa-btn-copy-token" class="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 transition shrink-0" title="Copiar Token">
+                  📋
+                </button>
+              </div>
+            </div>
+
+            <!-- Pasos Guiados -->
+            <div class="p-3 rounded-lg bg-[#0b0f19] border border-[#1f2937] flex flex-col gap-2">
+              <span class="font-semibold text-slate-200 flex items-center gap-1.5">
+                <span>📋</span> Pasos en developers.facebook.com:
+              </span>
+              <ol class="list-decimal list-inside space-y-1 text-[11px] text-slate-400 leading-relaxed">
+                <li>Ve a tu App &gt; <strong>WhatsApp</strong> &gt; <strong>Configuración</strong>.</li>
+                <li>En la tarjeta <strong>Webhook</strong>, haz clic en <em>Editar</em>.</li>
+                <li>Pega la <strong>URL de Callback</strong> y el <strong>Verify Token</strong> de arriba.</li>
+                <li>Haz clic en <em>Verificar y Guardar</em>.</li>
+                <li>En los campos del Webhook, suscríbete a <strong><code>messages</code></strong>.</li>
+              </ol>
+            </div>
+
+            <!-- Botón de Test Handshake Local -->
+            <button type="button" id="wa-btn-test-handshake" class="w-full py-2 rounded-lg bg-[#0b0f19] hover:bg-slate-800 text-slate-300 border border-[#1f2937] transition text-xs font-mono flex items-center justify-center gap-2">
+              <span>🧪</span> Validar Handshake GET Local
+            </button>
+            <div id="wa-handshake-result" class="hidden text-[11px] font-mono p-2 rounded bg-[#0b0f19] border border-[#1f2937]"></div>
+          </div>
+        </section>
+
+      </div>
+
+      <!-- Sección 2: 🧪 Sandbox Interactivo / Simulador WhatsApp -->
+      <section class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
+        <div class="flex items-center justify-between border-b border-[#1f2937] pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-base">🧪</span>
+            <h3 class="font-bold text-white text-sm">Sandbox Interactivo (Simulador de Mensajes)</h3>
+          </div>
+          <span class="px-2 py-0.5 rounded text-[11px] font-mono bg-cyan-950 text-cyan-300 border border-cyan-800">
+            Prueba directa sin gastar mensajes de WhatsApp
+          </span>
+        </div>
+
+        <p class="text-xs text-slate-400">
+          Simula la llegada de un mensaje de un cliente por WhatsApp. El mensaje entra al <strong>Intake Agent</strong>, se registra en SQLite y responde en tiempo real con el diálogo de aclaración de requisitos o el lanzamiento del pipeline.
+        </p>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+          <!-- Formulario de Envío -->
+          <div class="lg:col-span-5 flex flex-col gap-2.5">
+            <div>
+              <label for="wa-sim-phone" class="font-medium text-slate-300 text-xs block mb-1">Teléfono Emulado:</label>
+              <input type="text" id="wa-sim-phone" value="+34600123456" class="w-full px-3 py-1.5 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-white font-mono text-xs focus:border-cyan-500 focus:outline-none">
+            </div>
+            <div>
+              <label for="wa-sim-text" class="font-medium text-slate-300 text-xs block mb-1">Mensaje del Cliente:</label>
+              <textarea id="wa-sim-text" rows="3" placeholder="Ej: Quiero una app de reservas para una clínica dental con recordatorios por email y panel de citas" class="w-full px-3 py-2 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-white text-xs focus:border-cyan-500 focus:outline-none resize-none"></textarea>
+            </div>
+            <div class="flex items-center gap-2">
+              <button type="button" id="wa-btn-simulate" class="flex-1 py-2 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-semibold transition text-xs flex items-center justify-center gap-1.5 shadow-md">
+                <span>🚀</span> Simular Mensaje Entrante
+              </button>
+              <button type="button" id="wa-btn-sim-reset" class="px-3 py-2 rounded-lg bg-rose-950/60 hover:bg-rose-900 text-rose-300 border border-rose-800/60 transition text-xs" title="Reiniciar sesión de este teléfono emulado">
+                <span>🔄</span> /reset
+              </button>
+            </div>
+          </div>
+
+          <!-- Consola de Respuesta del Intake Agent -->
+          <div class="lg:col-span-7 flex flex-col">
+            <div class="flex items-center justify-between text-xs font-mono text-slate-400 mb-1">
+              <span>Respuesta del Agente de Recepción (Intake Agent):</span>
+              <span id="wa-sim-badge" class="text-slate-500">En espera</span>
+            </div>
+            <div id="wa-sim-output" class="flex-1 min-h-[120px] p-3 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-xs font-mono text-slate-300 overflow-y-auto custom-scrollbar whitespace-pre-wrap flex flex-col justify-center items-center text-center text-slate-500">
+              Escribe un mensaje a la izquierda y pulsa 'Simular Mensaje Entrante' para observar el diálogo de intake y el avance de fases.
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Sección 3: 👥 Sesiones Activas en SQLite (whatsapp_sessions) -->
+      <section class="bg-[#111827] border border-[#1f2937] rounded-xl p-4 shadow-lg flex flex-col gap-3">
+        <div class="flex items-center justify-between border-b border-[#1f2937] pb-3">
+          <div class="flex items-center gap-2">
+            <span class="text-base">👥</span>
+            <h3 class="font-bold text-white text-sm">Sesiones Activas de WhatsApp</h3>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-[11px] font-mono text-slate-400">Tabla: whatsapp_sessions</span>
+            <button type="button" id="wa-btn-refresh-sessions" class="px-2.5 py-1 rounded bg-[#0b0f19] hover:bg-slate-800 text-slate-300 border border-[#1f2937] text-xs transition flex items-center gap-1">
+              <span>🔄</span> Refrescar
+            </button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto custom-scrollbar">
+          <table class="w-full text-left text-xs font-mono">
+            <thead class="bg-[#0b0f19] text-slate-400 border-b border-[#1f2937]">
+              <tr>
+                <th class="py-2.5 px-3 font-semibold">Teléfono</th>
+                <th class="py-2.5 px-3 font-semibold">Fase</th>
+                <th class="py-2.5 px-3 font-semibold">Proyecto ID</th>
+                <th class="py-2.5 px-3 font-semibold text-center">Mensajes</th>
+                <th class="py-2.5 px-3 font-semibold">Última Actividad</th>
+                <th class="py-2.5 px-3 font-semibold text-right">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="wa-sessions-table-body" class="divide-y divide-[#1f2937] text-slate-300">
+              <tr>
+                <td colspan="6" class="py-6 text-center text-slate-500">
+                  Cargando sesiones...
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
 
     </div>
 

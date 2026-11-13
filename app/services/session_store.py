@@ -78,6 +78,31 @@ class WhatsAppSessionStore:
         result["intake_answers"] = json.loads(result["intake_answers"])
         return result
 
+    async def list_sessions(self) -> list[dict[str, Any]]:
+        """Return all active WhatsApp conversation sessions ordered by updated_at descending."""
+        async with aiosqlite.connect(self._db_path) as db:
+            await self._ensure_table(db)
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT phone_number, project_id, phase,
+                       conversation_history, intake_answers,
+                       created_at, updated_at
+                FROM whatsapp_sessions
+                ORDER BY updated_at DESC
+                """
+            ) as cursor:
+                rows = await cursor.fetchall()
+
+        results: list[dict[str, Any]] = []
+        for row in rows:
+            rec = dict(row)
+            rec["conversation_history"] = json.loads(rec["conversation_history"])
+            rec["intake_answers"] = json.loads(rec["intake_answers"])
+            rec["message_count"] = len(rec["conversation_history"])
+            results.append(rec)
+        return results
+
     async def upsert_session(
         self,
         phone: str,
