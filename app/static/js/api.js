@@ -335,6 +335,143 @@ const API = {
       return null;
     }
   },
+
+  // ── LLM Models, Agent Routing & Diagnostics (PASO 3 & 5) ─────────────────
+
+  /**
+   * Get global LLM models catalog.
+   * @returns {Promise<Array<object>>}
+   */
+  async getLLMCatalog() {
+    const r = await fetch(`${BASE}/api/office/llm/catalog`);
+    if (!r.ok) throw new Error(`getLLMCatalog: HTTP ${r.status}`);
+    return r.json();
+  },
+
+  /**
+   * Create a new LLM model in the global catalog.
+   * @param {object} modelData
+   * @returns {Promise<object>}
+   */
+  async createLLMModel(modelData) {
+    const r = await fetch(`${BASE}/api/office/llm/catalog`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(modelData),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `createLLMModel: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
+
+  /**
+   * Update an existing LLM model in the catalog.
+   * @param {string} modelId
+   * @param {object} updateData
+   * @returns {Promise<object>}
+   */
+  async updateLLMModel(modelId, updateData) {
+    const r = await fetch(`${BASE}/api/office/llm/catalog/${encodeURIComponent(modelId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updateData),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `updateLLMModel: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
+
+  /**
+   * Delete an LLM model from the catalog.
+   * @param {string} modelId
+   * @returns {Promise<{status: string, model_id: string}>}
+   */
+  async deleteLLMModel(modelId) {
+    const r = await fetch(`${BASE}/api/office/llm/catalog/${encodeURIComponent(modelId)}`, {
+      method: 'DELETE',
+    });
+    if (!r.ok) throw new Error(`deleteLLMModel: HTTP ${r.status}`);
+    return r.json();
+  },
+
+  /**
+   * Get dynamic LLM configuration for a specific agent.
+   * @param {string} agentId
+   * @returns {Promise<object>}
+   */
+  async getAgentLLMConfig(agentId) {
+    const r = await fetch(`${BASE}/api/office/agents/${encodeURIComponent(agentId)}/llm-config`);
+    if (!r.ok) throw new Error(`getAgentLLMConfig: HTTP ${r.status}`);
+    return r.json();
+  },
+
+  /**
+   * Save dynamic LLM configuration for a specific agent.
+   * @param {string} agentId
+   * @param {object} configData
+   * @returns {Promise<object>}
+   */
+  async saveAgentLLMConfig(agentId, configData) {
+    const r = await fetch(`${BASE}/api/office/agents/${encodeURIComponent(agentId)}/llm-config`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(configData),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `saveAgentLLMConfig: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
+
+  /**
+   * Reset agent's LLM configuration to defaults.
+   * @param {string} agentId
+   * @returns {Promise<object>}
+   */
+  async resetAgentLLMConfig(agentId) {
+    const r = await fetch(`${BASE}/api/office/agents/${encodeURIComponent(agentId)}/llm-config/reset`, {
+      method: 'POST',
+    });
+    if (!r.ok) throw new Error(`resetAgentLLMConfig: HTTP ${r.status}`);
+    return r.json();
+  },
+
+  /**
+   * Test ping connection to a specific model.
+   * @param {string} modelId
+   * @returns {Promise<object>}
+   */
+  async pingLLMModel(modelId) {
+    const r = await fetch(`${BASE}/api/office/llm/ping/${encodeURIComponent(modelId)}`, {
+      method: 'POST',
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `pingLLMModel: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
+
+  /**
+   * Test entire active LLM chain for an agent.
+   * @param {string} agentId
+   * @returns {Promise<object>}
+   */
+  async pingAgentLLMChain(agentId) {
+    const r = await fetch(`${BASE}/api/office/agents/${encodeURIComponent(agentId)}/llm-ping`, {
+      method: 'POST',
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `pingAgentLLMChain: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
 };
 
 export default API;

@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Fira+Code:wght@400;600&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/css/pixel.css?v=2.7.0">
+  <link rel="stylesheet" href="/static/css/pixel.css?v=2.8.0">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -342,6 +342,7 @@
             <button class="tab-btn active" data-tab="chat" role="tab" aria-selected="true">💬 CHAT</button>
             <button class="tab-btn" data-tab="logs" role="tab" aria-selected="false">📋 LOGS</button>
             <button class="tab-btn" data-tab="files" role="tab" aria-selected="false">📁 ARCHIVOS</button>
+            <button class="tab-btn" data-tab="models" role="tab" aria-selected="false" title="Configuración de Modelos LLM y Enrutamiento">🧠 MODELOS</button>
           </div>
 
           <div id="panel-content">
@@ -378,7 +379,111 @@
                 <pre id="file-viewer-content" aria-label="Contenido del archivo"></pre>
               </div>
             </div>
-          </div>
+
+            <!-- Models & Routing Tab (PASO 5) -->
+            <div class="tab-content" id="tab-models" role="tabpanel">
+              <div class="models-tab-header">
+                <div class="models-title-row">
+                  <span class="models-tab-title">🧠 MODELOS LLM &amp; ENRUTAMIENTO</span>
+                  <button id="btn-ping-chain" class="pixel-btn primary" title="Probar conexión de toda la cadena en orden de prioridad">
+                    ⚡ PROBAR CADENA
+                  </button>
+                </div>
+                <div id="chain-ping-banner" class="chain-banner hidden"></div>
+              </div>
+
+              <!-- Active Fallback Chain List -->
+              <div class="models-section-label">CADENA DE FALLBACKS (ORDEN DE PRIORIDAD)</div>
+              <div id="agent-models-list" class="agent-models-container" aria-label="Lista de modelos del agente">
+                <!-- Injected dynamically by panel.js -->
+              </div>
+
+              <!-- Add model from catalog selector -->
+              <div class="add-model-row">
+                <select id="select-add-model" class="pixel-select" aria-label="Añadir modelo del catálogo">
+                  <option value="">+ Seleccionar modelo del catálogo...</option>
+                </select>
+                <button id="btn-add-model-to-agent" class="pixel-btn secondary">+ AÑADIR</button>
+              </div>
+
+              <!-- Agent Global Parameters -->
+              <div class="models-section-label" style="margin-top:16px;">PARÁMETROS DEL AGENTE</div>
+              <div class="agent-params-grid">
+                <div class="param-group">
+                  <label for="param-temperature" class="pixel-label">TEMP: <span id="val-temperature">0.2</span></label>
+                  <input type="range" id="param-temperature" min="0" max="1" step="0.05" value="0.2" class="pixel-slider">
+                </div>
+                <div class="param-group">
+                  <label for="param-max-tokens" class="pixel-label">MAX TOKENS:</label>
+                  <input type="number" id="param-max-tokens" min="256" max="32768" step="256" value="4096" class="pixel-input small">
+                </div>
+                <div class="param-group">
+                  <label for="param-timeout" class="pixel-label">TIMEOUT (s):</label>
+                  <input type="number" id="param-timeout" min="5" max="300" step="5" value="60" class="pixel-input small">
+                </div>
+                <div class="param-group">
+                  <label for="param-max-retries" class="pixel-label">RETRIES (429):</label>
+                  <input type="number" id="param-max-retries" min="0" max="5" step="1" value="1" class="pixel-input small">
+                </div>
+              </div>
+
+              <div class="agent-models-actions">
+                <button id="btn-save-llm-config" class="pixel-btn primary">💾 GUARDAR CONFIG</button>
+                <button id="btn-reset-llm-config" class="pixel-btn secondary" title="Restablecer a la cadena recomendada de fábrica">↺ POR DEFECTO</button>
+                <button id="btn-toggle-new-model" class="pixel-btn secondary" title="Registrar un nuevo modelo en el catálogo global">+ NUEVO MODELO</button>
+              </div>
+
+              <!-- Expandable / Modal for New Catalog Model -->
+              <div id="new-model-drawer" class="new-model-box hidden">
+                <div class="new-model-header">
+                  <span>➕ REGISTRAR NUEVO MODELO EN CATÁLOGO</span>
+                  <button id="btn-close-new-model" class="pixel-btn icon">✕</button>
+                </div>
+                <div class="new-model-fields">
+                  <div class="form-row">
+                    <label class="pixel-label">MODEL ID:</label>
+                    <input type="text" id="new-model-id" class="pixel-input" placeholder="ej. mistral-large-2407">
+                  </div>
+                  <div class="form-row">
+                    <label class="pixel-label">NOMBRE:</label>
+                    <input type="text" id="new-model-name" class="pixel-input" placeholder="ej. Mistral Large 2">
+                  </div>
+                  <div class="form-row">
+                    <label class="pixel-label">PROVEEDOR:</label>
+                    <select id="new-model-provider" class="pixel-select">
+                      <option value="google">google</option>
+                      <option value="groq">groq</option>
+                      <option value="mistral">mistral</option>
+                      <option value="openrouter">openrouter</option>
+                      <option value="openai">openai</option>
+                      <option value="anthropic">anthropic</option>
+                      <option value="deepseek">deepseek</option>
+                      <option value="custom">custom</option>
+                    </select>
+                  </div>
+                  <div class="form-row">
+                    <label class="pixel-label">BASE URL:</label>
+                    <input type="text" id="new-model-base-url" class="pixel-input" placeholder="https://api.openai.com/v1 (opcional)">
+                  </div>
+                  <div class="form-row">
+                    <label class="pixel-label">ENV API KEY:</label>
+                    <input type="text" id="new-model-env" class="pixel-input" placeholder="ej. GROQ_API_KEY">
+                  </div>
+                  <div class="form-row">
+                    <label class="pixel-label">TIER:</label>
+                    <select id="new-model-tier" class="pixel-select">
+                      <option value="free" selected>FREE</option>
+                      <option value="paid">PAID</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="new-model-actions">
+                  <button id="btn-ping-new-model" class="pixel-btn secondary">⚡ PROBAR CONEXIÓN</button>
+                  <button id="btn-create-catalog-model" class="pixel-btn primary">➕ GUARDAR EN CATÁLOGO</button>
+                  <span id="new-model-ping-result" class="ping-badge"></span>
+                </div>
+              </div>
+            </div>
         </aside><!-- /#side-panel -->
 
         <!-- Floating Action Button for Quick Chat (Cyberpunk AI Terminal Trigger) -->
@@ -1481,7 +1586,7 @@
     </div>
   </div>
 
-  <script type="module" src="/static/js/main.js?v=2.7.0"></script>
-  <script src="/static/js/dashboard.js?v=2.7.1"></script>
+  <script type="module" src="/static/js/main.js?v=2.8.0"></script>
+  <script src="/static/js/dashboard.js?v=2.8.0"></script>
 </body>
 </html>

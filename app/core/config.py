@@ -27,6 +27,12 @@ class Settings(BaseSettings):
     )
 
     GEMINI_API_KEY: str = "dummy-key-for-tests"
+    GROQ_API_KEY: str | None = None
+    MISTRAL_API_KEY: str | None = None
+    OPENROUTER_API_KEY: str | None = None
+    OPENAI_API_KEY: str | None = None
+    ANTHROPIC_API_KEY: str | None = None
+    DEEPSEEK_API_KEY: str | None = None
     USE_MOCK_LLM: bool = False
     DEFAULT_LLM_MODEL: str = "gemini-3.5-flash"
     LLM_INPUT_COST_PER_MILLION: float = 0.35

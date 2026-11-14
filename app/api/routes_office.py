@@ -25,10 +25,21 @@ from app.schemas.file_edit import (
     ProjectFileContent,
     ProjectFileInfo,
 )
+from app.schemas.office import (
+    AgentLLMChainPingResponse,
+    AgentLLMConfig,
+    AgentLLMConfigUpdate,
+    LLMModelCatalogCreate,
+    LLMModelCatalogItem,
+    LLMModelCatalogUpdate,
+    LLMModelPingResponse,
+)
 from app.schemas.routing import AgentID
 from app.services.brownfield_service import BrownfieldService
 from app.services.chat_service import ChatService
 from app.services.file_edit_service import FileEditService
+from app.services.llm_gateway import GeminiLLMGateway, LLMGatewayProtocol
+from app.services.office_store import OfficeStore, normalize_agent_id
 from app.services.orchestrator_service import OrchestratorService
 
 router = APIRouter(prefix="/api/v1/office", tags=["Office UI"])
@@ -387,3 +398,187 @@ async def reject_brownfield_audit(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(err),
         ) from None
+
+
+# ── Dynamic LLM Catalog, Routing & Diagnostics (PASO 3) ────────────────────
+
+def _get_office_store(request: Request) -> OfficeStore:
+    """Dependency: retrieve active OfficeStore from application state."""
+    orchestrator = getattr(request.app.state, "orchestrator", None)
+    if orchestrator and hasattr(orchestrator, "office_store"):
+        return orchestrator.office_store
+    return OfficeStore()
+
+
+def _get_llm_gateway(request: Request) -> LLMGatewayProtocol:
+    """Dependency: retrieve active LLMGateway from application state."""
+    orchestrator = getattr(request.app.state, "orchestrator", None)
+    if orchestrator and hasattr(orchestrator, "llm_gateway"):
+        return orchestrator.llm_gateway
+    return GeminiLLMGateway(store=_get_office_store(request))
+
+
+llm_router = APIRouter()
+
+
+@llm_router.get(
+    "/llm/catalog",
+    response_model=list[LLMModelCatalogItem],
+    summary="Listar catálogo completo de modelos LLM con estado de credenciales",
+)
+async def list_llm_catalog(request: Request) -> list[LLMModelCatalogItem]:
+    """Return all catalog models enriched with credential status (has_api_key)."""
+    store = _get_office_store(request)
+    return await store.get_llm_catalog()
+
+
+@llm_router.post(
+    "/llm/catalog",
+    response_model=LLMModelCatalogItem,
+    status_code=status.HTTP_201_CREATED,
+    summary="Añadir nuevo modelo LLM al catálogo global",
+)
+async def create_llm_model(
+    body: LLMModelCatalogCreate,
+    request: Request,
+) -> LLMModelCatalogItem:
+    """Register a new LLM model in the catalog."""
+    store = _get_office_store(request)
+    existing = await store.get_llm_model(body.model_id)
+    if existing:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"El modelo '{body.model_id}' ya existe en el catálogo.",
+        )
+    return await store.create_llm_model(body)
+
+
+@llm_router.put(
+    "/llm/catalog/{model_id:path}",
+    response_model=LLMModelCatalogItem,
+    summary="Actualizar modelo LLM del catálogo",
+)
+async def update_llm_model(
+    model_id: str,
+    body: LLMModelCatalogUpdate,
+    request: Request,
+) -> LLMModelCatalogItem:
+    """Modify parameters or status for an existing catalog model."""
+    store = _get_office_store(request)
+    updated = await store.update_llm_model(model_id, body)
+    if updated is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Modelo '{model_id}' no encontrado en el catálogo.",
+        )
+    return updated
+
+
+@llm_router.delete(
+    "/llm/catalog/{model_id:path}",
+    summary="Eliminar modelo LLM del catálogo",
+)
+async def delete_llm_model(
+    model_id: str,
+    request: Request,
+) -> dict[str, str]:
+    """Remove a model from the catalog."""
+    store = _get_office_store(request)
+    deleted = await store.delete_llm_model(model_id)
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Modelo '{model_id}' no encontrado en el catálogo.",
+        )
+    return {"status": "deleted", "model_id": model_id}
+
+
+@llm_router.get(
+    "/agents/{agent_id}/llm-config",
+    response_model=AgentLLMConfig,
+    summary="Obtener configuración y cadena de fallback del agente",
+)
+async def get_agent_llm_config(
+    agent_id: str,
+    request: Request,
+) -> AgentLLMConfig:
+    """Retrieve dynamic LLM chain, temperature, timeout and max_retries for an agent."""
+    norm_id = normalize_agent_id(agent_id)
+    store = _get_office_store(request)
+    return await store.get_agent_llm_config(norm_id)
+
+
+@llm_router.put(
+    "/agents/{agent_id}/llm-config",
+    response_model=AgentLLMConfig,
+    summary="Guardar en caliente la configuración de modelos del agente",
+)
+async def update_agent_llm_config(
+    agent_id: str,
+    body: AgentLLMConfigUpdate,
+    request: Request,
+) -> AgentLLMConfig:
+    """Persist updated fallback priorities, enabled switches, and agent parameters."""
+    norm_id = normalize_agent_id(agent_id)
+    store = _get_office_store(request)
+    return await store.save_agent_llm_config(norm_id, body)
+
+
+@llm_router.post(
+    "/agents/{agent_id}/llm-config/reset",
+    response_model=AgentLLMConfig,
+    summary="Restaurar configuración de modelos por defecto del agente",
+)
+async def reset_agent_llm_config(
+    agent_id: str,
+    request: Request,
+) -> AgentLLMConfig:
+    """Restore recommended factory defaults for an agent's LLM chain."""
+    norm_id = normalize_agent_id(agent_id)
+    store = _get_office_store(request)
+    return await store.reset_agent_llm_config(norm_id)
+
+
+@llm_router.post(
+    "/llm/ping/{model_id:path}",
+    response_model=LLMModelPingResponse,
+    summary="Test Ping individual de un modelo LLM",
+)
+async def ping_model(
+    model_id: str,
+    request: Request,
+) -> LLMModelPingResponse:
+    """Run isolated connection ping test against a model without penalizing circuit breaker."""
+    store = _get_office_store(request)
+    model = await store.get_llm_model(model_id)
+    if not model:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Modelo '{model_id}' no encontrado en el catálogo.",
+        )
+    gateway = _get_llm_gateway(request)
+    return await gateway.ping_model(model)
+
+
+@llm_router.post(
+    "/agents/{agent_id}/llm-ping",
+    response_model=AgentLLMChainPingResponse,
+    summary="Probar cadena activa completa de modelos del agente",
+)
+async def ping_agent_chain(
+    agent_id: str,
+    request: Request,
+) -> AgentLLMChainPingResponse:
+    """Test all active models in agent fallback chain and determine effective responding model."""
+    norm_id = normalize_agent_id(agent_id)
+    gateway = _get_llm_gateway(request)
+    return await gateway.ping_agent_chain(norm_id)
+
+
+# Mount llm_router under /api/v1/office
+router.include_router(llm_router)
+
+# Mount compat router under /api/office
+office_compat_router = APIRouter(prefix="/api/office", tags=["Office UI (compat)"])
+office_compat_router.include_router(llm_router)
+

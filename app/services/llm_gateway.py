@@ -1,13 +1,26 @@
-"""LLM Gateway service providing protocol, Gemini client, and testing mock."""
+"""LLM Gateway service providing protocol, Gemini, multi-provider routing, and testing mock."""
 
 import asyncio
-from typing import Protocol
+import logging
+import os
+import time
+from typing import Any, Protocol
 
+import httpx
 from langchain_core.messages import HumanMessage, SystemMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from app.core.config import settings
+from app.schemas.office import (
+    AgentChainLinkPing,
+    AgentLLMChainPingResponse,
+    LLMModelCatalogItem,
+    LLMModelPingResponse,
+)
 from app.schemas.routing import AgentID
+from app.services.office_store import OfficeStore, has_env_key, normalize_agent_id
+
+logger = logging.getLogger(__name__)
 
 
 class LLMGatewayProtocol(Protocol):
@@ -22,14 +35,35 @@ class LLMGatewayProtocol(Protocol):
         """Invoke an agent with prompts and payload, returning the raw response string."""
         ...
 
+    async def ping_model(
+        self,
+        model: LLMModelCatalogItem,
+    ) -> LLMModelPingResponse:
+        """Test diagnostic connection to a specific model."""
+        ...
+
+    async def ping_agent_chain(
+        self,
+        agent_id: str | AgentID,
+    ) -> AgentLLMChainPingResponse:
+        """Test full fallback chain for an agent."""
+        ...
+
 
 class GeminiLLMGateway:
-    """Production LLM Gateway using Google Gemini via ChatGoogleGenerativeAI."""
+    """Production LLM Gateway using Google Gemini, Groq, Mistral, and fallbacks."""
 
-    def __init__(self, api_key: str | None = None) -> None:
-        """Initialize the Gemini client with an optional custom API key."""
+    def __init__(
+        self,
+        api_key: str | None = None,
+        store: OfficeStore | None = None,
+    ) -> None:
+        """Initialize gateway with primary Gemini key and optional office store."""
         self.api_key = api_key or settings.GEMINI_API_KEY
+        self.store = store or OfficeStore()
         self._semaphore = asyncio.Semaphore(1)
+        self.last_model_used: dict[str, str] = {}
+        self.last_fallback_event: dict[str, Any] = {}
 
     async def invoke_agent(
         self,
@@ -37,84 +71,481 @@ class GeminiLLMGateway:
         system_prompt: str,
         user_payload: str,
     ) -> str:
-        """Invoke Gemini with rate limiting, semaphore serialization, and transient error retry."""
+        """Invoke agent with dynamic fallback routing across configured models."""
         async with self._semaphore:
             if settings.RATE_LIMIT_DELAY_SECONDS > 0:
                 await asyncio.sleep(settings.RATE_LIMIT_DELAY_SECONDS)
 
-            model_name = settings.get_agent_model(agent_id)
-            temperature = settings.get_agent_temperature(agent_id)
+            norm_id = normalize_agent_id(agent_id)
 
-            llm = ChatGoogleGenerativeAI(
-                model=model_name,
-                google_api_key=self.api_key,
-                temperature=temperature,
+            # 1. Fetch dynamic config and catalog
+            try:
+                config = await self.store.get_agent_llm_config(norm_id)
+                catalog_list = await self.store.get_llm_catalog()
+                catalog = {m.model_id: m for m in catalog_list}
+            except Exception as e:
+                logger.warning("[LLM Gateway] Could not load store config for %s: %s", norm_id, e)
+                config = None
+                catalog = {}
+
+            # 2. Build candidate chain
+            candidates: list[tuple[str, LLMModelCatalogItem]] = []
+            if config:
+                for assigned in config.assigned_models:
+                    if not assigned.enabled:
+                        continue
+                    cat_model = catalog.get(assigned.model_id)
+                    if not cat_model or not cat_model.is_active:
+                        continue
+
+                    # Determine credential availability
+                    if cat_model.provider == "google":
+                        has_key = bool(self.api_key and str(self.api_key).strip()) or has_env_key(
+                            cat_model.api_key_env
+                        )
+                    else:
+                        has_key = has_env_key(cat_model.api_key_env)
+
+                    if has_key:
+                        candidates.append((assigned.model_id, cat_model))
+
+            # 3. If no candidate with API keys found, fall back to default Gemini invocation
+            if not candidates:
+                return await self._invoke_gemini(
+                    model_name=settings.get_agent_model(agent_id),
+                    temperature=settings.get_agent_temperature(agent_id),
+                    system_prompt=system_prompt,
+                    user_payload=user_payload,
+                    agent_id=agent_id,
+                )
+
+            # 4. Try candidates in priority order with instant fallback
+            last_err: Exception | None = None
+            for idx, (model_id, cat_model) in enumerate(candidates):
+                is_fallback = idx > 0
+                try:
+                    if cat_model.provider == "google":
+                        res = await self._invoke_gemini(
+                            model_name=model_id,
+                            temperature=config.temperature if config else 0.2,
+                            system_prompt=system_prompt,
+                            user_payload=user_payload,
+                            agent_id=agent_id,
+                            max_retries=config.max_retries if config and len(candidates) > 1 else 5,
+                        )
+                    elif cat_model.provider == "anthropic":
+                        res = await self._invoke_anthropic(
+                            cat_model=cat_model,
+                            temperature=config.temperature if config else 0.2,
+                            max_tokens=config.max_tokens if config else 4096,
+                            timeout=config.timeout if config else 60,
+                            system_prompt=system_prompt,
+                            user_payload=user_payload,
+                        )
+                    else:
+                        res = await self._invoke_openai_compatible(
+                            cat_model=cat_model,
+                            temperature=config.temperature if config else 0.2,
+                            max_tokens=config.max_tokens if config else 4096,
+                            timeout=config.timeout if config else 60,
+                            system_prompt=system_prompt,
+                            user_payload=user_payload,
+                        )
+
+                    self.last_model_used[norm_id] = model_id
+                    self.last_fallback_event[norm_id] = {
+                        "responded_model": model_id,
+                        "provider": cat_model.provider,
+                        "fallback_used": is_fallback,
+                        "attempt_index": idx,
+                    }
+                    if is_fallback:
+                        logger.info(
+                            "[LLM Gateway] Fallback OK: %s used %s (prio %d)",
+                            norm_id,
+                            model_id,
+                            idx + 1,
+                        )
+                    return res
+
+                except Exception as exc:
+                    last_err = exc
+                    logger.warning(
+                        "[LLM Gateway] Model %s failed for %s (%s). Trying fallback...",
+                        model_id,
+                        norm_id,
+                        exc,
+                    )
+                    continue
+
+            if last_err:
+                raise last_err
+            raise RuntimeError(f"All LLM candidate models failed for agent {agent_id}.")
+
+    async def _invoke_gemini(
+        self,
+        model_name: str,
+        temperature: float,
+        system_prompt: str,
+        user_payload: str,
+        agent_id: AgentID,
+        max_retries: int = 5,
+    ) -> str:
+        """Invoke Gemini via ChatGoogleGenerativeAI with transient backoff."""
+        llm = ChatGoogleGenerativeAI(
+            model=model_name,
+            google_api_key=self.api_key,
+            temperature=temperature,
+        )
+
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_payload),
+        ]
+
+        backoff_delays = [10.0, 20.0, 40.0, 60.0]
+        last_error: Exception | None = None
+
+        for attempt in range(max_retries):
+            try:
+                response = await llm.ainvoke(messages)
+                if isinstance(response.content, str):
+                    return response.content
+                if isinstance(response.content, list):
+                    parts: list[str] = []
+                    for part in response.content:
+                        if isinstance(part, str):
+                            parts.append(part)
+                        elif isinstance(part, dict) and "text" in part:
+                            parts.append(str(part["text"]))
+                        else:
+                            parts.append(str(part))
+                    return "".join(parts)
+                return str(response.content)
+            except Exception as e:
+                err_str = str(e).lower()
+                exc_name = type(e).__name__.lower()
+                is_daily_quota = (
+                    "per day limit exceeded" in err_str
+                    or "perprojectpermodel-freetier" in err_str
+                )
+                if is_daily_quota:
+                    raise e
+
+                is_transient = (
+                    "429" in err_str
+                    or "resourceexhausted" in err_str
+                    or "quota" in err_str
+                    or "rate limit" in err_str
+                    or "503" in err_str
+                    or "500" in err_str
+                    or "unavailable" in err_str
+                    or "servererror" in err_str
+                    or "googleapierror" in err_str
+                    or "service unavailable" in err_str
+                    or "server error" in err_str
+                    or "servererror" in exc_name
+                    or "googleapierror" in exc_name
+                )
+                if is_transient and attempt < max_retries - 1:
+                    backoff = backoff_delays[min(attempt, len(backoff_delays) - 1)]
+                    print(
+                        f"\n[Gemini Gateway] Aviso: Error transitorio en {agent_id.value}: "
+                        f"{e}. Reintentando ({attempt + 2}/{max_retries}) en {backoff:.0f}s..."
+                    )
+                    await asyncio.sleep(backoff)
+                    last_error = e
+                else:
+                    raise e
+
+        if last_error:
+            raise last_error
+        raise RuntimeError("Unexpected failure during Gemini invocation.")
+
+    async def _invoke_openai_compatible(
+        self,
+        cat_model: LLMModelCatalogItem,
+        temperature: float,
+        max_tokens: int,
+        timeout: int,
+        system_prompt: str,
+        user_payload: str,
+    ) -> str:
+        """Invoke an OpenAI-compatible model (Groq, Mistral, OpenAI, DeepSeek, etc.)."""
+        api_key = os.environ.get(cat_model.api_key_env) or getattr(
+            settings, cat_model.api_key_env, None
+        )
+        base = cat_model.base_url or "https://api.openai.com/v1"
+        url = f"{base.rstrip('/')}/chat/completions"
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": cat_model.model_id,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_payload},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+
+        async with httpx.AsyncClient(timeout=float(timeout)) as client:
+            response = await client.post(url, json=payload, headers=headers)
+            if response.status_code == 200:
+                data = response.json()
+                return str(data["choices"][0]["message"]["content"])
+            elif response.status_code == 429:
+                raise RuntimeError(f"HTTP 429 Rate limit on model {cat_model.model_id}")
+            elif response.status_code >= 500:
+                raise RuntimeError(
+                    f"HTTP {response.status_code} Server error on model {cat_model.model_id}"
+                )
+            else:
+                msg = f"HTTP {response.status_code} on {cat_model.model_id}: {response.text[:150]}"
+                raise RuntimeError(msg)
+
+    async def _invoke_anthropic(
+        self,
+        cat_model: LLMModelCatalogItem,
+        temperature: float,
+        max_tokens: int,
+        timeout: int,
+        system_prompt: str,
+        user_payload: str,
+    ) -> str:
+        """Invoke Anthropic Claude API."""
+        api_key = os.environ.get(cat_model.api_key_env) or getattr(
+            settings, cat_model.api_key_env, None
+        )
+        base = cat_model.base_url or "https://api.anthropic.com/v1"
+        url = f"{base.rstrip('/')}/messages"
+
+        headers = {
+            "x-api-key": str(api_key),
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": cat_model.model_id,
+            "system": system_prompt,
+            "messages": [{"role": "user", "content": user_payload}],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+
+        async with httpx.AsyncClient(timeout=float(timeout)) as client:
+            response = await client.post(url, json=payload, headers=headers)
+            if response.status_code in (200, 201):
+                data = response.json()
+                parts = [
+                    p.get("text", "")
+                    for p in data.get("content", [])
+                    if p.get("type") == "text"
+                ]
+                return "".join(parts)
+            elif response.status_code == 429:
+                raise RuntimeError(f"HTTP 429 Rate limit on model {cat_model.model_id}")
+            else:
+                raise RuntimeError(
+                    f"HTTP {response.status_code} Anthropic error: {response.text[:200]}"
+                )
+
+    async def _execute_diagnostic_http(
+        self, model: LLMModelCatalogItem, api_key: str
+    ) -> tuple[int, int, str]:
+        """Execute isolated HTTP request for ping diagnosis: (status_code, latency_ms, text)."""
+        t0 = time.perf_counter()
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            if model.provider == "google":
+                url = f"https://generativelanguage.googleapis.com/v1beta/models/{model.model_id}:generateContent?key={api_key}"
+                headers = {"Content-Type": "application/json"}
+                payload = {
+                    "contents": [{"parts": [{"text": "Responde solo: OK"}]}],
+                    "generationConfig": {"maxOutputTokens": 5, "temperature": 0.0},
+                }
+                response = await client.post(url, json=payload, headers=headers)
+            elif model.provider == "anthropic":
+                base = model.base_url or "https://api.anthropic.com/v1"
+                url = f"{base.rstrip('/')}/messages"
+                headers = {
+                    "x-api-key": str(api_key),
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                }
+                payload = {
+                    "model": model.model_id,
+                    "messages": [{"role": "user", "content": "Responde solo: OK"}],
+                    "max_tokens": 5,
+                }
+                response = await client.post(url, json=payload, headers=headers)
+            else:
+                base = model.base_url or "https://api.openai.com/v1"
+                url = f"{base.rstrip('/')}/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                }
+                payload = {
+                    "model": model.model_id,
+                    "messages": [{"role": "user", "content": "Responde solo: OK"}],
+                    "max_tokens": 5,
+                    "temperature": 0.0,
+                }
+                response = await client.post(url, json=payload, headers=headers)
+
+            latency_ms = int((time.perf_counter() - t0) * 1000)
+            return response.status_code, latency_ms, response.text
+
+    async def ping_model(self, model: LLMModelCatalogItem) -> LLMModelPingResponse:
+        """Run lightweight diagnostic ping for catalog model without touching circuit breaker."""
+        api_key = os.environ.get(model.api_key_env)
+        if not api_key:
+            api_key = getattr(settings, model.api_key_env, None)
+
+        if not api_key or not str(api_key).strip():
+            return LLMModelPingResponse(
+                model_id=model.model_id,
+                provider=model.provider,
+                success=False,
+                status="missing_api_key",
+                latency_ms=None,
+                http_status=None,
+                message=f"Variable de entorno '{model.api_key_env}' no configurada o vacía.",
             )
 
-            messages = [
-                SystemMessage(content=system_prompt),
-                HumanMessage(content=user_payload),
-            ]
+        try:
+            code, latency_ms, resp_text = await self._execute_diagnostic_http(model, str(api_key))
+            if code in (200, 201):
+                return LLMModelPingResponse(
+                    model_id=model.model_id,
+                    provider=model.provider,
+                    success=True,
+                    status="ok",
+                    latency_ms=latency_ms,
+                    http_status=code,
+                    message=f"Conectado ({latency_ms} ms)",
+                )
+            elif code in (401, 403):
+                return LLMModelPingResponse(
+                    model_id=model.model_id,
+                    provider=model.provider,
+                    success=False,
+                    status="auth_error",
+                    latency_ms=latency_ms,
+                    http_status=code,
+                    message="API Key inválida o sin permisos (HTTP 401/403)",
+                )
+            elif code == 429:
+                return LLMModelPingResponse(
+                    model_id=model.model_id,
+                    provider=model.provider,
+                    success=False,
+                    status="rate_limited",
+                    latency_ms=latency_ms,
+                    http_status=code,
+                    message="Límite de cuota alcanzado (HTTP 429)",
+                )
+            else:
+                return LLMModelPingResponse(
+                    model_id=model.model_id,
+                    provider=model.provider,
+                    success=False,
+                    status="provider_error",
+                    latency_ms=latency_ms,
+                    http_status=code,
+                    message=f"Error devuelto por el proveedor (HTTP {code})",
+                )
+        except httpx.TimeoutException:
+            return LLMModelPingResponse(
+                model_id=model.model_id,
+                provider=model.provider,
+                success=False,
+                status="timeout",
+                latency_ms=None,
+                http_status=408,
+                message="Tiempo de espera agotado (>10s)",
+            )
+        except Exception as e:
+            return LLMModelPingResponse(
+                model_id=model.model_id,
+                provider=model.provider,
+                success=False,
+                status="provider_error",
+                latency_ms=None,
+                http_status=None,
+                message=f"Fallo de conexión: {str(e)}",
+            )
 
-            max_retries = 5
-            backoff_delays = [10.0, 20.0, 40.0, 60.0]
-            last_error: Exception | None = None
+    async def ping_agent_chain(self, agent_id: str | AgentID) -> AgentLLMChainPingResponse:
+        """Run diagnosis across all enabled models in an agent's fallback chain."""
+        norm_id = normalize_agent_id(agent_id)
+        config = await self.store.get_agent_llm_config(norm_id)
+        catalog = {m.model_id: m for m in await self.store.get_llm_catalog()}
 
-            for attempt in range(max_retries):
-                try:
-                    response = await llm.ainvoke(messages)
-                    if isinstance(response.content, str):
-                        return response.content
-                    if isinstance(response.content, list):
-                        parts: list[str] = []
-                        for part in response.content:
-                            if isinstance(part, str):
-                                parts.append(part)
-                            elif isinstance(part, dict) and "text" in part:
-                                parts.append(str(part["text"]))
-                            else:
-                                parts.append(str(part))
-                        return "".join(parts)
-                    return str(response.content)
-                except Exception as e:
-                    err_str = str(e).lower()
-                    exc_name = type(e).__name__.lower()
-                    is_daily_quota = (
-                        "per day limit exceeded" in err_str
-                        or "perprojectpermodel-freetier" in err_str
-                    )
-                    if is_daily_quota:
-                        raise e
+        chain_status: list[AgentChainLinkPing] = []
+        effective_model_id: str | None = None
+        effective_provider: str | None = None
 
-                    is_transient = (
-                        "429" in err_str
-                        or "resourceexhausted" in err_str
-                        or "quota" in err_str
-                        or "rate limit" in err_str
-                        or "503" in err_str
-                        or "500" in err_str
-                        or "unavailable" in err_str
-                        or "servererror" in err_str
-                        or "googleapierror" in err_str
-                        or "service unavailable" in err_str
-                        or "server error" in err_str
-                        or "servererror" in exc_name
-                        or "googleapierror" in exc_name
-                    )
-                    if is_transient and attempt < max_retries - 1:
-                        backoff = backoff_delays[min(attempt, len(backoff_delays) - 1)]
-                        print(
-                            f"\n[Gemini Gateway] Aviso: Error transitorio en {agent_id.value}: "
-                            f"{e}. Reintentando ({attempt + 2}/{max_retries}) en {backoff:.0f}s..."
-                        )
-                        await asyncio.sleep(backoff)
-                        last_error = e
-                    else:
-                        raise e
+        active_links = [m for m in config.assigned_models if m.enabled]
+        active_links.sort(key=lambda x: x.priority)
 
-            if last_error:
-                raise last_error
-            raise RuntimeError("Unexpected failure during Gemini invocation.")
+        for idx, link in enumerate(active_links):
+            role_label = "Primario" if idx == 0 else f"Fallback {idx}"
+            cat_model = catalog.get(link.model_id)
+
+            if not cat_model:
+                ping_res = LLMModelPingResponse(
+                    model_id=link.model_id,
+                    provider=link.provider or "custom",
+                    success=False,
+                    status="provider_error",
+                    message=f"Modelo '{link.model_id}' no encontrado en el catálogo.",
+                )
+            else:
+                ping_res = await self.ping_model(cat_model)
+
+            display_name = link.display_name or (
+                cat_model.display_name if cat_model else link.model_id
+            )
+            provider_val = link.provider or (
+                cat_model.provider if cat_model else "custom"
+            )
+            tier_val = link.tier or (cat_model.tier if cat_model else "free")
+
+            chain_status.append(
+                AgentChainLinkPing(
+                    model_id=link.model_id,
+                    display_name=display_name,
+                    provider=provider_val,
+                    tier=tier_val,
+                    priority=link.priority,
+                    role_label=role_label,
+                    enabled=link.enabled,
+                    ping_result=ping_res,
+                )
+            )
+
+            if ping_res.success and effective_model_id is None:
+                effective_model_id = link.model_id
+                effective_provider = cat_model.provider if cat_model else "custom"
+
+        all_ok = effective_model_id is not None
+        if all_ok:
+            msg = f"Cadena verificada. Modelo efectivo: {effective_model_id} ({effective_provider})"
+        else:
+            msg = "Ningún modelo activo en la cadena respondió satisfactoriamente."
+
+        return AgentLLMChainPingResponse(
+            agent_id=norm_id,
+            effective_model_id=effective_model_id,
+            effective_provider=effective_provider,
+            chain_status=chain_status,
+            all_ok=all_ok,
+            message=msg,
+        )
 
 
 class MockLLMGateway:
@@ -154,6 +585,75 @@ class MockLLMGateway:
         self.ciso_calls: int = 0
         self.invocations: list[tuple[AgentID, str, str]] = []
         self.invocation_counts: dict[AgentID, int] = dict.fromkeys(AgentID, 0)
+
+    async def ping_model(self, model: LLMModelCatalogItem) -> LLMModelPingResponse:
+        """Simulate connection ping in Mock/Testing mode."""
+        api_key = os.environ.get(model.api_key_env) or getattr(settings, model.api_key_env, None)
+        if not api_key or not str(api_key).strip():
+            return LLMModelPingResponse(
+                model_id=model.model_id,
+                provider=model.provider,
+                success=False,
+                status="missing_api_key",
+                message=f"Variable de entorno '{model.api_key_env}' no configurada o vacía.",
+            )
+        return LLMModelPingResponse(
+            model_id=model.model_id,
+            provider=model.provider,
+            success=True,
+            status="ok",
+            latency_ms=45,
+            http_status=200,
+            message="Conectado (45 ms)",
+        )
+
+    async def ping_agent_chain(self, agent_id: str | AgentID) -> AgentLLMChainPingResponse:
+        """Simulate testing entire chain for an agent in Mock mode."""
+        store = OfficeStore()
+        norm_id = normalize_agent_id(agent_id)
+        config = await store.get_agent_llm_config(norm_id)
+        chain_status: list[AgentChainLinkPing] = []
+        effective_model_id = None
+        effective_provider = None
+
+        active_links = [m for m in config.assigned_models if m.enabled]
+        active_links.sort(key=lambda x: x.priority)
+
+        for idx, link in enumerate(active_links):
+            role_label = "Primario" if idx == 0 else f"Fallback {idx}"
+            ping_res = LLMModelPingResponse(
+                model_id=link.model_id,
+                provider=link.provider or "custom",
+                success=True,
+                status="ok",
+                latency_ms=50 + idx * 10,
+                http_status=200,
+                message=f"Conectado ({50 + idx * 10} ms)",
+            )
+            chain_status.append(
+                AgentChainLinkPing(
+                    model_id=link.model_id,
+                    display_name=link.display_name or link.model_id,
+                    provider=link.provider or "custom",
+                    tier=link.tier or "free",
+                    priority=link.priority,
+                    role_label=role_label,
+                    enabled=link.enabled,
+                    ping_result=ping_res,
+                )
+            )
+            if effective_model_id is None:
+                effective_model_id = link.model_id
+                effective_provider = link.provider or "custom"
+
+        return AgentLLMChainPingResponse(
+            agent_id=norm_id,
+            effective_model_id=effective_model_id,
+            effective_provider=effective_provider,
+            chain_status=chain_status,
+            all_ok=effective_model_id is not None,
+            message=f"Modelo activo para responder: {effective_model_id} ({effective_provider})",
+        )
 
     async def invoke_agent(
         self,

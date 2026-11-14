@@ -60,21 +60,24 @@ En la columna izquierda se ubica el catálogo interactivo del equipo. Ha sido di
 
 ### Los 13 Especialistas Oficiales de la Factoría:
 
-| Icono y Nombre Visual | Identificador | Rol en el Proyecto | ¿Qué tipo de entregable produce? |
-| :--- | :--- | :--- | :--- |
-| 👔 **CEO** | `agente_00_ceo` | Dirección Ejecutiva | **Charter de Negocio** (fijación de precios y márgenes) y **Signoff** (acta final de lanzamiento autorizado). |
-| 📋 **Product Manager** | `agente_01_pm` | Dirección de Producto | **Sprint Backlog** y matriz de historias de usuario priorizadas. |
-| 📐 **Software Architect** | `agente_02_architect` | Arquitectura de Software | **Diseño Técnico del Sistema (SDD)** y contratos formales de APIs. |
-| 🎨 **UI/UX Designer** | `agente_11_ui_ux` | Diseño y Experiencia | **Design System**, paleta tipográfica y flujos de pantallas. |
-| 🐘 **Dev PHP (Laravel)** | `agente_03_laravel` | Desarrollo Backend Core | Código fuente del servidor, modelos de datos y endpoints de negocio. |
-| ⚡ **Dev Python (FastAPI)** | `agente_04_fastapi` | Microservicios Asíncronos | Servicios de alta velocidad y procesamiento en segundo plano. |
-| 🔬 **QA PHP (Pest)** | `agente_05_qa_php` | Calidad y Testing PHP | Informe de pruebas automatizadas y cobertura de código. |
-| 🐍 **QA Python (Pytest)** | `agente_06_qa_python` | Calidad y Testing Python | Pruebas de integración, asincronía y verificación funcional. |
-| ⚙️ **DevOps & Docker** | `agente_07_devops` | Infraestructura | Ficheros Docker Compose, variables de entorno y validación de despliegue. |
-| 🛡️ **CISO Security** | `agente_10_ciso` | Ciberseguridad | Auditoría forense OWASP, blindaje de contraseñas y mitigación de vulnerabilidades. |
-| 📚 **Docs & RAG** | `agente_08_docs` | Documentación | Manual de despliegue técnico y guías de uso para clientes. |
-| 📣 **Marketing** | `agente_12_marketing` | Crecimiento y Adquisición | Estrategia de captación de tráfico (TOFU/MOFU), copys y propuesta de valor. |
-| 💹 **Sales & Analytics** | `agente_13_sales_analytics` | Analítica y Monetización | Embudo de conversión, proyecciones de facturación y métricas SaaS. |
+| Icono y Nombre Visual | Identificador | Rol en el Proyecto | Modelo Primario (P1) | Cadena de Fallback | ¿Qué tipo de entregable produce? |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| 👔 **CEO** | `agente_00_ceo` | Dirección Ejecutiva | `llama-4-scout-17b` (Groq) | `gemini-3.5-flash-lite`, `qwen3-32b` | **Charter de Negocio** (fijación de precios y márgenes) y **Signoff** (lanzamiento autorizado). |
+| 📋 **Product Manager** | `agente_01_pm` | Dirección de Producto | `gemini-3.6-flash` (Google) | `llama-3.3-70b`, `mistral-large` | **Sprint Backlog** y matriz de historias de usuario priorizadas. |
+| 📐 **Software Architect** | `agente_02_architect` | Arquitectura de Software | `gemini-3.5-pro` (Google) | `gemini-3.6-flash`, `mistral-large` | **Diseño Técnico del Sistema (SDD)** y contratos formales de APIs. |
+| 🎨 **UI/UX Designer** | `agente_11_ui_ux` | Diseño y Experiencia | `gemini-3.5-pro` (Google) | `gemini-3.6-flash`, `codestral` | **Design System**, paleta tipográfica y flujos de pantallas. |
+| 🐘 **Dev PHP (Laravel)** | `agente_03_laravel` | Desarrollo Backend Core | `gemini-3.6-flash` (Google) | `codestral`, `qwen3-32b` | Código fuente del servidor, modelos de datos y endpoints de negocio. |
+| ⚡ **Dev Python (FastAPI)** | `agente_04_fastapi` | Microservicios Asíncronos | `gemini-3.6-flash` (Google) | `codestral`, `qwen3-32b` | Servicios de alta velocidad y procesamiento en segundo plano. |
+| 🔬 **QA PHP (Pest)** | `agente_05_qa_php` | Calidad y Testing PHP | `qwen/qwen3-32b` (Groq) | `codestral`, `gemini-3.5-flash-lite` | Informe de pruebas automatizadas y cobertura de código. |
+| 🐍 **QA Python (Pytest)** | `agente_06_qa_python` | Calidad y Testing Python | `qwen/qwen3-32b` (Groq) | `codestral`, `gemini-3.5-flash-lite` | Pruebas de integración, asincronía y verificación funcional. |
+| ⚙️ **DevOps & Docker** | `agente_07_devops` | Infraestructura | `codestral-latest` (Mistral) | `qwen3-32b`, `gemini-3.5-flash-lite` | Ficheros Docker Compose, variables de entorno y validación de despliegue. |
+| 🛡️ **CISO Security** | `agente_10_ciso` | Ciberseguridad | `gemini-3.5-pro` (Google) | `mistral-large`, `qwen3-32b` | Auditoría forense OWASP, blindaje de contraseñas y mitigación de vulnerabilidades. |
+| 📚 **Docs & RAG** | `agente_08_docs` | Documentación | `gemini-3.6-flash` (Google) | `gemini-3.5-flash-lite`, `mistral-large` | Manual de despliegue técnico y guías de uso para clientes. |
+| 📣 **Marketing** | `agente_12_marketing` | Crecimiento y Adquisición | `llama-3.3-70b` (Groq) | `mistral-large`, `llama-3.1-8b` | Estrategia de captación de tráfico (TOFU/MOFU), copys y propuesta de valor. |
+| 💹 **Sales & Analytics** | `agente_13_sales_analytics` | Analítica y Monetización | `gemini-3.6-flash` (Google) | `mistral-large`, `gemini-3.5-flash-lite` | Embudo de conversión, proyecciones de facturación y métricas SaaS. |
+
+> [!NOTE]
+> Para consultar la matriz técnica pormenorizada con temperaturas, límites de tokens y configuración de API Keys, consulta [matriz_modelos_ia_agentes.md](file:///c:/Proyectos%20Docker/agentoffice/langGraph/docs/matriz_modelos_ia_agentes.md).
 
 ### Indicadores y Comportamiento de cada Agente:
 

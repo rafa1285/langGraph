@@ -87,7 +87,7 @@ async def list_projects(
     workspaces_dir = Path(settings.WORKSPACES_DIR)
     if workspaces_dir.exists() and workspaces_dir.is_dir():
         for item in workspaces_dir.iterdir():
-            if item.is_dir() and not item.name.startswith(".") and item.name in db_summaries:
+            if item.is_dir() and not item.name.startswith("."):
                 all_project_ids.add(item.name)
 
     projects_list: list[ProjectSummaryResponse] = []

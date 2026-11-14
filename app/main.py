@@ -9,7 +9,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routes import router
-from app.api.routes_office import router as office_router
+from app.api.routes_office import office_compat_router, router as office_router
 from app.api.routes_telemetry import router as telemetry_router
 from app.core.config import settings
 from app.services.llm_gateway import GeminiLLMGateway, MockLLMGateway
@@ -84,6 +84,7 @@ def create_app() -> FastAPI:
 
     # Office UI routes (agent status, chat — Phase 2+)
     application.include_router(office_router)
+    application.include_router(office_compat_router)
 
     # Telemetry, Agent Thoughts & Operations Dashboard routes
     application.include_router(telemetry_router)

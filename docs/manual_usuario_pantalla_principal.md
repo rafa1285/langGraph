@@ -62,9 +62,9 @@ La barra superior permanece fija en la parte más alta de la pantalla en todo mo
 
 ---
 
-## 3. Barra de Navegación: Las 7 Pestañas de Gestión
+## 3. Barra de Navegación: Las 8 Pestañas de Gestión
 
-Situada justo debajo de la cabecera de telemetría, esta barra te permite desplazarte rápidamente entre las 7 secciones de la factoría. El cambio es instantáneo y fluido: el mapa de la oficina nunca se reinicia ni se pierde lo que estés viendo.
+Situada justo debajo de la cabecera de telemetría, esta barra te permite desplazarte rápidamente entre las 8 secciones de la factoría. El cambio es instantáneo y fluido: el mapa de la oficina nunca se reinicia ni se pierde lo que estés viendo.
 
 ### 📌 Resumen de Pestañas
 
@@ -82,6 +82,8 @@ Situada justo debajo de la cabecera de telemetría, esta barra te permite despla
   - Panel de supervisión de riesgos y seguridad: detecta posibles atascos y muestra los controles de protección aplicados por el responsable de seguridad (CISO).
 - **7. `🗄️ Database & Artifacts`:**
   - Explorador general de bases de datos y biblioteca de todos los documentos oficiales generados por el equipo.
+- **8. `📱 WhatsApp Hub` (`http://127.0.0.1:8080/#tab-whatsapp`):**
+  - Pasarela conversacional de cara a clientes y público externo: configuración de Meta Cloud API, asistente de Webhooks, simulador interactivo de entrada (Sandbox) y monitor de sesiones activas.
 
 ---
 
@@ -324,8 +326,9 @@ Accesible desde el visor de archivos o desde el pie del chat:
 ## 10. Próximos Capítulos de la Guía
 
 - 📖 **[Capítulo 2: Guía de la Consola de Lanzamiento y Fases (`💬 Interaction & Pipeline`)](manual_usuario_interacciones_pipeline.md)** *(Disponible en Notion: [Capítulo 2](https://app.notion.com/p/415be4dde97381f69617fd6c67f25779))*
-- 📖 **Capítulo 3:** Manual de Razonamiento y Reflexión de los Agentes (`🧠 Agent Thoughts`)
-- 📖 **Capítulo 4:** Cuadro de Mando de Rendimiento y Tiempos de Respuesta (`📊 Agent Usage & Stats`)
-- 📖 **Capítulo 5:** Gestión Financiera y Control de Consumos (`💰 Token & Cost Monitor`)
-- 📖 **Capítulo 6:** Medidas de Seguridad y Protección del Sistema (`🛡️ Circuit Breakers`)
-- 📖 **Capítulo 7:** Consulta de Bases de Datos y Biblioteca de Documentos (`🗄️ Database & Artifacts`)
+- 📖 **[Capítulo 3: Manual de Razonamiento y Reflexión de los Agentes (`🧠 Agent Thoughts`)](manual_usuario_capitulo_3_agent_thoughts.md)** *(Disponible en Notion: [Capítulo 3](https://app.notion.com/p/416be4dde9738121a20ddaeef6beea74))*
+- 📖 **[Capítulo 4: Cuadro de Mando de Rendimiento y Tiempos de Respuesta (`📊 Agent Usage & Stats`)](manual_usuario_capitulo_4_agent_usage_stats.md)** *(Disponible en Notion: [Capítulo 4](https://app.notion.com/p/416be4dde97381bc9249fffa763f0441))*
+- 📖 **[Capítulo 5: Medidas de Seguridad y Protección del Sistema (`🛡️ Circuit Breakers`)](manual_usuario_capitulo_5_security_circuit_breakers.md)** *(Disponible en Notion: [Capítulo 5](https://app.notion.com/p/416be4dde9738147bac6d05de53008ff))*
+- 📖 **[Capítulo 6: Consulta de Bases de Datos y Biblioteca de Documentos (`🗄️ Database & Artifacts`)](manual_usuario_capitulo_6_database_artifacts.md)** *(Disponible en Notion: [Capítulo 6](https://app.notion.com/p/416be4dde973815991cac1f06e72839f))*
+- 📖 **[Capítulo 7: Pasarela de Clientes y Centro de Control de WhatsApp (`📱 WhatsApp Hub`)](manual_usuario_capitulo_7_whatsapp_hub.md)** *(Disponible en Notion: [Capítulo 7](https://app.notion.com/p/418be4dde97381cd9777ca2fa6e8a6f4))*
+- 🤖 **[Matriz de Modelos de Inteligencia Artificial y Cadenas de Fallback](matriz_modelos_ia_agentes.md)** *(Disponible en Notion: [Matriz de Modelos](https://app.notion.com/p/418be4dde9738106a660e49c74c2a610))*

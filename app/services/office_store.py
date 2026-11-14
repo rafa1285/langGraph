@@ -1,6 +1,8 @@
 """Persistent SQLite storage for agent conversations, internal emails, and telemetry."""
 
 import json
+import os
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 from uuid import UUID
@@ -10,8 +12,392 @@ import aiosqlite
 from app.core.config import settings
 from app.schemas.brownfield import AuditReport
 from app.schemas.chat import ChatTurn
-from app.schemas.office import AgentConversationRecord, AgentEmailRecord, EmailPriority
+from app.schemas.office import (
+    AgentConversationRecord,
+    AgentEmailRecord,
+    AgentLLMConfig,
+    AgentLLMConfigUpdate,
+    AssignedModelItem,
+    EmailPriority,
+    LLMModelCatalogCreate,
+    LLMModelCatalogItem,
+    LLMModelCatalogUpdate,
+)
 from app.schemas.routing import AgentID, DeliverableStatus
+
+_AGENT_ID_ALIASES: dict[str, str] = {
+    "00_ceo": "agente_00_ceo",
+    "01_pm": "agente_01_pm",
+    "02_architect": "agente_02_architect",
+    "03_laravel": "agente_03_laravel",
+    "03_laravel_dev": "agente_03_laravel",
+    "04_fastapi": "agente_04_fastapi",
+    "04_fastapi_dev": "agente_04_fastapi",
+    "05_qa_php": "agente_05_qa_php",
+    "06_qa_python": "agente_06_qa_python",
+    "07_devops": "agente_07_devops",
+    "08_docs": "agente_08_docs",
+    "08_docs_rag": "agente_08_docs",
+    "09_growth": "agente_09_growth",
+    "10_ciso": "agente_10_ciso",
+    "11_ui_ux": "agente_11_ui_ux",
+    "12_marketing": "agente_12_marketing",
+    "13_sales_analytics": "agente_13_sales_analytics",
+    "14_qa_ui_ux": "agente_14_qa_ui_ux",
+}
+
+
+def normalize_agent_id(agent_id: str | AgentID) -> str:
+    """Normalize agent id strings or AgentID enums to canonical 'agente_XX_...'."""
+    raw = agent_id.value if isinstance(agent_id, AgentID) else str(agent_id).strip().lower()
+    if raw in _AGENT_ID_ALIASES:
+        return _AGENT_ID_ALIASES[raw]
+    if raw.startswith("agente_"):
+        return raw
+    candidate = f"agente_{raw}"
+    if candidate in _AGENT_ID_ALIASES.values():
+        return candidate
+    return raw
+
+
+def has_env_key(api_key_env: str) -> bool:
+    """Check whether the given API key variable is present and non-empty in settings or env."""
+    if not api_key_env:
+        return False
+    val = getattr(settings, api_key_env, None)
+    if val is not None and str(val).strip():
+        return True
+    env_val = os.environ.get(api_key_env)
+    return bool(env_val and str(env_val).strip())
+
+
+DEFAULT_CATALOG_MODELS: list[dict[str, Any]] = [
+    {
+        "model_id": "gemini-3.5-pro",
+        "display_name": "Gemini 3.5 Pro",
+        "provider": "google",
+        "base_url": None,
+        "api_key_env": "GEMINI_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 8192,
+        "is_active": True,
+    },
+    {
+        "model_id": "gemini-3.6-flash",
+        "display_name": "Gemini 3.6 Flash",
+        "provider": "google",
+        "base_url": None,
+        "api_key_env": "GEMINI_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 8192,
+        "is_active": True,
+    },
+    {
+        "model_id": "gemini-3.5-flash-lite",
+        "display_name": "Gemini 3.5 Flash Lite",
+        "provider": "google",
+        "base_url": None,
+        "api_key_env": "GEMINI_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "gemini-3.5-flash",
+        "display_name": "Gemini 3.5 Flash",
+        "provider": "google",
+        "base_url": None,
+        "api_key_env": "GEMINI_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 8192,
+        "is_active": True,
+    },
+    {
+        "model_id": "mistral-large-latest",
+        "display_name": "Mistral Large Latest",
+        "provider": "mistral",
+        "base_url": "https://api.mistral.ai/v1",
+        "api_key_env": "MISTRAL_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "codestral-latest",
+        "display_name": "Codestral Latest",
+        "provider": "mistral",
+        "base_url": "https://codestral.mistral.ai/v1",
+        "api_key_env": "MISTRAL_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.1,
+        "default_max_tokens": 8192,
+        "is_active": True,
+    },
+    {
+        "model_id": "qwen/qwen3-32b",
+        "display_name": "Qwen 3 32B (Groq)",
+        "provider": "groq",
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key_env": "GROQ_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "llama-3.3-70b-versatile",
+        "display_name": "Llama 3.3 70B (Groq)",
+        "provider": "groq",
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key_env": "GROQ_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "llama-3.1-8b-instant",
+        "display_name": "Llama 3.1 8B (Groq)",
+        "provider": "groq",
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key_env": "GROQ_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "meta-llama/llama-4-scout-17b-16e-instruct",
+        "display_name": "Llama 4 Scout 17B (Groq)",
+        "provider": "groq",
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key_env": "GROQ_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "claude-3-5-sonnet-latest",
+        "display_name": "Claude 3.5 Sonnet",
+        "provider": "anthropic",
+        "base_url": "https://api.anthropic.com/v1",
+        "api_key_env": "ANTHROPIC_API_KEY",
+        "tier": "paid",
+        "default_temperature": 0.2,
+        "default_max_tokens": 8192,
+        "is_active": True,
+    },
+    {
+        "model_id": "o3-mini",
+        "display_name": "o3-mini",
+        "provider": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "tier": "paid",
+        "default_temperature": 1.0,
+        "default_max_tokens": 8192,
+        "is_active": True,
+    },
+    {
+        "model_id": "gpt-4o-mini",
+        "display_name": "GPT-4o Mini",
+        "provider": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "tier": "paid",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "gpt-4o",
+        "display_name": "GPT-4o",
+        "provider": "openai",
+        "base_url": "https://api.openai.com/v1",
+        "api_key_env": "OPENAI_API_KEY",
+        "tier": "paid",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "deepseek-chat",
+        "display_name": "DeepSeek Chat (V3)",
+        "provider": "deepseek",
+        "base_url": "https://api.deepseek.com",
+        "api_key_env": "DEEPSEEK_API_KEY",
+        "tier": "paid",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+]
+
+DEFAULT_AGENT_CHAINS: dict[str, dict[str, Any]] = {
+    "agente_02_architect": {
+        "assigned": [
+            ("gemini-3.5-pro", True, 1),
+            ("gemini-3.6-flash", True, 2),
+            ("mistral-large-latest", True, 3),
+            ("claude-3-5-sonnet-latest", False, 4),
+            ("o3-mini", False, 5),
+        ],
+        "temperature": 0.1,
+        "max_tokens": 8192,
+    },
+    "agente_10_ciso": {
+        "assigned": [
+            ("gemini-3.5-pro", True, 1),
+            ("mistral-large-latest", True, 2),
+            ("qwen/qwen3-32b", True, 3),
+            ("o3-mini", False, 4),
+            ("claude-3-5-sonnet-latest", False, 5),
+        ],
+        "temperature": 0.1,
+        "max_tokens": 8192,
+    },
+    "agente_01_pm": {
+        "assigned": [
+            ("gemini-3.6-flash", True, 1),
+            ("llama-3.3-70b-versatile", True, 2),
+            ("mistral-large-latest", True, 3),
+            ("gpt-4o-mini", False, 4),
+        ],
+        "temperature": 0.2,
+        "max_tokens": 8192,
+    },
+    "agente_03_laravel": {
+        "assigned": [
+            ("gemini-3.6-flash", True, 1),
+            ("codestral-latest", True, 2),
+            ("qwen/qwen3-32b", True, 3),
+            ("claude-3-5-sonnet-latest", False, 4),
+            ("deepseek-chat", False, 5),
+        ],
+        "temperature": 0.1,
+        "max_tokens": 8192,
+    },
+    "agente_04_fastapi": {
+        "assigned": [
+            ("gemini-3.6-flash", True, 1),
+            ("codestral-latest", True, 2),
+            ("qwen/qwen3-32b", True, 3),
+            ("claude-3-5-sonnet-latest", False, 4),
+            ("deepseek-chat", False, 5),
+        ],
+        "temperature": 0.1,
+        "max_tokens": 8192,
+    },
+    "agente_11_ui_ux": {
+        "assigned": [
+            ("gemini-3.5-pro", True, 1),
+            ("gemini-3.6-flash", True, 2),
+            ("codestral-latest", True, 3),
+            ("claude-3-5-sonnet-latest", False, 4),
+        ],
+        "temperature": 0.2,
+        "max_tokens": 8192,
+    },
+    "agente_05_qa_php": {
+        "assigned": [
+            ("qwen/qwen3-32b", True, 1),
+            ("codestral-latest", True, 2),
+            ("gemini-3.5-flash-lite", True, 3),
+            ("deepseek-chat", False, 4),
+            ("gpt-4o-mini", False, 5),
+        ],
+        "temperature": 0.1,
+        "max_tokens": 4096,
+    },
+    "agente_06_qa_python": {
+        "assigned": [
+            ("qwen/qwen3-32b", True, 1),
+            ("codestral-latest", True, 2),
+            ("gemini-3.5-flash-lite", True, 3),
+            ("deepseek-chat", False, 4),
+            ("gpt-4o-mini", False, 5),
+        ],
+        "temperature": 0.1,
+        "max_tokens": 4096,
+    },
+    "agente_14_qa_ui_ux": {
+        "assigned": [
+            ("gemini-3.6-flash", True, 1),
+            ("qwen/qwen3-32b", True, 2),
+            ("gemini-3.5-flash-lite", True, 3),
+            ("gemini-3.5-flash", False, 4),
+        ],
+        "temperature": 0.1,
+        "max_tokens": 4096,
+    },
+    "agente_07_devops": {
+        "assigned": [
+            ("codestral-latest", True, 1),
+            ("qwen/qwen3-32b", True, 2),
+            ("gemini-3.5-flash-lite", True, 3),
+            ("gpt-4o-mini", False, 4),
+        ],
+        "temperature": 0.1,
+        "max_tokens": 4096,
+    },
+    "agente_08_docs": {
+        "assigned": [
+            ("gemini-3.6-flash", True, 1),
+            ("gemini-3.5-flash-lite", True, 2),
+            ("mistral-large-latest", True, 3),
+            ("gemini-3.5-flash", False, 4),
+        ],
+        "temperature": 0.2,
+        "max_tokens": 4096,
+    },
+    "agente_09_growth": {
+        "assigned": [
+            ("llama-3.3-70b-versatile", True, 1),
+            ("mistral-large-latest", True, 2),
+            ("llama-3.1-8b-instant", True, 3),
+            ("gpt-4o-mini", False, 4),
+        ],
+        "temperature": 0.4,
+        "max_tokens": 4096,
+    },
+    "agente_12_marketing": {
+        "assigned": [
+            ("llama-3.3-70b-versatile", True, 1),
+            ("mistral-large-latest", True, 2),
+            ("llama-3.1-8b-instant", True, 3),
+            ("gpt-4o-mini", False, 4),
+        ],
+        "temperature": 0.3,
+        "max_tokens": 4096,
+    },
+    "agente_13_sales_analytics": {
+        "assigned": [
+            ("gemini-3.6-flash", True, 1),
+            ("mistral-large-latest", True, 2),
+            ("gemini-3.5-flash-lite", True, 3),
+            ("gpt-4o-mini", False, 4),
+        ],
+        "temperature": 0.2,
+        "max_tokens": 4096,
+    },
+    "agente_00_ceo": {
+        "assigned": [
+            ("meta-llama/llama-4-scout-17b-16e-instruct", True, 1),
+            ("gemini-3.5-flash-lite", True, 2),
+            ("qwen/qwen3-32b", True, 3),
+            ("gpt-4o-mini", False, 4),
+            ("gpt-4o", False, 5),
+        ],
+        "temperature": 0.1,
+        "max_tokens": 8192,
+    },
+}
 
 
 class OfficeStore:
@@ -57,7 +443,10 @@ class OfficeStore:
             async with db.execute("PRAGMA table_info(agent_conversations);") as cur:
                 existing_cols = [r[1] for r in await cur.fetchall()]
                 if "is_visible" not in existing_cols:
-                    await db.execute("ALTER TABLE agent_conversations ADD COLUMN is_visible INTEGER NOT NULL DEFAULT 1;")
+                    await db.execute(
+                        "ALTER TABLE agent_conversations "
+                        "ADD COLUMN is_visible INTEGER NOT NULL DEFAULT 1;"
+                    )
             await db.execute(
                 """
                 CREATE TABLE IF NOT EXISTS agent_emails (
@@ -120,6 +509,49 @@ class OfficeStore:
                 "CREATE INDEX IF NOT EXISTS idx_bf_status "
                 "ON brownfield_audits(status, created_at);"
             )
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS llm_models_catalog (
+                    model_id TEXT PRIMARY KEY,
+                    display_name TEXT NOT NULL,
+                    provider TEXT NOT NULL,
+                    base_url TEXT,
+                    api_key_env TEXT NOT NULL,
+                    tier TEXT NOT NULL DEFAULT 'free',
+                    default_temperature REAL NOT NULL DEFAULT 0.2,
+                    default_max_tokens INTEGER NOT NULL DEFAULT 4096,
+                    is_active INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS agent_llm_configs (
+                    agent_id TEXT PRIMARY KEY,
+                    assigned_models TEXT NOT NULL,
+                    temperature REAL NOT NULL DEFAULT 0.2,
+                    max_tokens INTEGER NOT NULL DEFAULT 4096,
+                    timeout INTEGER NOT NULL DEFAULT 60,
+                    max_retries INTEGER NOT NULL DEFAULT 1,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            # Auto-seed catalog if empty
+            async with db.execute("SELECT COUNT(*) FROM llm_models_catalog;") as cur:
+                row = await cur.fetchone()
+                if row and row[0] == 0:
+                    await self._seed_catalog(db)
+
+            # Auto-seed agent configs if empty
+            async with db.execute("SELECT COUNT(*) FROM agent_llm_configs;") as cur:
+                row = await cur.fetchone()
+                if row and row[0] == 0:
+                    await self._seed_agent_configs(db)
+
             await db.commit()
 
     async def save_conversation(self, record: AgentConversationRecord) -> None:
@@ -366,7 +798,9 @@ class OfficeStore:
         )
         email_projects_query = (
             "SELECT DISTINCT project_id FROM agent_emails "
-            "WHERE project_id IN (SELECT DISTINCT project_id FROM agent_conversations WHERE is_visible = 1)"
+            "WHERE project_id IN ("
+            "    SELECT DISTINCT project_id FROM agent_conversations WHERE is_visible = 1"
+            ")"
         )
 
         summaries: dict[str, dict[str, Any]] = {}
@@ -387,7 +821,11 @@ class OfficeStore:
                     pid, st = row[0], row[1]
                     if pid in summaries:
                         prev = summaries[pid].get("current_status")
-                        if prev in ("LANZAMIENTO_AUTORIZADO", "CICLO_DE_SOFTWARE_COMPLETADO_100") and st not in (
+                        is_final = prev in (
+                            "LANZAMIENTO_AUTORIZADO",
+                            "CICLO_DE_SOFTWARE_COMPLETADO_100",
+                        )
+                        if is_final and st not in (
                             "LANZAMIENTO_AUTORIZADO",
                             "CICLO_DE_SOFTWARE_COMPLETADO_100",
                         ):
@@ -538,3 +976,378 @@ class OfficeStore:
             update={"status": new_status, "updated_at": now_iso}
         )
         await self.save_audit_report(updated_report)
+
+    # ── LLM Models Catalog & Agent Routing Configuration ───────────────────
+
+    async def _seed_catalog(self, db: aiosqlite.Connection) -> None:
+        """Seed initial LLM models catalog."""
+        now_iso = datetime.now(UTC).isoformat()
+        for m in DEFAULT_CATALOG_MODELS:
+            await db.execute(
+                """
+                INSERT OR IGNORE INTO llm_models_catalog (
+                    model_id, display_name, provider, base_url, api_key_env,
+                    tier, default_temperature, default_max_tokens, is_active,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    m["model_id"],
+                    m["display_name"],
+                    m["provider"],
+                    m.get("base_url"),
+                    m["api_key_env"],
+                    m.get("tier", "free"),
+                    m.get("default_temperature", 0.2),
+                    m.get("default_max_tokens", 4096),
+                    1 if m.get("is_active", True) else 0,
+                    now_iso,
+                    now_iso,
+                ),
+            )
+
+    async def _seed_agent_configs(self, db: aiosqlite.Connection) -> None:
+        """Seed initial fallback routing chains for all 15 agents."""
+        now_iso = datetime.now(UTC).isoformat()
+        for agent_id, chain_info in DEFAULT_AGENT_CHAINS.items():
+            assigned = [
+                {"model_id": mid, "enabled": enabled, "priority": priority}
+                for mid, enabled, priority in chain_info["assigned"]
+            ]
+            await db.execute(
+                """
+                INSERT OR IGNORE INTO agent_llm_configs (
+                    agent_id, assigned_models, temperature, max_tokens, timeout, max_retries,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    agent_id,
+                    json.dumps(assigned),
+                    chain_info.get("temperature", 0.2),
+                    chain_info.get("max_tokens", 4096),
+                    60,
+                    1,
+                    now_iso,
+                    now_iso,
+                ),
+            )
+
+    async def get_llm_catalog(self) -> list[LLMModelCatalogItem]:
+        """List all LLM models in the catalog enriched with credential availability."""
+        await self.init_db()
+        models: list[LLMModelCatalogItem] = []
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT model_id, display_name, provider, base_url, api_key_env,
+                       tier, default_temperature, default_max_tokens, is_active,
+                       created_at, updated_at
+                FROM llm_models_catalog
+                ORDER BY tier ASC, provider ASC, display_name ASC;
+                """
+            ) as cursor:
+                rows = await cursor.fetchall()
+                for row in rows:
+                    api_key_env = str(row["api_key_env"])
+                    models.append(
+                        LLMModelCatalogItem(
+                            model_id=str(row["model_id"]),
+                            display_name=str(row["display_name"]),
+                            provider=str(row["provider"]),
+                            base_url=row["base_url"],
+                            api_key_env=api_key_env,
+                            tier=str(row["tier"]),
+                            default_temperature=float(row["default_temperature"]),
+                            default_max_tokens=int(row["default_max_tokens"]),
+                            is_active=bool(row["is_active"]),
+                            has_api_key=has_env_key(api_key_env),
+                            created_at=row["created_at"],
+                            updated_at=row["updated_at"],
+                        )
+                    )
+        return models
+
+    async def get_llm_model(self, model_id: str) -> LLMModelCatalogItem | None:
+        """Retrieve a specific LLM model by model_id."""
+        await self.init_db()
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT model_id, display_name, provider, base_url, api_key_env,
+                       tier, default_temperature, default_max_tokens, is_active,
+                       created_at, updated_at
+                FROM llm_models_catalog
+                WHERE model_id = ?;
+                """,
+                (model_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+                if row is None:
+                    return None
+                api_key_env = str(row["api_key_env"])
+                return LLMModelCatalogItem(
+                    model_id=str(row["model_id"]),
+                    display_name=str(row["display_name"]),
+                    provider=str(row["provider"]),
+                    base_url=row["base_url"],
+                    api_key_env=api_key_env,
+                    tier=str(row["tier"]),
+                    default_temperature=float(row["default_temperature"]),
+                    default_max_tokens=int(row["default_max_tokens"]),
+                    is_active=bool(row["is_active"]),
+                    has_api_key=has_env_key(api_key_env),
+                    created_at=row["created_at"],
+                    updated_at=row["updated_at"],
+                )
+
+    async def create_llm_model(self, item: LLMModelCatalogCreate) -> LLMModelCatalogItem:
+        """Register a new LLM model in the global catalog."""
+        await self.init_db()
+        now_iso = datetime.now(UTC).isoformat()
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            await db.execute(
+                """
+                INSERT INTO llm_models_catalog (
+                    model_id, display_name, provider, base_url, api_key_env,
+                    tier, default_temperature, default_max_tokens, is_active,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    item.model_id,
+                    item.display_name,
+                    item.provider,
+                    item.base_url,
+                    item.api_key_env,
+                    item.tier,
+                    item.default_temperature,
+                    item.default_max_tokens,
+                    1 if item.is_active else 0,
+                    now_iso,
+                    now_iso,
+                ),
+            )
+            await db.commit()
+
+        created = await self.get_llm_model(item.model_id)
+        if created is None:
+            raise RuntimeError("Error al persistir el nuevo modelo en SQLite.")
+        return created
+
+    async def update_llm_model(
+        self, model_id: str, item: LLMModelCatalogUpdate
+    ) -> LLMModelCatalogItem | None:
+        """Update fields for an existing LLM model in the catalog."""
+        existing = await self.get_llm_model(model_id)
+        if existing is None:
+            return None
+
+        fields: list[str] = []
+        params: list[Any] = []
+
+        if item.display_name is not None:
+            fields.append("display_name = ?")
+            params.append(item.display_name)
+        if item.provider is not None:
+            fields.append("provider = ?")
+            params.append(item.provider)
+        if item.base_url is not None:
+            fields.append("base_url = ?")
+            params.append(item.base_url)
+        if item.api_key_env is not None:
+            fields.append("api_key_env = ?")
+            params.append(item.api_key_env)
+        if item.tier is not None:
+            fields.append("tier = ?")
+            params.append(item.tier)
+        if item.default_temperature is not None:
+            fields.append("default_temperature = ?")
+            params.append(item.default_temperature)
+        if item.default_max_tokens is not None:
+            fields.append("default_max_tokens = ?")
+            params.append(item.default_max_tokens)
+        if item.is_active is not None:
+            fields.append("is_active = ?")
+            params.append(1 if item.is_active else 0)
+
+        if not fields:
+            return existing
+
+        now_iso = datetime.now(UTC).isoformat()
+        fields.append("updated_at = ?")
+        params.append(now_iso)
+        params.append(model_id)
+
+        query = f"UPDATE llm_models_catalog SET {', '.join(fields)} WHERE model_id = ?;"
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            await db.execute(query, params)
+            await db.commit()
+
+        return await self.get_llm_model(model_id)
+
+    async def delete_llm_model(self, model_id: str) -> bool:
+        """Delete an LLM model from the catalog."""
+        await self.init_db()
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            async with db.execute(
+                "DELETE FROM llm_models_catalog WHERE model_id = ?;", (model_id,)
+            ) as cur:
+                await db.commit()
+                return cur.rowcount > 0
+
+    async def get_agent_llm_config(self, agent_id: str | AgentID) -> AgentLLMConfig:
+        """Retrieve dynamic LLM configuration for an agent, enriched with catalog details."""
+        await self.init_db()
+        norm_id = normalize_agent_id(agent_id)
+        catalog_map = {m.model_id: m for m in await self.get_llm_catalog()}
+
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                """
+                SELECT agent_id, assigned_models, temperature, max_tokens, timeout,
+                       max_retries, updated_at
+                FROM agent_llm_configs WHERE agent_id = ?;
+                """,
+                (norm_id,),
+            ) as cur:
+                row = await cur.fetchone()
+
+        if row is None:
+            return await self.reset_agent_llm_config(norm_id)
+
+        try:
+            assigned_raw = json.loads(row["assigned_models"])
+        except Exception:
+            assigned_raw = []
+
+        assigned_models: list[AssignedModelItem] = []
+        for item in assigned_raw:
+            mid = item.get("model_id", "")
+            cat_item = catalog_map.get(mid)
+            dname = cat_item.display_name if cat_item else item.get("display_name", mid)
+            prov = cat_item.provider if cat_item else item.get("provider", "custom")
+            tier_val = cat_item.tier if cat_item else item.get("tier", "free")
+            assigned_models.append(
+                AssignedModelItem(
+                    model_id=mid,
+                    enabled=bool(item.get("enabled", True)),
+                    priority=int(item.get("priority", 1)),
+                    display_name=dname,
+                    provider=prov,
+                    tier=tier_val,
+                    has_api_key=cat_item.has_api_key if cat_item else False,
+                )
+            )
+
+        assigned_models.sort(key=lambda x: x.priority)
+
+        return AgentLLMConfig(
+            agent_id=norm_id,
+            assigned_models=assigned_models,
+            temperature=float(row["temperature"]),
+            max_tokens=int(row["max_tokens"]),
+            timeout=int(row["timeout"]),
+            max_retries=int(row["max_retries"]),
+            updated_at=row["updated_at"],
+        )
+
+    async def save_agent_llm_config(
+        self, agent_id: str | AgentID, config: AgentLLMConfigUpdate
+    ) -> AgentLLMConfig:
+        """Update and persist agent LLM routing configuration."""
+        await self.init_db()
+        norm_id = normalize_agent_id(agent_id)
+        current = await self.get_agent_llm_config(norm_id)
+
+        now_iso = datetime.now(UTC).isoformat()
+        new_assigned = [
+            {
+                "model_id": item.model_id,
+                "enabled": item.enabled,
+                "priority": item.priority,
+            }
+            for item in config.assigned_models
+        ]
+        new_assigned.sort(key=lambda x: x["priority"])
+
+        temperature = config.temperature if config.temperature is not None else current.temperature
+        max_tokens = config.max_tokens if config.max_tokens is not None else current.max_tokens
+        timeout = config.timeout if config.timeout is not None else current.timeout
+        max_retries = config.max_retries if config.max_retries is not None else current.max_retries
+
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO agent_llm_configs (
+                    agent_id, assigned_models, temperature, max_tokens, timeout, max_retries,
+                    created_at, updated_at
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?,
+                    COALESCE((SELECT created_at FROM agent_llm_configs WHERE agent_id = ?), ?),
+                    ?
+                );
+                """,
+                (
+                    norm_id,
+                    json.dumps(new_assigned),
+                    temperature,
+                    max_tokens,
+                    timeout,
+                    max_retries,
+                    norm_id,
+                    now_iso,
+                    now_iso,
+                ),
+            )
+            await db.commit()
+
+        return await self.get_agent_llm_config(norm_id)
+
+    async def reset_agent_llm_config(self, agent_id: str | AgentID) -> AgentLLMConfig:
+        """Reset an agent's LLM configuration to its factory default chain."""
+        await self.init_db()
+        norm_id = normalize_agent_id(agent_id)
+        now_iso = datetime.now(UTC).isoformat()
+        default_chain = DEFAULT_AGENT_CHAINS.get(norm_id)
+
+        if default_chain:
+            assigned = [
+                {"model_id": mid, "enabled": enabled, "priority": priority}
+                for mid, enabled, priority in default_chain["assigned"]
+            ]
+            temp = float(default_chain.get("temperature", 0.2))
+            tokens = int(default_chain.get("max_tokens", 4096))
+        else:
+            assigned = [
+                {"model_id": "gemini-3.6-flash", "enabled": True, "priority": 1},
+                {"model_id": "gemini-3.5-flash-lite", "enabled": True, "priority": 2},
+            ]
+            temp = 0.2
+            tokens = 4096
+
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO agent_llm_configs (
+                    agent_id, assigned_models, temperature, max_tokens, timeout, max_retries,
+                    created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+                """,
+                (
+                    norm_id,
+                    json.dumps(assigned),
+                    temp,
+                    tokens,
+                    60,
+                    1,
+                    now_iso,
+                    now_iso,
+                ),
+            )
+            await db.commit()
+
+        return await self.get_agent_llm_config(norm_id)

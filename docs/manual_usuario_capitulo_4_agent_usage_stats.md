@@ -154,5 +154,8 @@ Una de las mayores utilidades de esta pantalla para un Director de Proyecto o Fo
 - **¿Qué diferencia hay entre esta pestaña y «💰 Token & Cost Monitor»?**  
   **Agent Usage & Stats** se centra en la *eficiencia y rendimiento humano/operativo* de los 13 especialistas (tiempos, aprobaciones, número de llamadas y reparto de trabajo). En cambio, la pestaña siguiente (*💰 Token & Cost Monitor*) se enfoca exclusivamente en la *contabilidad financiera*: desglose de gasto en dólares, modelos de lenguaje utilizados y cálculo exacto del dinero ahorrado.
 
+- **¿Qué modelos de IA utiliza cada especialista y cómo funciona el fallback ante caídas?**  
+  Cada especialista cuenta con una **cadena de modelos asignados por prioridad (LLM Chain)** configurada en `app/services/office_store.py`. Si el modelo primario sufre un límite de tasa (*Rate Limit / HTTP 429*) o indisponibilidad temporal, el **LLM Gateway** conmuta en milisegundos al siguiente modelo de la cadena (ej. saltando de Gemini a Groq o Mistral) sin interrumpir el pipeline. Consulta la matriz detallada en [matriz_modelos_ia_agentes.md](file:///c:/Proyectos%20Docker/agentoffice/langGraph/docs/matriz_modelos_ia_agentes.md).
+
 - **¿Qué debo hacer si un agente permanece en estado «BLOCKED»?**  
   Un estado **`BLOCKED`** significa que el agente de seguridad (CISO) o los tests de calidad vetaron la entrega por detectar vulnerabilidades o errores críticos. Dirígete a la pestaña **`🧠 Agent Thoughts`**, selecciona el agente bloqueado y lee el apartado de correcciones exigidas para conocer los detalles del bloqueo.

@@ -51,6 +51,8 @@ _ALLOWED_DB_TABLES = {
     "chat_sessions",
     "brownfield_audits",
     "whatsapp_sessions",
+    "llm_models_catalog",
+    "agent_llm_configs",
 }
 
 # Official 13 agents of the LangGraph factory (in pipeline sequence)

@@ -307,6 +307,7 @@ function _loadTabContent(tabName) {
   if (tabName === 'chat')  _loadChatHistory();
   if (tabName === 'logs')  _loadLogs();
   if (tabName === 'files') _loadFiles();
+  if (tabName === 'models') _loadModelsTab();
 }
 
 // ── Chat Tab ──────────────────────────────────────────────────────────────
@@ -1064,6 +1065,504 @@ async function _openFileEditModal(initialFilePath = '') {
   });
 }
 
+// ── Models & LLM Routing Tab (PASO 5) ──────────────────────────────────────
+
+/** @type {object|null} Active agent's loaded LLM config */
+let _currentAgentLLMConfig = null;
+/** @type {Array<object>} Global catalog of models */
+let _globalCatalog = [];
+/** @type {Record<string, object>} Cached ping results per model_id */
+let _pingStatuses = {};
+
+async function _loadModelsTab() {
+  const targetAgent = _currentAgent;
+  const listEl = $id('agent-models-list');
+  const bannerEl = $id('chain-ping-banner');
+  if (bannerEl) bannerEl.classList.add('hidden');
+
+  if (!targetAgent) {
+    if (listEl) {
+      listEl.innerHTML = `
+        <div class="chat-placeholder" style="padding:20px;text-align:center;">
+          <div class="placeholder-icon">🤖</div>
+          <div style="font-family:var(--font-mono);font-size:11px;color:#cbd5e1;margin-bottom:8px;">
+            SELECCIONA UN AGENTE PARA CONFIGURAR SUS MODELOS LLM
+          </div>
+          <div style="font-size:9px;color:#94a3b8;line-height:1.5;">
+            Haz clic en cualquier agente en la oficina 2D o usa el acceso rápido a continuación:
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;justify-content:center;">
+            ${AGENTS.map((a) => `<button class="pixel-btn secondary btn-pick-agent" data-agent="${_esc(a.id)}" style="font-size:8px;padding:3px 6px;">${a.icon} ${a.name}</button>`).join('')}
+          </div>
+        </div>
+      `;
+      listEl.querySelectorAll('.btn-pick-agent').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const aid = /** @type {HTMLElement} */ (btn).dataset.agent;
+          const found = AGENTS.find((a) => a.id === aid);
+          if (found) _openPanel(found, _getEffectiveProjectId());
+        });
+      });
+    }
+    return;
+  }
+
+  if (listEl) {
+    listEl.innerHTML = `
+      <div style="padding:16px;text-align:center;font-family:var(--font-mono);font-size:10px;color:#06b6d4;">
+        ⏳ Cargando catálogo y modelos para ${_esc(targetAgent.name)}...
+      </div>
+    `;
+  }
+
+  try {
+    const [catalog, config] = await Promise.all([
+      API.getLLMCatalog(),
+      API.getAgentLLMConfig(targetAgent.id),
+    ]);
+    _globalCatalog = catalog || [];
+    _currentAgentLLMConfig = config;
+    _renderModelsTab();
+  } catch (err) {
+    if (listEl) {
+      listEl.innerHTML = `
+        <div class="chain-banner error">
+          Error al cargar configuración LLM: ${_esc(err.message || err)}
+        </div>
+      `;
+    }
+  }
+}
+
+function _renderModelsTab() {
+  if (!_currentAgentLLMConfig) return;
+
+  // 1. Populate agent global params
+  const tempSlider = /** @type {HTMLInputElement|null} */ ($id('param-temperature'));
+  const tempVal = $id('val-temperature');
+  const tokensInput = /** @type {HTMLInputElement|null} */ ($id('param-max-tokens'));
+  const timeoutInput = /** @type {HTMLInputElement|null} */ ($id('param-timeout'));
+  const retriesInput = /** @type {HTMLInputElement|null} */ ($id('param-max-retries'));
+
+  if (tempSlider) tempSlider.value = String(_currentAgentLLMConfig.temperature ?? 0.2);
+  if (tempVal) tempVal.textContent = String(_currentAgentLLMConfig.temperature ?? 0.2);
+  if (tokensInput) tokensInput.value = String(_currentAgentLLMConfig.max_tokens ?? 4096);
+  if (timeoutInput) timeoutInput.value = String(_currentAgentLLMConfig.timeout ?? 60);
+  if (retriesInput) retriesInput.value = String(_currentAgentLLMConfig.max_retries ?? 1);
+
+  // 2. Populate add model dropdown
+  const selectEl = /** @type {HTMLSelectElement|null} */ ($id('select-add-model'));
+  if (selectEl) {
+    const assignedIds = new Set((_currentAgentLLMConfig.assigned_models || []).map((m) => m.model_id));
+    const available = _globalCatalog.filter((m) => !assignedIds.has(m.model_id));
+    let opts = '<option value="">+ Seleccionar modelo del catálogo...</option>';
+    available.forEach((m) => {
+      opts += `<option value="${_esc(m.model_id)}">${_esc(m.display_name)} (${_esc(m.provider.toUpperCase())} · ${_esc(m.tier.toUpperCase())})</option>`;
+    });
+    selectEl.innerHTML = opts;
+  }
+
+  // 3. Render assigned models list
+  const listEl = $id('agent-models-list');
+  if (!listEl) return;
+
+  const assigned = _currentAgentLLMConfig.assigned_models || [];
+  if (assigned.length === 0) {
+    listEl.innerHTML = '<div style="padding:10px;font-size:9px;color:#94a3b8;font-family:var(--font-mono);">No hay modelos vinculados a este agente. Añade uno del catálogo.</div>';
+    return;
+  }
+
+  let enabledCounter = 0;
+  const cardsHtml = assigned.map((item, idx) => {
+    let roleLabel = '[INACTIVO]';
+    let roleClass = 'role-inactive';
+    let cardClass = 'model-row-card disabled-card';
+
+    if (item.enabled) {
+      enabledCounter++;
+      if (enabledCounter === 1) {
+        roleLabel = '[PRIMARIO]';
+        roleClass = 'role-primary';
+        cardClass = 'model-row-card primary-card';
+      } else {
+        roleLabel = `[FALLBACK ${enabledCounter - 1}]`;
+        roleClass = 'role-fallback';
+        cardClass = 'model-row-card fallback-card';
+      }
+    }
+
+    const tierBadge = item.tier === 'paid'
+      ? '<span class="meta-badge badge-paid">PAID</span>'
+      : '<span class="meta-badge badge-free">FREE</span>';
+
+    const keyBadge = item.has_api_key
+      ? '<span class="meta-badge badge-key-ok">KEY OK</span>'
+      : '<span class="meta-badge badge-key-missing">SIN KEY</span>';
+
+    // Ping status badge
+    let pingBadgeHtml = '';
+    const pStatus = _pingStatuses[item.model_id];
+    if (pStatus) {
+      if (pStatus.loading) {
+        pingBadgeHtml = '<span class="ping-result-badge loading">Probando...</span>';
+      } else if (pStatus.success) {
+        pingBadgeHtml = `<span class="ping-result-badge ok">🟢 OK · ${pStatus.latency_ms || 0} ms</span>`;
+      } else if (pStatus.status === 'rate_limited') {
+        pingBadgeHtml = '<span class="ping-result-badge rate-limited">🟡 429 Cuota Agotada</span>';
+      } else {
+        const errLabel = pStatus.status === 'missing_api_key' ? 'Sin API Key' : (pStatus.status === 'timeout' ? 'Timeout' : 'Error');
+        pingBadgeHtml = `<span class="ping-result-badge error">🔴 ${errLabel}</span>`;
+      }
+    }
+
+    const upDisabled = idx === 0 ? 'disabled' : '';
+    const downDisabled = idx === assigned.length - 1 ? 'disabled' : '';
+
+    return `
+      <div class="${cardClass}" data-model="${_esc(item.model_id)}" data-idx="${idx}">
+        <div class="model-row-top">
+          <span class="model-role-badge ${roleClass}">${roleLabel}</span>
+          <div class="model-info-group">
+            <span class="model-name-text" title="${_esc(item.model_id)}">${_esc(item.display_name || item.model_id)}</span>
+            <span class="model-provider-tag">${_esc(item.provider || 'custom')}</span>
+          </div>
+          <div class="model-meta-badges">
+            ${tierBadge}
+            ${keyBadge}
+          </div>
+        </div>
+        <div class="model-row-bottom">
+          <div class="model-row-controls">
+            <label class="model-toggle-label">
+              <input type="checkbox" class="model-active-toggle" data-idx="${idx}" ${item.enabled ? 'checked' : ''}>
+              <span>${item.enabled ? 'ACTIVO' : 'APAGADO'}</span>
+            </label>
+            <div class="reorder-btns">
+              <button class="pixel-btn icon btn-arrow btn-move-up" data-idx="${idx}" ${upDisabled} title="Subir prioridad">▲</button>
+              <button class="pixel-btn icon btn-arrow btn-move-down" data-idx="${idx}" ${downDisabled} title="Bajar prioridad">▼</button>
+            </div>
+            <button class="pixel-btn icon btn-arrow btn-remove-model" data-idx="${idx}" title="Quitar de este agente" style="color:#ef4444;">✕</button>
+          </div>
+          <div class="model-ping-group">
+            ${pingBadgeHtml}
+            <button class="pixel-btn secondary btn-ping-model" data-model="${_esc(item.model_id)}" style="font-size:7px;padding:2px 6px;">
+              ⚡ Ping
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  listEl.innerHTML = cardsHtml;
+
+  // 4. Attach event listeners on cards
+  listEl.querySelectorAll('.model-active-toggle').forEach((cb) => {
+    cb.addEventListener('change', (e) => {
+      const idx = parseInt(/** @type {HTMLInputElement} */ (e.target).dataset.idx || '0', 10);
+      if (_currentAgentLLMConfig.assigned_models[idx]) {
+        _currentAgentLLMConfig.assigned_models[idx].enabled = /** @type {HTMLInputElement} */ (e.target).checked;
+        _renderModelsTab();
+      }
+    });
+  });
+
+  listEl.querySelectorAll('.btn-move-up').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(/** @type {HTMLElement} */ (e.target).dataset.idx || '0', 10);
+      if (idx > 0) {
+        const arr = _currentAgentLLMConfig.assigned_models;
+        const temp = arr[idx];
+        arr[idx] = arr[idx - 1];
+        arr[idx - 1] = temp;
+        arr.forEach((m, i) => { m.priority = i + 1; });
+        _renderModelsTab();
+      }
+    });
+  });
+
+  listEl.querySelectorAll('.btn-move-down').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(/** @type {HTMLElement} */ (e.target).dataset.idx || '0', 10);
+      const arr = _currentAgentLLMConfig.assigned_models;
+      if (idx < arr.length - 1) {
+        const temp = arr[idx];
+        arr[idx] = arr[idx + 1];
+        arr[idx + 1] = temp;
+        arr.forEach((m, i) => { m.priority = i + 1; });
+        _renderModelsTab();
+      }
+    });
+  });
+
+  listEl.querySelectorAll('.btn-remove-model').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      const idx = parseInt(/** @type {HTMLElement} */ (e.target).dataset.idx || '0', 10);
+      _currentAgentLLMConfig.assigned_models.splice(idx, 1);
+      _currentAgentLLMConfig.assigned_models.forEach((m, i) => { m.priority = i + 1; });
+      _renderModelsTab();
+    });
+  });
+
+  listEl.querySelectorAll('.btn-ping-model').forEach((btn) => {
+    btn.addEventListener('click', async (e) => {
+      const modelId = /** @type {HTMLElement} */ (e.target).dataset.model;
+      if (!modelId) return;
+
+      _pingStatuses[modelId] = { loading: true };
+      _renderModelsTab();
+
+      try {
+        const res = await API.pingLLMModel(modelId);
+        _pingStatuses[modelId] = res;
+      } catch (err) {
+        _pingStatuses[modelId] = {
+          success: false,
+          status: 'provider_error',
+          message: err.message || 'Error de conexión',
+        };
+      }
+      _renderModelsTab();
+    });
+  });
+}
+
+function _initModelsTabEvents() {
+  // Temperature slider real-time label update
+  $id('param-temperature')?.addEventListener('input', (e) => {
+    const valEl = $id('val-temperature');
+    if (valEl) valEl.textContent = /** @type {HTMLInputElement} */ (e.target).value;
+  });
+
+  // Test full agent chain
+  $id('btn-ping-chain')?.addEventListener('click', async () => {
+    if (!_currentAgent) return;
+    const btn = $id('btn-ping-chain');
+    const banner = $id('chain-ping-banner');
+
+    if (btn) {
+      btn.textContent = '⏳ PROBANDO...';
+      btn.setAttribute('disabled', 'true');
+    }
+    if (banner) {
+      banner.className = 'chain-banner warning';
+      banner.innerHTML = '⚡ Verificando todos los modelos activos en orden de prioridad...';
+      banner.classList.remove('hidden');
+    }
+
+    try {
+      const res = await API.pingAgentLLMChain(_currentAgent.id);
+
+      if (res.chain_status && Array.isArray(res.chain_status)) {
+        res.chain_status.forEach((link) => {
+          if (link.model_id && link.ping_result) {
+            _pingStatuses[link.model_id] = link.ping_result;
+          }
+        });
+      }
+
+      if (banner) {
+        if (res.all_ok) {
+          banner.className = 'chain-banner success';
+          banner.innerHTML = `🟢 <strong>Cadena Operativa:</strong> Responderá <code>${_esc(res.effective_model_id)}</code> (${_esc(res.effective_provider?.toUpperCase())})`;
+        } else {
+          banner.className = 'chain-banner error';
+          banner.innerHTML = '🔴 <strong>Fallo en la Cadena:</strong> Ningún modelo respondió con éxito. Verifica tus API keys en el entorno.';
+        }
+      }
+      _renderModelsTab();
+    } catch (err) {
+      if (banner) {
+        banner.className = 'chain-banner error';
+        banner.innerHTML = `🔴 Error al probar la cadena: ${_esc(err.message || err)}`;
+      }
+    } finally {
+      if (btn) {
+        btn.textContent = '⚡ PROBAR CADENA';
+        btn.removeAttribute('disabled');
+      }
+    }
+  });
+
+  // Add model from catalog selector
+  $id('btn-add-model-to-agent')?.addEventListener('click', () => {
+    const selectEl = /** @type {HTMLSelectElement|null} */ ($id('select-add-model'));
+    if (!selectEl || !selectEl.value || !_currentAgentLLMConfig) return;
+
+    const mid = selectEl.value;
+    const catModel = _globalCatalog.find((m) => m.model_id === mid);
+    const newPriority = (_currentAgentLLMConfig.assigned_models || []).length + 1;
+
+    _currentAgentLLMConfig.assigned_models.push({
+      model_id: mid,
+      enabled: true,
+      priority: newPriority,
+      display_name: catModel ? catModel.display_name : mid,
+      provider: catModel ? catModel.provider : 'custom',
+      tier: catModel ? catModel.tier : 'free',
+      has_api_key: catModel ? catModel.has_api_key : false,
+    });
+
+    _renderModelsTab();
+  });
+
+  // Save Agent Configuration
+  $id('btn-save-llm-config')?.addEventListener('click', async () => {
+    if (!_currentAgent || !_currentAgentLLMConfig) return;
+    const btn = $id('btn-save-llm-config');
+    const banner = $id('chain-ping-banner');
+
+    const tempSlider = /** @type {HTMLInputElement|null} */ ($id('param-temperature'));
+    const tokensInput = /** @type {HTMLInputElement|null} */ ($id('param-max-tokens'));
+    const timeoutInput = /** @type {HTMLInputElement|null} */ ($id('param-timeout'));
+    const retriesInput = /** @type {HTMLInputElement|null} */ ($id('param-max-retries'));
+
+    const payload = {
+      assigned_models: _currentAgentLLMConfig.assigned_models,
+      temperature: tempSlider ? parseFloat(tempSlider.value) : 0.2,
+      max_tokens: tokensInput ? parseInt(tokensInput.value, 10) : 4096,
+      timeout: timeoutInput ? parseInt(timeoutInput.value, 10) : 60,
+      max_retries: retriesInput ? parseInt(retriesInput.value, 10) : 1,
+    };
+
+    if (btn) {
+      btn.textContent = '⏳ GUARDANDO...';
+      btn.setAttribute('disabled', 'true');
+    }
+
+    try {
+      const saved = await API.saveAgentLLMConfig(_currentAgent.id, payload);
+      _currentAgentLLMConfig = saved;
+      _renderModelsTab();
+      if (banner) {
+        banner.className = 'chain-banner success';
+        banner.innerHTML = '💾 <strong>Configuración guardada en caliente.</strong> Persistida en SQLite.';
+        banner.classList.remove('hidden');
+        setTimeout(() => banner.classList.add('hidden'), 4000);
+      }
+    } catch (err) {
+      if (banner) {
+        banner.className = 'chain-banner error';
+        banner.innerHTML = `🔴 Error al guardar: ${_esc(err.message || err)}`;
+        banner.classList.remove('hidden');
+      }
+    } finally {
+      if (btn) {
+        btn.textContent = '💾 GUARDAR CONFIG';
+        btn.removeAttribute('disabled');
+      }
+    }
+  });
+
+  // Reset to default configuration
+  $id('btn-reset-llm-config')?.addEventListener('click', async () => {
+    if (!_currentAgent) return;
+    if (!confirm(`¿Restablecer la cadena de ${_currentAgent.name} a los valores recomendados de fábrica?`)) return;
+
+    try {
+      const def = await API.resetAgentLLMConfig(_currentAgent.id);
+      _currentAgentLLMConfig = def;
+      _pingStatuses = {};
+      _renderModelsTab();
+      const banner = $id('chain-ping-banner');
+      if (banner) {
+        banner.className = 'chain-banner success';
+        banner.innerHTML = '↺ Cadena restablecida a valores recomendados de fábrica.';
+        banner.classList.remove('hidden');
+        setTimeout(() => banner.classList.add('hidden'), 4000);
+      }
+    } catch (err) {
+      alert(`Error al restablecer: ${err.message || err}`);
+    }
+  });
+
+  // Toggle New Model Drawer
+  $id('btn-toggle-new-model')?.addEventListener('click', () => {
+    const drawer = $id('new-model-drawer');
+    drawer?.classList.toggle('hidden');
+  });
+
+  $id('btn-close-new-model')?.addEventListener('click', () => {
+    $id('new-model-drawer')?.classList.add('hidden');
+  });
+
+  // Ping new model before registering
+  $id('btn-ping-new-model')?.addEventListener('click', async () => {
+    const modelId = /** @type {HTMLInputElement|null} */ ($id('new-model-id'))?.value.trim();
+    const resultSpan = $id('new-model-ping-result');
+    if (!modelId) {
+      alert('Introduce un Model ID primero.');
+      return;
+    }
+
+    if (resultSpan) {
+      resultSpan.className = 'ping-result-badge loading';
+      resultSpan.textContent = 'Probando conexión...';
+    }
+
+    try {
+      const res = await API.pingLLMModel(modelId);
+      if (resultSpan) {
+        if (res.success) {
+          resultSpan.className = 'ping-result-badge ok';
+          resultSpan.textContent = `🟢 OK · ${res.latency_ms} ms`;
+        } else if (res.status === 'rate_limited') {
+          resultSpan.className = 'ping-result-badge rate-limited';
+          resultSpan.textContent = '🟡 429 Cuota Agotada';
+        } else {
+          resultSpan.className = 'ping-result-badge error';
+          resultSpan.textContent = `🔴 ${res.status === 'missing_api_key' ? 'Sin API Key' : res.status}`;
+        }
+      }
+    } catch (err) {
+      if (resultSpan) {
+        resultSpan.className = 'ping-result-badge error';
+        resultSpan.textContent = '🔴 Fallo de conexión';
+      }
+    }
+  });
+
+  // Create Catalog Model
+  $id('btn-create-catalog-model')?.addEventListener('click', async () => {
+    const idInput = /** @type {HTMLInputElement|null} */ ($id('new-model-id'));
+    const nameInput = /** @type {HTMLInputElement|null} */ ($id('new-model-name'));
+    const provSelect = /** @type {HTMLSelectElement|null} */ ($id('new-model-provider'));
+    const urlInput = /** @type {HTMLInputElement|null} */ ($id('new-model-base-url'));
+    const envInput = /** @type {HTMLInputElement|null} */ ($id('new-model-env'));
+    const tierSelect = /** @type {HTMLSelectElement|null} */ ($id('new-model-tier'));
+
+    if (!idInput || !idInput.value.trim() || !nameInput || !nameInput.value.trim() || !envInput || !envInput.value.trim()) {
+      alert('Por favor completa Model ID, Nombre y Env API Key.');
+      return;
+    }
+
+    const payload = {
+      model_id: idInput.value.trim(),
+      display_name: nameInput.value.trim(),
+      provider: provSelect ? provSelect.value : 'custom',
+      base_url: urlInput && urlInput.value.trim() ? urlInput.value.trim() : null,
+      api_key_env: envInput.value.trim(),
+      tier: tierSelect ? tierSelect.value : 'free',
+      default_temperature: 0.2,
+      default_max_tokens: 4096,
+      is_active: true,
+    };
+
+    try {
+      const created = await API.createLLMModel(payload);
+      _globalCatalog.push(created);
+      alert(`¡Modelo '${created.display_name}' registrado en el catálogo con éxito!`);
+      $id('new-model-drawer')?.classList.add('hidden');
+      idInput.value = '';
+      nameInput.value = '';
+      if (urlInput) urlInput.value = '';
+      _renderModelsTab();
+    } catch (err) {
+      alert(`Error al crear modelo: ${err.message || err}`);
+    }
+  });
+}
+
 // ── Chat Send ─────────────────────────────────────────────────────────────
 
 function _initChatInput() {
@@ -1235,6 +1734,7 @@ export function initPanel() {
 
   _initChatInput();
   _initDockAndFAB();
+  _initModelsTabEvents();
 
   // URL Query Parameters support for quick deep linking / automated testing
   const urlParams = new URLSearchParams(window.location.search);
