@@ -11,8 +11,13 @@ from app.graph.router import (
     route_after_architect,
     route_after_ceo_signoff,
     route_after_ciso,
+    route_after_docs,
+    route_after_docs_legacy,
+    route_after_growth,
+    route_after_marketing,
     route_after_qa_php,
     route_after_qa_python,
+    route_after_sales_analytics,
     route_after_sync_barrier,
     route_after_ui_ux,
 )
@@ -37,8 +42,13 @@ __all__ = [
     "route_after_architect",
     "route_after_ceo_signoff",
     "route_after_ciso",
+    "route_after_docs",
+    "route_after_docs_legacy",
+    "route_after_growth",
+    "route_after_marketing",
     "route_after_qa_php",
     "route_after_qa_python",
+    "route_after_sales_analytics",
     "route_after_sync_barrier",
     "route_after_ui_ux",
 ]
@@ -87,7 +97,7 @@ def compile_factory_graph(
         builder.add_conditional_edges(AgentID.QA_SYNC_BARRIER.value, route_after_sync_barrier)
         builder.add_edge(AgentID.AGENTE_07_DEVOPS.value, AgentID.AGENTE_10_CISO.value)
         builder.add_conditional_edges(AgentID.AGENTE_10_CISO.value, route_after_ciso)
-        builder.add_edge(AgentID.AGENTE_08_DOCS.value, AgentID.AGENTE_09_GROWTH.value)
+        builder.add_conditional_edges(AgentID.AGENTE_08_DOCS.value, route_after_docs_legacy)
         builder.add_edge(AgentID.AGENTE_09_GROWTH.value, END)
 
         return builder.compile(checkpointer=checkpointer)
@@ -105,6 +115,7 @@ def compile_factory_graph(
     builder.add_node(AgentID.AGENTE_07_DEVOPS.value, nodes.node_07_devops)
     builder.add_node(AgentID.AGENTE_10_CISO.value, nodes.node_10_ciso)
     builder.add_node(AgentID.AGENTE_08_DOCS.value, nodes.node_08_docs)
+    builder.add_node(AgentID.AGENTE_09_GROWTH.value, nodes.node_09_growth)
     builder.add_node(AgentID.AGENTE_12_MARKETING.value, nodes.marketing_node)
     builder.add_node(AgentID.AGENTE_13_SALES_ANALYTICS.value, nodes.sales_analytics_node)
     builder.add_node(NODE_CEO_SIGNOFF, nodes.ceo_signoff_node)
@@ -144,10 +155,14 @@ def compile_factory_graph(
     # 10. CISO conditional multi-directional routing
     builder.add_conditional_edges(AgentID.AGENTE_10_CISO.value, route_after_ciso)
 
-    # 11. Terminal sequence: Docs -> Marketing -> Sales Analytics -> CEO Signoff -> END/Rework
-    builder.add_edge(AgentID.AGENTE_08_DOCS.value, AgentID.AGENTE_12_MARKETING.value)
-    builder.add_edge(AgentID.AGENTE_12_MARKETING.value, AgentID.AGENTE_13_SALES_ANALYTICS.value)
-    builder.add_edge(AgentID.AGENTE_13_SALES_ANALYTICS.value, NODE_CEO_SIGNOFF)
+    # 11. Terminal sequence with dynamic multi-project marketing routing
+    builder.add_conditional_edges(AgentID.AGENTE_08_DOCS.value, route_after_docs)
+    builder.add_conditional_edges(AgentID.AGENTE_09_GROWTH.value, route_after_growth)
+    builder.add_conditional_edges(AgentID.AGENTE_12_MARKETING.value, route_after_marketing)
+    builder.add_conditional_edges(
+        AgentID.AGENTE_13_SALES_ANALYTICS.value,
+        route_after_sales_analytics,
+    )
     builder.add_conditional_edges(NODE_CEO_SIGNOFF, route_after_ceo_signoff)
 
     return builder.compile(checkpointer=checkpointer)

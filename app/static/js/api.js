@@ -21,15 +21,32 @@ const API = {
   },
 
   /**
-   * Create a new Greenfield project from an idea.
+   * Alias for listProjects to ensure compatibility across modules.
+   * @returns {Promise<{total: number, projects: Array<object>}>}
+   */
+  async getProjects() {
+    return this.listProjects();
+  },
+
+  /**
+   * Create a new Greenfield project from an idea, optionally configuring marketing.
    * @param {string} idea
+   * @param {boolean|null} [marketingEnabled=null]
+   * @param {string|null} [marketingType=null]
    * @returns {Promise<{project_id: string, status: string}>}
    */
-  async createProject(idea) {
+  async createProject(idea, marketingEnabled = null, marketingType = null) {
+    const payload = { idea_inicial: idea };
+    if (marketingEnabled !== null && marketingEnabled !== undefined) {
+      payload.marketing_enabled = Boolean(marketingEnabled);
+    }
+    if (marketingType) {
+      payload.marketing_type = String(marketingType);
+    }
     const r = await fetch(`${BASE}/api/v1/projects`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idea_inicial: idea }),
+      body: JSON.stringify(payload),
     });
     if (!r.ok) {
       const txt = await r.text().catch(() => '');
@@ -469,6 +486,162 @@ const API = {
     if (!r.ok) {
       const err = await r.json().catch(() => ({}));
       throw new Error(err.detail || `pingAgentLLMChain: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
+
+  // ── Marketing Multi-Project, Multi-Channel & On-Demand ───────────────────
+
+  /**
+   * Get available marketing presets, channels catalog, and tools catalog.
+   * @returns {Promise<{available_types: string[], channels_catalog: Array<object>, tools_catalog: Array<object>}>}
+   */
+  async getMarketingPresets() {
+    const r = await fetch(`${BASE}/api/office/marketing/presets`);
+    if (!r.ok) throw new Error(`getMarketingPresets: HTTP ${r.status}`);
+    return r.json();
+  },
+
+  /**
+   * List all projects with marketing overview.
+   * @returns {Promise<Array<{project_id: string, project_name: string|null, marketing_enabled: boolean, marketing_type: string, active_channels_count: number, last_execution_status: string|null, last_executed_at: string|null}>>}
+   */
+  async getMarketingProjects() {
+    const r = await fetch(`${BASE}/api/office/marketing/projects`);
+    if (!r.ok) throw new Error(`getMarketingProjects: HTTP ${r.status}`);
+    return r.json();
+  },
+
+  /**
+   * Get complete ProjectMarketingProfile for a specific project.
+   * @param {string} projectId
+   * @returns {Promise<object>}
+   */
+  async getProjectMarketingConfig(projectId) {
+    const r = await fetch(`${BASE}/api/office/marketing/projects/${encodeURIComponent(projectId)}`);
+    if (!r.ok) throw new Error(`getProjectMarketingConfig: HTTP ${r.status}`);
+    return r.json();
+  },
+
+  /**
+   * Save / update complete ProjectMarketingProfile.
+   * @param {string} projectId
+   * @param {object} profilePayload
+   * @returns {Promise<object>}
+   */
+  async saveProjectMarketingConfig(projectId, profilePayload) {
+    const r = await fetch(`${BASE}/api/office/marketing/projects/${encodeURIComponent(projectId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profilePayload),
+    });
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `saveProjectMarketingConfig: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
+
+  /**
+   * Apply a marketing preset to a project retaining existing credentials.
+   * @param {string} projectId
+   * @param {string} marketingType
+   * @returns {Promise<object>}
+   */
+  async applyProjectMarketingPreset(projectId, marketingType) {
+    const r = await fetch(
+      `${BASE}/api/office/marketing/projects/${encodeURIComponent(projectId)}/apply-preset/${encodeURIComponent(marketingType)}`,
+      { method: 'POST' }
+    );
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `applyProjectMarketingPreset: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
+
+  /**
+   * Test connection and credentials for a specific marketing tool.
+   * @param {string} projectId
+   * @param {string} toolId
+   * @param {object} [payload=null]
+   * @returns {Promise<{project_id: string, tool_id: string, success: boolean, status: string, latency_ms: number, message: string, details?: object}>}
+   */
+  async testProjectMarketingTool(projectId, toolId, payload = null) {
+    const options = { method: 'POST' };
+    if (payload) {
+      options.headers = { 'Content-Type': 'application/json' };
+      options.body = JSON.stringify(payload);
+    }
+    const r = await fetch(
+      `${BASE}/api/office/marketing/projects/${encodeURIComponent(projectId)}/test-tool/${encodeURIComponent(toolId)}`,
+      options
+    );
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `testProjectMarketingTool: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
+
+  /**
+   * Execute on-demand marketing cycle for a project.
+   * @param {string} projectId
+   * @param {object} [payload=null]
+   * @returns {Promise<{project_id: string, status: string, marketing_type: string, executed_nodes: string[], artifacts_created: string[], actions_dispatched: object[], profile: object, message: string}>}
+   */
+  async executeProjectMarketingNow(projectId, payload = null) {
+    const options = { method: 'POST' };
+    if (payload) {
+      options.headers = { 'Content-Type': 'application/json' };
+      options.body = JSON.stringify(payload);
+    }
+    const r = await fetch(
+      `${BASE}/api/office/marketing/projects/${encodeURIComponent(projectId)}/execute`,
+      options
+    );
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `executeProjectMarketingNow: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
+
+  /**
+   * Get dynamic n8n workflow JSON for a project.
+   * @param {string} projectId
+   * @returns {Promise<object>}
+   */
+  async getProjectN8NWorkflow(projectId) {
+    const r = await fetch(
+      `${BASE}/api/office/marketing/projects/${encodeURIComponent(projectId)}/n8n-workflow`
+    );
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `getProjectN8NWorkflow: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
+
+  /**
+   * Provision n8n workflow for a project via n8n REST API.
+   * @param {string} projectId
+   * @param {object} [payload=null]
+   * @returns {Promise<{status: string, project_id: string, workflow_id: string, webhook_url: string, n8n_base_url: string, live_n8n_connected: boolean, active_channels: string[], message: string, api_error?: string}>}
+   */
+  async provisionProjectN8NWorkflow(projectId, payload = null) {
+    const options = { method: 'POST' };
+    if (payload) {
+      options.headers = { 'Content-Type': 'application/json' };
+      options.body = JSON.stringify(payload);
+    }
+    const r = await fetch(
+      `${BASE}/api/office/marketing/projects/${encodeURIComponent(projectId)}/n8n-provision`,
+      options
+    );
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `provisionProjectN8NWorkflow: HTTP ${r.status}`);
     }
     return r.json();
   },

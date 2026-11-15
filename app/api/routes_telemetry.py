@@ -99,6 +99,10 @@ def _get_compiled_agents_count() -> tuple[int, int]:
                 for k in graph.nodes
                 if k.startswith("agente_")
             }
+            if "agente_09_growth" in agent_nodes and len(agent_nodes) > 13:
+                core_nodes = {a for a in agent_nodes if a != "agente_09_growth"}
+                count = len(core_nodes)
+                return (count, count)
             count = len(agent_nodes) if agent_nodes else 13
             return (count, count)
     except Exception:

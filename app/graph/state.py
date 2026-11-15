@@ -59,6 +59,9 @@ class SoftwareFactoryState(TypedDict):
     ceo_blocked: NotRequired[bool]
     ceo_culprit: NotRequired[AgentID | None]
     zero_touch_violations: NotRequired[list[str]]
+    _office_db_path: NotRequired[str | None]
+    marketing_enabled: NotRequired[bool | None]
+    marketing_type: NotRequired[str | None]
     retry_counts: Annotated[dict[str, int], merge_retry_counts]
     execution_history: Annotated[list[StepExecutionRecord], append_execution_records]
 

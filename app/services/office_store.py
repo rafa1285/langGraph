@@ -1,7 +1,9 @@
 """Persistent SQLite storage for agent conversations, internal emails, and telemetry."""
 
 import json
+import logging
 import os
+import sqlite3
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -22,8 +24,17 @@ from app.schemas.office import (
     LLMModelCatalogCreate,
     LLMModelCatalogItem,
     LLMModelCatalogUpdate,
+    MarketingChannelConfig,
+    MarketingChannelID,
+    MarketingToolID,
+    MarketingToolTestResponse,
+    MarketingType,
+    ProjectMarketingProfile,
+    ProjectMarketingToolConfig,
 )
 from app.schemas.routing import AgentID, DeliverableStatus
+
+logger = logging.getLogger(__name__)
 
 _AGENT_ID_ALIASES: dict[str, str] = {
     "00_ceo": "agente_00_ceo",
@@ -399,6 +410,318 @@ DEFAULT_AGENT_CHAINS: dict[str, dict[str, Any]] = {
     },
 }
 
+MARKETING_CHANNELS_CATALOG: list[dict[str, Any]] = [
+    {
+        "channel_id": "linkedin",
+        "name": "LinkedIn",
+        "account_handle_or_url": "",
+        "credentials": {},
+        "custom_instructions": (
+            "Enfoque B2B corporativo, thought leadership, carruseles y casos de uso."
+        ),
+    },
+    {
+        "channel_id": "x_twitter",
+        "name": "X / Twitter",
+        "account_handle_or_url": "",
+        "credentials": {},
+        "custom_instructions": (
+            "Tono técnico directo, hilos de código, release notes y changelog público."
+        ),
+    },
+    {
+        "channel_id": "instagram_meta",
+        "name": "Instagram / Meta",
+        "account_handle_or_url": "",
+        "credentials": {},
+        "custom_instructions": (
+            "Enfoque visual, infografías, Reels de demostración y stories destacadas."
+        ),
+    },
+    {
+        "channel_id": "tiktok",
+        "name": "TikTok",
+        "account_handle_or_url": "",
+        "credentials": {},
+        "custom_instructions": (
+            "Formato vertical dinámico, hook en los primeros 3 segundos y estilo dev-friendly."
+        ),
+    },
+    {
+        "channel_id": "producthunt",
+        "name": "Product Hunt",
+        "account_handle_or_url": "",
+        "credentials": {},
+        "custom_instructions": (
+            "Lanzamiento con tagline llamativo, primera demo GIF y makers comment estructurado."
+        ),
+    },
+    {
+        "channel_id": "google_ads",
+        "name": "Google Ads",
+        "account_handle_or_url": "",
+        "credentials": {},
+        "custom_instructions": (
+            "Búsqueda transaccional y copy orientado a alta intención de conversión."
+        ),
+    },
+    {
+        "channel_id": "reddit_devto",
+        "name": "Reddit & Dev.to",
+        "account_handle_or_url": "",
+        "credentials": {},
+        "custom_instructions": (
+            "Contenido técnico honesto en comunidades relevantes y zero-spam."
+        ),
+    },
+    {
+        "channel_id": "telegram_discord",
+        "name": "Telegram & Discord",
+        "account_handle_or_url": "",
+        "credentials": {},
+        "custom_instructions": (
+            "Anuncios a la comunidad, alertas tempranas de updates y soporte self-service."
+        ),
+    },
+    {
+        "channel_id": "email_newsletter",
+        "name": "Email Newsletter",
+        "account_handle_or_url": "",
+        "credentials": {},
+        "custom_instructions": (
+            "Bienvenida/onboarding, nutrición de leads técnicos y resúmenes periódicos."
+        ),
+    },
+]
+
+MARKETING_TOOLS_CATALOG: list[dict[str, Any]] = [
+    {
+        "tool_id": "market_research_seo",
+        "name": "Market Research & SEO Scraper",
+        "description": (
+            "Investigación automatizada de palabras clave, competidores y tendencias."
+        ),
+        "credentials": {},
+        "settings": {
+            "competitor_urls": [],
+            "seed_keywords": [],
+            "search_depth": "deep",
+        },
+        "is_configured": True,
+    },
+    {
+        "tool_id": "seo_landing_injector",
+        "name": "SEO Landing & Metadata Injector",
+        "description": (
+            "Generación e inyección de OpenGraph, sitemap.xml, robots.txt y landing pages."
+        ),
+        "credentials": {},
+        "settings": {
+            "domain_url": "",
+            "generate_landing_html": True,
+            "generate_sitemap_robots": True,
+            "target_keywords": [],
+        },
+        "is_configured": True,
+    },
+    {
+        "tool_id": "email_campaign_manager",
+        "name": "Email Campaign & Outreach Manager",
+        "description": (
+            "Secuencias de email marketing, newsletters de captación y onboarding."
+        ),
+        "credentials": {},
+        "settings": {
+            "email_provider": "smtp",
+            "sender_email": "",
+            "sender_name": "",
+            "recipient_list": [],
+            "send_mode": "dry_run",
+        },
+        "is_configured": True,
+    },
+    {
+        "tool_id": "social_ads_publisher",
+        "name": "Social & Ads Campaign Publisher",
+        "description": (
+            "Publicación y gestión de campañas publicitarias en redes y buscadores."
+        ),
+        "credentials": {},
+        "settings": {
+            "target_platforms": ["meta", "google"],
+            "daily_budget_limit": 50,
+            "ad_format": "responsive",
+        },
+        "is_configured": True,
+    },
+]
+
+
+def get_marketing_preset(
+    marketing_type: str | MarketingType,
+    project_id: str = "",
+    project_name: str | None = None,
+) -> ProjectMarketingProfile:
+    """Generate default ProjectMarketingProfile preset based on marketing archetype."""
+    m_type_str = str(marketing_type).lower().strip()
+    valid_types = (
+        "none",
+        "saas_b2b",
+        "b2c_app_ecommerce",
+        "devtools_api",
+        "internal_rollout",
+        "custom",
+    )
+    m_type: MarketingType = cast(
+        MarketingType, m_type_str if m_type_str in valid_types else "saas_b2b"
+    )
+
+    enabled = True
+    include_growth = True
+    include_sales = True
+    active_tools: set[str] = set()
+    active_channels: set[str] = set()
+    brand_voice = "persuasivo-profesional"
+    target_audience = ""
+
+    if m_type == "none":
+        enabled = False
+        include_growth = False
+        include_sales = False
+        active_tools = set()
+        active_channels = set()
+        brand_voice = "neutral"
+        target_audience = "Sin marketing activo"
+
+    elif m_type == "saas_b2b":
+        enabled = True
+        include_growth = True
+        include_sales = True
+        active_tools = {
+            "market_research_seo",
+            "seo_landing_injector",
+            "email_campaign_manager",
+            "social_ads_publisher",
+        }
+        active_channels = {
+            "linkedin",
+            "x_twitter",
+            "producthunt",
+            "google_ads",
+            "email_newsletter",
+        }
+        brand_voice = "persuasivo-profesional"
+        target_audience = "Empresas B2B, fundadores, CTOs y líderes de producto"
+
+    elif m_type == "b2c_app_ecommerce":
+        enabled = True
+        include_growth = True
+        include_sales = True
+        active_tools = {
+            "market_research_seo",
+            "seo_landing_injector",
+            "email_campaign_manager",
+            "social_ads_publisher",
+        }
+        active_channels = {
+            "instagram_meta",
+            "tiktok",
+            "google_ads",
+            "email_newsletter",
+            "x_twitter",
+        }
+        brand_voice = "enérgico-cercano"
+        target_audience = "Consumidores finales, early adopters y usuarios móviles"
+
+    elif m_type == "devtools_api":
+        enabled = True
+        include_growth = True
+        include_sales = True
+        active_tools = {
+            "market_research_seo",
+            "seo_landing_injector",
+            "social_ads_publisher",
+        }
+        active_channels = {
+            "producthunt",
+            "reddit_devto",
+            "x_twitter",
+            "linkedin",
+            "telegram_discord",
+        }
+        brand_voice = "técnico-riguroso"
+        target_audience = "Desarrolladores de software, ingenieros de datos y DevOps"
+
+    elif m_type == "internal_rollout":
+        enabled = True
+        include_growth = False
+        include_sales = False
+        active_tools = {
+            "email_campaign_manager",
+        }
+        active_channels = {
+            "email_newsletter",
+            "telegram_discord",
+        }
+        brand_voice = "claro-formativo"
+        target_audience = "Equipos internos, empleados y stakeholders corporativos"
+
+    elif m_type == "custom":
+        enabled = True
+        include_growth = True
+        include_sales = True
+        active_tools = {
+            "market_research_seo",
+            "seo_landing_injector",
+        }
+        active_channels = {
+            "linkedin",
+            "x_twitter",
+        }
+        brand_voice = "persuasivo-profesional"
+        target_audience = "Audiencia personalizada"
+
+    channels: list[MarketingChannelConfig] = [
+        MarketingChannelConfig(
+            channel_id=cast(MarketingChannelID, ch["channel_id"]),
+            name=ch["name"],
+            enabled=ch["channel_id"] in active_channels,
+            account_handle_or_url=ch.get("account_handle_or_url", ""),
+            credentials=dict(ch.get("credentials", {})),
+            custom_instructions=ch.get("custom_instructions", ""),
+        )
+        for ch in MARKETING_CHANNELS_CATALOG
+    ]
+
+    tools: list[ProjectMarketingToolConfig] = [
+        ProjectMarketingToolConfig(
+            tool_id=cast(MarketingToolID, t["tool_id"]),
+            name=t["name"],
+            description=t["description"],
+            enabled=t["tool_id"] in active_tools,
+            credentials=dict(t.get("credentials", {})),
+            settings=dict(t.get("settings", {})),
+            is_configured=t.get("is_configured", True),
+        )
+        for t in MARKETING_TOOLS_CATALOG
+    ]
+
+    return ProjectMarketingProfile(
+        project_id=project_id,
+        project_name=project_name,
+        marketing_enabled=enabled,
+        include_growth_agent=include_growth,
+        include_sales_analytics_agent=include_sales,
+        marketing_type=m_type,
+        brand_voice=brand_voice,
+        target_audience=target_audience,
+        language="es",
+        channels=channels,
+        tools=tools,
+        last_execution_status="idle" if enabled else "disabled",
+        last_executed_at=None,
+    )
+
 
 class OfficeStore:
     """Async store managing conversations, emails, and telemetry persisted in SQLite."""
@@ -539,6 +862,19 @@ class OfficeStore:
                     updated_at TEXT NOT NULL
                 );
                 """
+            )
+            await db.execute(
+                """
+                CREATE TABLE IF NOT EXISTS project_marketing_configs (
+                    project_id TEXT PRIMARY KEY,
+                    config_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                """
+            )
+            await db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_marketing_updated "
+                "ON project_marketing_configs(updated_at);"
             )
             # Auto-seed catalog if empty
             async with db.execute("SELECT COUNT(*) FROM llm_models_catalog;") as cur:
@@ -1351,3 +1687,180 @@ class OfficeStore:
             await db.commit()
 
         return await self.get_agent_llm_config(norm_id)
+
+    def get_marketing_preset(
+        self,
+        marketing_type: str | MarketingType,
+        project_id: str = "",
+        project_name: str | None = None,
+    ) -> ProjectMarketingProfile:
+        """Helper on store instance to retrieve a marketing archetype preset."""
+        return get_marketing_preset(
+            marketing_type, project_id=project_id, project_name=project_name
+        )
+
+    async def list_marketing_projects(self) -> list[dict[str, Any]]:
+        """List marketing configuration summaries for all registered projects."""
+        await self.init_db()
+        results: list[dict[str, Any]] = []
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            async with db.execute(
+                """
+                SELECT project_id, config_json, updated_at
+                FROM project_marketing_configs
+                ORDER BY updated_at DESC;
+                """
+            ) as cursor:
+                rows = await cursor.fetchall()
+                for pid, c_json, updated_at in rows:
+                    try:
+                        prof = ProjectMarketingProfile.model_validate_json(c_json)
+                        results.append(
+                            {
+                                "project_id": prof.project_id,
+                                "project_name": prof.project_name,
+                                "marketing_enabled": prof.marketing_enabled,
+                                "marketing_type": prof.marketing_type,
+                                "include_growth_agent": prof.include_growth_agent,
+                                "include_sales_analytics_agent": prof.include_sales_analytics_agent,
+                                "active_channels": [
+                                    c.channel_id for c in prof.channels if c.enabled
+                                ],
+                                "active_tools": [t.tool_id for t in prof.tools if t.enabled],
+                                "last_execution_status": prof.last_execution_status,
+                                "last_executed_at": prof.last_executed_at,
+                                "updated_at": updated_at,
+                            }
+                        )
+                    except Exception as exc:
+                        logger.warning("Error parsing marketing profile %s: %s", pid, exc)
+        return results
+
+    async def get_project_marketing_config(
+        self, project_id: str
+    ) -> ProjectMarketingProfile:
+        """Retrieve stored marketing configuration for a project, or default preset."""
+        await self.init_db()
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            async with db.execute(
+                "SELECT config_json FROM project_marketing_configs WHERE project_id = ?;",
+                (project_id,),
+            ) as cursor:
+                row = await cursor.fetchone()
+                if row and row[0]:
+                    try:
+                        return ProjectMarketingProfile.model_validate_json(row[0])
+                    except Exception as exc:
+                        logger.warning("Invalid JSON in marketing config %s: %s", project_id, exc)
+        return get_marketing_preset("saas_b2b", project_id=project_id)
+
+    def get_project_marketing_config_sync(
+        self, project_id: str
+    ) -> ProjectMarketingProfile:
+        """Synchronously query marketing config for fast router decision in LangGraph."""
+        if not Path(self.db_path).exists():
+            return get_marketing_preset("saas_b2b", project_id=project_id)
+        try:
+            with sqlite3.connect(str(self.db_path)) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    CREATE TABLE IF NOT EXISTS project_marketing_configs (
+                        project_id TEXT PRIMARY KEY,
+                        config_json TEXT NOT NULL,
+                        updated_at TEXT NOT NULL
+                    );
+                    """
+                )
+                cursor.execute(
+                    "SELECT config_json FROM project_marketing_configs WHERE project_id = ?;",
+                    (project_id,),
+                )
+                row = cursor.fetchone()
+                if row and row[0]:
+                    return ProjectMarketingProfile.model_validate_json(row[0])
+        except Exception as exc:
+            logger.warning("Sync marketing fetch error for %s: %s", project_id, exc)
+        return get_marketing_preset("saas_b2b", project_id=project_id)
+
+    async def save_project_marketing_config(
+        self, project_id: str, profile: ProjectMarketingProfile
+    ) -> ProjectMarketingProfile:
+        """Persist or update marketing profile for a project."""
+        await self.init_db()
+        profile.project_id = project_id
+        now_iso = datetime.now(UTC).isoformat()
+        config_json = profile.model_dump_json()
+        async with aiosqlite.connect(str(self.db_path)) as db:
+            await db.execute(
+                """
+                INSERT OR REPLACE INTO project_marketing_configs (
+                    project_id, config_json, updated_at
+                ) VALUES (?, ?, ?);
+                """,
+                (project_id, config_json, now_iso),
+            )
+            await db.commit()
+        return profile
+
+    async def apply_preset_to_project(
+        self, project_id: str, marketing_type: str
+    ) -> ProjectMarketingProfile:
+        """Apply marketing preset to a project while retaining configured credentials/handles."""
+        current = await self.get_project_marketing_config(project_id)
+        new_preset = get_marketing_preset(
+            marketing_type,
+            project_id=project_id,
+            project_name=current.project_name,
+        )
+
+        # Merge channels preserving custom credentials, handle/url and instructions
+        existing_channels = {ch.channel_id: ch for ch in current.channels}
+        for ch in new_preset.channels:
+            if ch.channel_id in existing_channels:
+                old = existing_channels[ch.channel_id]
+                if old.account_handle_or_url:
+                    ch.account_handle_or_url = old.account_handle_or_url
+                if old.credentials:
+                    ch.credentials = {**ch.credentials, **old.credentials}
+                if old.custom_instructions:
+                    ch.custom_instructions = old.custom_instructions
+
+        # Merge tools preserving custom credentials and project settings
+        existing_tools = {t.tool_id: t for t in current.tools}
+        for t in new_preset.tools:
+            if t.tool_id in existing_tools:
+                old = existing_tools[t.tool_id]
+                if old.credentials:
+                    t.credentials = {**t.credentials, **old.credentials}
+                if old.settings:
+                    t.settings = {**t.settings, **old.settings}
+
+        if current.brand_voice:
+            new_preset.brand_voice = current.brand_voice
+        if current.target_audience:
+            new_preset.target_audience = current.target_audience
+        if current.language:
+            new_preset.language = current.language
+
+        return await self.save_project_marketing_config(project_id, new_preset)
+
+    async def test_marketing_tool(
+        self, project_id: str, tool_id: str
+    ) -> MarketingToolTestResponse:
+        """Diagnose connection or credentials for an individual marketing tool in a project."""
+        from app.services.marketing_tools import test_project_marketing_tool
+
+        profile = await self.get_project_marketing_config(project_id)
+        matching_tools = [t for t in profile.tools if t.tool_id == tool_id]
+        if not matching_tools:
+            return MarketingToolTestResponse(
+                project_id=project_id,
+                tool_id=tool_id,
+                success=False,
+                status="error",
+                message=f"Herramienta '{tool_id}' no encontrada en el perfil del proyecto.",
+            )
+        tool = matching_tools[0]
+        return await test_project_marketing_tool(project_id, tool, profile.channels)
+

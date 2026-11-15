@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
 
+from app.schemas.api import CreateProjectRequest, CreateProjectResponse
 from app.schemas.brownfield import (
     AuditReport,
     BrownfieldApproveRequest,
@@ -33,6 +35,13 @@ from app.schemas.office import (
     LLMModelCatalogItem,
     LLMModelCatalogUpdate,
     LLMModelPingResponse,
+    MarketingExecuteRequest,
+    MarketingExecuteResponse,
+    MarketingPresetsResponse,
+    MarketingToolTestResponse,
+    N8NProvisionRequest,
+    N8NProvisionResponse,
+    ProjectMarketingProfile,
 )
 from app.schemas.routing import AgentID
 from app.services.brownfield_service import BrownfieldService
@@ -575,10 +584,396 @@ async def ping_agent_chain(
     return await gateway.ping_agent_chain(norm_id)
 
 
-# Mount llm_router under /api/v1/office
+# Marketing routes router
+marketing_router = APIRouter(prefix="/marketing", tags=["Office Marketing"])
+
+
+@marketing_router.get(
+    "/presets",
+    response_model=MarketingPresetsResponse,
+    summary="Obtener catálogo de tipos de marketing y canales disponibles",
+)
+async def get_marketing_presets() -> MarketingPresetsResponse:
+    """Devuelve los tipos de estrategia disponibles y el catálogo de canales y herramientas."""
+    from app.schemas.office import MarketingChannelConfig, ProjectMarketingToolConfig
+    from app.services.office_store import MARKETING_CHANNELS_CATALOG, MARKETING_TOOLS_CATALOG
+
+    types = ["none", "saas_b2b", "b2c_app_ecommerce", "devtools_api", "internal_rollout", "custom"]
+    channels = [
+        MarketingChannelConfig(
+            channel_id=ch["channel_id"],
+            name=ch["name"],
+            enabled=False,
+            account_handle_or_url=ch.get("account_handle_or_url", ""),
+            credentials=dict(ch.get("credentials", {})),
+            custom_instructions=ch.get("custom_instructions", ""),
+        )
+        for ch in MARKETING_CHANNELS_CATALOG
+    ]
+    tools = [
+        ProjectMarketingToolConfig(
+            tool_id=t["tool_id"],
+            name=t["name"],
+            description=t["description"],
+            enabled=False,
+            credentials=dict(t.get("credentials", {})),
+            settings=dict(t.get("settings", {})),
+            is_configured=t.get("is_configured", True),
+        )
+        for t in MARKETING_TOOLS_CATALOG
+    ]
+    return MarketingPresetsResponse(
+        available_types=types,
+        channels_catalog=channels,
+        tools_catalog=tools,
+    )
+
+
+@marketing_router.get(
+    "/projects",
+    response_model=list[dict[str, Any]],
+    summary="Listar todos los proyectos con su estado de marketing",
+)
+async def list_marketing_projects(
+    request: Request,
+) -> list[dict[str, Any]]:
+    """Listar proyectos con estado, marketing_type, canales activos y última ejecución."""
+    store = _get_office_store(request)
+    return await store.list_marketing_projects()
+
+
+@marketing_router.get(
+    "/projects/{project_id}",
+    response_model=ProjectMarketingProfile,
+    summary="Obtener perfil de marketing de un proyecto",
+)
+async def get_project_marketing_profile(
+    project_id: str,
+    request: Request,
+) -> ProjectMarketingProfile:
+    """Devuelve el ProjectMarketingProfile del proyecto."""
+    store = _get_office_store(request)
+    return await store.get_project_marketing_config(project_id)
+
+
+@marketing_router.put(
+    "/projects/{project_id}",
+    response_model=ProjectMarketingProfile,
+    summary="Actualizar en caliente la configuración de marketing del proyecto",
+)
+async def update_project_marketing_profile(
+    project_id: str,
+    profile: ProjectMarketingProfile,
+    request: Request,
+) -> ProjectMarketingProfile:
+    """Actualiza en caliente el perfil de marketing, herramientas, canales y cuentas."""
+    store = _get_office_store(request)
+    return await store.save_project_marketing_config(project_id, profile)
+
+
+@marketing_router.post(
+    "/projects/{project_id}/apply-preset/{marketing_type}",
+    response_model=ProjectMarketingProfile,
+    summary="Aplicar preset de canales y herramientas conservando credenciales",
+)
+async def apply_marketing_preset(
+    project_id: str,
+    marketing_type: str,
+    request: Request,
+) -> ProjectMarketingProfile:
+    """Aplica un preset de canales y herramientas al proyecto sin borrar sus API keys guardadas."""
+    store = _get_office_store(request)
+    return await store.apply_preset_to_project(project_id, marketing_type)
+
+
+@marketing_router.post(
+    "/projects/{project_id}/tools/{tool_id}/test",
+    response_model=MarketingToolTestResponse,
+    summary="Probar conectividad y credenciales de una herramienta de marketing",
+)
+async def test_marketing_tool(
+    project_id: str,
+    tool_id: str,
+    request: Request,
+) -> MarketingToolTestResponse:
+    """Prueba conectividad y credenciales de una herramienta de marketing para el proyecto."""
+    store = _get_office_store(request)
+    return await store.test_marketing_tool(project_id, tool_id)
+
+
+@marketing_router.post(
+    "/projects/{project_id}/test-tool/{tool_id}",
+    response_model=MarketingToolTestResponse,
+    summary="Probar en vivo una herramienta de marketing con las cuentas del proyecto",
+)
+async def test_marketing_tool_live(
+    project_id: str,
+    tool_id: str,
+    request: Request,
+) -> MarketingToolTestResponse:
+    """Prueba en vivo una herramienta con las credenciales y configuración del proyecto."""
+    store = _get_office_store(request)
+    return await store.test_marketing_tool(project_id, tool_id)
+
+
+@marketing_router.post(
+    "/projects/{project_id}/execute",
+    response_model=MarketingExecuteResponse,
+    summary="Ejecutar marketing bajo demanda para un proyecto",
+)
+async def execute_marketing_ondemand(
+    project_id: str,
+    request: Request,
+    payload: MarketingExecuteRequest | None = None,
+) -> MarketingExecuteResponse:
+    """Ejecuta el ciclo de marketing bajo demanda para un proyecto en cualquier fase."""
+    import json
+    from pathlib import Path
+
+    from app.core.config import settings
+    from app.graph.nodes import FactoryNodes
+    from app.graph.state import SoftwareFactoryState
+    from app.services.llm_gateway import GeminiLLMGateway, MockLLMGateway
+    from app.services.prompt_loader import PromptLoader
+    from app.services.workspace_writer import WorkspaceWriter
+
+    store = _get_office_store(request)
+    profile = await store.get_project_marketing_config(project_id)
+
+    # 1. Apply any payload updates or switch on marketing
+    if payload:
+        if payload.marketing_type and payload.marketing_type != profile.marketing_type:
+            profile = await store.apply_preset_to_project(project_id, payload.marketing_type)
+        if payload.brand_voice:
+            profile.brand_voice = payload.brand_voice
+        if payload.target_audience:
+            profile.target_audience = payload.target_audience
+
+    # Ensure marketing is turned ON
+    profile.marketing_enabled = True
+    if profile.marketing_type == "none":
+        profile = await store.apply_preset_to_project(project_id, "saas_b2b")
+        profile.marketing_enabled = True
+
+    await store.save_project_marketing_config(project_id, profile)
+
+    # 2. Inspect workspace context
+    ws_dir = Path(settings.WORKSPACES_DIR) / project_id
+    idea_inicial = f"Proyecto {project_id}"
+    pre_sdd_doc = ""
+    sdd_arquitectura = ""
+    documentacion_rag = ""
+    ui_ux_spec = ""
+    ceo_charter = ""
+
+    if ws_dir.exists():
+        deliv_dir = ws_dir / "deliverables"
+        if deliv_dir.exists():
+            for f in deliv_dir.glob("*.md"):
+                fname = f.name.lower()
+                if "01_agente_01_pm" in fname:
+                    pre_sdd_doc = f.read_text(encoding="utf-8")
+                elif "02_agente_02_architect" in fname:
+                    sdd_arquitectura = f.read_text(encoding="utf-8")
+                elif "08_agente_08_docs" in fname:
+                    documentacion_rag = f.read_text(encoding="utf-8")
+                elif "11_agente_11_ui_ux" in fname:
+                    ui_ux_spec = f.read_text(encoding="utf-8")
+                elif "00_agente_00_ceo" in fname:
+                    ceo_charter = f.read_text(encoding="utf-8")
+
+        if not pre_sdd_doc:
+            readme = ws_dir / "README.md"
+            if readme.exists():
+                pre_sdd_doc = readme.read_text(encoding="utf-8")
+
+    state: SoftwareFactoryState = {
+        "project_id": project_id,
+        "idea_inicial": idea_inicial,
+        "pre_sdd_doc": pre_sdd_doc or f"# Especificación {project_id}\nPlataforma de software.",
+        "sdd_arquitectura": sdd_arquitectura or f"# SDD {project_id}\nArquitectura modular.",
+        "documentacion_rag": documentacion_rag or f"# Documentación {project_id}\nGuías y API.",
+        "ui_ux_spec": ui_ux_spec or f"# UI/UX {project_id}\nComponentes TailwindCSS.",
+        "ceo_charter": ceo_charter or f"# CEO Charter {project_id}\nZero-Touch 100% autoservicio.",
+        "version_iteracion": 1,
+        "marketing_enabled": True,
+        "marketing_type": profile.marketing_type,
+        "_office_db_path": str(store.db_path),
+        "execution_history": [],
+    }
+
+    # 3. Instantiate FactoryNodes with active store
+    orchestrator = getattr(request.app.state, "orchestrator", None)
+    if orchestrator and getattr(orchestrator, "nodes", None):
+        nodes = orchestrator.nodes
+        nodes.office_store = store
+    else:
+        gateway = MockLLMGateway() if settings.USE_MOCK_LLM else GeminiLLMGateway()
+        loader = PromptLoader()
+        writer = WorkspaceWriter(base_dir=settings.WORKSPACES_DIR)
+        nodes = FactoryNodes(
+            llm_gateway=gateway,
+            prompt_loader=loader,
+            workspace_writer=writer,
+            office_store=store,
+        )
+
+    executed_nodes: list[str] = []
+
+    # 4. Sequence execution: 09_growth -> 12_marketing -> 13_sales_analytics
+    force_all = bool(payload and payload.force_all_nodes)
+    if profile.include_growth_agent or force_all:
+        res_09 = await nodes.node_09_growth(state)
+        state["estrategia_growth"] = str(res_09.get("estrategia_growth", ""))
+        executed_nodes.append("agente_09_growth")
+
+    res_12 = await nodes.marketing_node(state)
+    state["marketing_spec"] = str(res_12.get("marketing_spec", ""))
+    executed_nodes.append("agente_12_marketing")
+
+    if profile.include_sales_analytics_agent or force_all:
+        res_13 = await nodes.sales_analytics_node(state)
+        state["sales_analytics_spec"] = str(res_13.get("sales_analytics_spec", ""))
+        executed_nodes.append("agente_13_sales_analytics")
+
+    # 5. Collect created artifacts
+    marketing_dir = ws_dir / "marketing"
+    artifacts_created: list[str] = []
+    actions_dispatched: list[dict[str, Any]] = []
+
+    if marketing_dir.exists():
+        for p in marketing_dir.glob("*"):
+            if p.is_file():
+                artifacts_created.append(p.name)
+
+        channels_payload_file = marketing_dir / "channels_payload.json"
+        if channels_payload_file.exists():
+            try:
+                cdata = json.loads(channels_payload_file.read_text(encoding="utf-8"))
+                for hook in cdata.get("dispatched_webhooks", []):
+                    actions_dispatched.append({"type": "webhook", **hook})
+            except Exception:
+                pass
+
+        emails_payload_file = marketing_dir / "email_campaigns.json"
+        if emails_payload_file.exists():
+            try:
+                edata = json.loads(emails_payload_file.read_text(encoding="utf-8"))
+                actions_dispatched.append(
+                    {
+                        "type": "email_campaigns",
+                        "provider": edata.get("email_provider"),
+                        "send_mode": edata.get("send_mode"),
+                        "count": len(edata.get("campaigns", [])),
+                    }
+                )
+            except Exception:
+                pass
+
+    updated_profile = await store.get_project_marketing_config(project_id)
+
+    return MarketingExecuteResponse(
+        project_id=project_id,
+        status="COMPLETED",
+        marketing_type=updated_profile.marketing_type,
+        executed_nodes=executed_nodes,
+        artifacts_created=artifacts_created,
+        actions_dispatched=actions_dispatched,
+        profile=updated_profile,
+        message=(
+            f"Marketing ejecutado bajo demanda con éxito "
+            f"({len(executed_nodes)} nodos, {len(artifacts_created)} artefactos)."
+        ),
+    )
+
+
+@marketing_router.get(
+    "/projects/{project_id}/n8n-workflow",
+    response_model=dict[str, Any],
+    summary="Generar y descargar workflow de n8n para el proyecto",
+)
+async def get_project_n8n_workflow_endpoint(
+    project_id: str,
+    request: Request,
+) -> dict[str, Any]:
+    """Genera el JSON completo de workflow para n8n adaptado a los canales activos del proyecto."""
+    from app.services.n8n_service import generate_project_n8n_workflow
+
+    store = _get_office_store(request)
+    profile = await store.get_project_marketing_config(project_id)
+    return generate_project_n8n_workflow(profile)
+
+
+@marketing_router.post(
+    "/projects/{project_id}/n8n-provision",
+    response_model=N8NProvisionResponse,
+    summary="Aprovisionar automáticamente el workflow en la API de n8n",
+)
+async def provision_project_n8n_workflow_endpoint(
+    project_id: str,
+    request: Request,
+    payload: N8NProvisionRequest | None = None,
+) -> N8NProvisionResponse:
+    """Crea el workflow en la instancia de n8n vía API y auto-asigna el webhook URL resultante."""
+    from app.services.n8n_service import provision_workflow_in_n8n
+
+    store = _get_office_store(request)
+    profile = await store.get_project_marketing_config(project_id)
+
+    base_url = payload.n8n_base_url if payload and payload.n8n_base_url else ""
+    api_key = payload.n8n_api_key if payload and payload.n8n_api_key else ""
+
+    result = await provision_workflow_in_n8n(
+        profile=profile,
+        n8n_base_url=base_url,
+        n8n_api_key=api_key,
+        office_store=store,
+    )
+    return N8NProvisionResponse(**result)
+
+
+# Mount llm_router & marketing_router under /api/v1/office
 router.include_router(llm_router)
+router.include_router(marketing_router)
 
 # Mount compat router under /api/office
 office_compat_router = APIRouter(prefix="/api/office", tags=["Office UI (compat)"])
 office_compat_router.include_router(llm_router)
+office_compat_router.include_router(marketing_router)
+
+
+@office_compat_router.post(
+    "/projects",
+    response_model=CreateProjectResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Crear proyecto con configuración opcional de marketing",
+)
+async def create_office_project(
+    payload: CreateProjectRequest,
+    request: Request,
+) -> CreateProjectResponse:
+    """Crea un proyecto aceptando opcionalmente marketing_enabled y marketing_type."""
+    import uuid
+    orchestrator = getattr(request.app.state, "orchestrator", None)
+    if not isinstance(orchestrator, OrchestratorService):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Servicio orquestador no inicializado.",
+        )
+    project_id = f"proj_{uuid.uuid4().hex[:8]}"
+    store = _get_office_store(request)
+    if payload.marketing_enabled is not None or payload.marketing_type is not None:
+        m_type = payload.marketing_type or (
+            "saas_b2b" if payload.marketing_enabled is not False else "none"
+        )
+        profile = store.get_marketing_preset(m_type, project_id=project_id)
+        if payload.marketing_enabled is not None:
+            profile.marketing_enabled = payload.marketing_enabled
+        await store.save_project_marketing_config(project_id, profile)
+
+    await orchestrator.start_project(
+        idea_inicial=payload.idea_inicial,
+        project_id=project_id,
+    )
+    return CreateProjectResponse(project_id=project_id, status="RUNNING")
 

@@ -155,6 +155,18 @@ async def create_project(
 ) -> CreateProjectResponse:
     """Create a project and trigger asynchronous background execution."""
     project_id = f"proj_{uuid.uuid4().hex[:8]}"
+
+    # Initialize marketing profile if provided or default
+    office_store = OfficeStore()
+    if payload.marketing_enabled is not None or payload.marketing_type is not None:
+        m_type = payload.marketing_type or (
+            "saas_b2b" if payload.marketing_enabled is not False else "none"
+        )
+        profile = office_store.get_marketing_preset(m_type, project_id=project_id)
+        if payload.marketing_enabled is not None:
+            profile.marketing_enabled = payload.marketing_enabled
+        await office_store.save_project_marketing_config(project_id, profile)
+
     await orchestrator.start_project(
         idea_inicial=payload.idea_inicial,
         project_id=project_id,

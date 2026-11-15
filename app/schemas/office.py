@@ -1,7 +1,7 @@
 """Pydantic schemas for agent conversations, internal email, and telemetry."""
 
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -192,4 +192,159 @@ class AgentLLMChainPingResponse(BaseModel):
     chain_status: list[AgentChainLinkPing] = Field(default_factory=list)
     all_ok: bool = False
     message: str = ""
+
+
+MarketingChannelID = Literal[
+    "linkedin",
+    "x_twitter",
+    "instagram_meta",
+    "tiktok",
+    "producthunt",
+    "google_ads",
+    "reddit_devto",
+    "telegram_discord",
+    "email_newsletter",
+]
+
+MarketingToolID = Literal[
+    "market_research_seo",
+    "seo_landing_injector",
+    "email_campaign_manager",
+    "social_ads_publisher",
+]
+
+MarketingType = Literal[
+    "none",
+    "saas_b2b",
+    "b2c_app_ecommerce",
+    "devtools_api",
+    "internal_rollout",
+    "custom",
+]
+
+MarketingToolStatus = Literal["ok", "missing_credentials", "error"]
+
+
+class MarketingChannelConfig(BaseModel):
+    """Configuration and credentials for an individual marketing channel."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    channel_id: MarketingChannelID
+    name: str
+    enabled: bool
+    account_handle_or_url: str = ""
+    credentials: dict[str, str] = Field(default_factory=dict)
+    custom_instructions: str = ""
+
+
+class ProjectMarketingToolConfig(BaseModel):
+    """Configuration, credentials, and settings for a project marketing tool."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    tool_id: MarketingToolID
+    name: str
+    description: str
+    enabled: bool
+    credentials: dict[str, str] = Field(default_factory=dict)
+    settings: dict[str, Any] = Field(default_factory=dict)
+    is_configured: bool = True
+
+
+class ProjectMarketingProfile(BaseModel):
+    """Comprehensive marketing profile and strategy for an individual project."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    project_id: str
+    project_name: str | None = None
+    marketing_enabled: bool = True
+    include_growth_agent: bool = True
+    include_sales_analytics_agent: bool = True
+    marketing_type: MarketingType = "saas_b2b"
+    brand_voice: str = "persuasivo-profesional"
+    target_audience: str = ""
+    language: str = "es"
+    channels: list[MarketingChannelConfig] = Field(default_factory=list)
+    tools: list[ProjectMarketingToolConfig] = Field(default_factory=list)
+    last_execution_status: str | None = None
+    last_executed_at: str | None = None
+
+
+class MarketingToolTestResponse(BaseModel):
+    """Diagnostic response when testing credentials/connectivity of a marketing tool."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    project_id: str
+    tool_id: str
+    success: bool
+    status: MarketingToolStatus
+    latency_ms: int | None = None
+    message: str
+    details: dict[str, Any] | None = None
+
+
+class MarketingPresetsResponse(BaseModel):
+    """Response containing available marketing types and global catalog."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    available_types: list[MarketingType]
+    channels_catalog: list[MarketingChannelConfig]
+    tools_catalog: list[ProjectMarketingToolConfig]
+
+
+class MarketingExecuteRequest(BaseModel):
+    """Payload to trigger on-demand marketing execution for a project."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    marketing_type: MarketingType | None = None
+    brand_voice: str | None = None
+    target_audience: str | None = None
+    force_all_nodes: bool = False
+
+
+class MarketingExecuteResponse(BaseModel):
+    """Response containing deliverables and actions from an on-demand marketing run."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    project_id: str
+    status: Literal["COMPLETED", "FAILED", "SKIPPED"]
+    marketing_type: str
+    executed_nodes: list[str]
+    artifacts_created: list[str]
+    actions_dispatched: list[dict[str, Any]]
+    profile: ProjectMarketingProfile
+    message: str
+
+
+class N8NProvisionRequest(BaseModel):
+    """Optional configuration to provision an n8n workflow for a project."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    n8n_base_url: str | None = None
+    n8n_api_key: str | None = None
+
+
+class N8NProvisionResponse(BaseModel):
+    """Response returned after generating and provisioning an n8n workflow."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    status: str
+    project_id: str
+    workflow_id: str
+    webhook_url: str
+    n8n_base_url: str
+    live_n8n_connected: bool
+    active_channels: list[str]
+    message: str
+    api_error: str | None = None
+    workflow_json: dict[str, Any] | None = None
+
 

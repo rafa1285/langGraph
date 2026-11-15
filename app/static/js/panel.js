@@ -246,8 +246,12 @@ function _openPanel(agent, projectId = null) {
     panel.classList.add('open');
   }
 
-  // Activate tab (default to current active or chat)
-  _switchTab(_activeTab || 'chat');
+  // Activate tab (default to marketing for growth & marketing agents)
+  if (agent && (agent.id === 'agente_12_marketing' || agent.id === 'agente_09_growth')) {
+    _switchTab('marketing');
+  } else {
+    _switchTab(_activeTab || 'chat');
+  }
 }
 
 /**
@@ -308,6 +312,7 @@ function _loadTabContent(tabName) {
   if (tabName === 'logs')  _loadLogs();
   if (tabName === 'files') _loadFiles();
   if (tabName === 'models') _loadModelsTab();
+  if (tabName === 'marketing') _loadMarketingTab();
 }
 
 // ── Chat Tab ──────────────────────────────────────────────────────────────
@@ -1642,6 +1647,1032 @@ function _initChatInput() {
   });
 }
 
+// ── Marketing Tab (FASE 3) ────────────────────────────────────────────────
+
+const MARKETING_CHANNELS_META = {
+  linkedin: {
+    icon: '💼',
+    name: 'LinkedIn',
+    handleLabel: 'Handle / URL Empresa',
+    handlePlaceholder: '@mi_empresa o https://linkedin.com/company/...',
+    credLabel: 'Webhook / Token',
+    credPlaceholder: 'https://hooks.zapier.com/...',
+    instLabel: 'Instrucciones Especiales',
+    instPlaceholder: 'Posts de autoridad técnica B2B, hitos y casos de uso',
+  },
+  x_twitter: {
+    icon: '🐦',
+    name: 'X (Twitter)',
+    handleLabel: 'Handle (@cuenta)',
+    handlePlaceholder: '@mi_saas_app',
+    credLabel: 'API Token / Webhook',
+    credPlaceholder: 'Token o webhook de publicación',
+    instLabel: 'Instrucciones Especiales',
+    instPlaceholder: 'Hilos técnicos, anuncios de features y memes dev',
+  },
+  instagram_meta: {
+    icon: '📸',
+    name: 'Instagram & Meta',
+    handleLabel: 'Usuario / URL Perfil',
+    handlePlaceholder: '@mi_cuenta_meta',
+    credLabel: 'Access Token / Webhook',
+    credPlaceholder: 'Token de Instagram Graph API o webhook',
+    instLabel: 'Instrucciones Especiales',
+    instPlaceholder: 'Carruseles explicativos, copies persuasivos',
+  },
+  tiktok: {
+    icon: '📱',
+    name: 'TikTok',
+    handleLabel: 'Usuario (@cuenta)',
+    handlePlaceholder: '@mi_cuenta_tiktok',
+    credLabel: 'Webhook / Token',
+    credPlaceholder: 'Webhook para publicar borradores',
+    instLabel: 'Instrucciones Especiales',
+    instPlaceholder: 'Guiones ágiles de video (30-60s), demos en vivo',
+  },
+  producthunt: {
+    icon: '🚀',
+    name: 'Product Hunt',
+    handleLabel: 'Slug Producto / URL',
+    handlePlaceholder: 'mi-saas-launch',
+    credLabel: 'API Token / Webhook',
+    credPlaceholder: 'Developer token de Product Hunt',
+    instLabel: 'Instrucciones Especiales',
+    instPlaceholder: 'Tagline de alto impacto, primer comentario del maker',
+  },
+  google_ads: {
+    icon: '🎯',
+    name: 'Google Ads',
+    handleLabel: 'ID de Cuenta / URL Final',
+    handlePlaceholder: '123-456-7890 o https://misaas.com',
+    credLabel: 'Conversions Webhook / Token',
+    credPlaceholder: 'Webhook o conversion tracking token',
+    instLabel: 'Instrucciones Especiales',
+    instPlaceholder: 'Copys con alta intención de búsqueda comercial',
+  },
+  reddit_devto: {
+    icon: '👾',
+    name: 'Reddit & Dev.to',
+    handleLabel: 'Subreddits / User Dev.to',
+    handlePlaceholder: 'r/SaaS, r/webdev, @mi_usuario',
+    credLabel: 'Webhook / API Key',
+    credPlaceholder: 'Token o webhook',
+    instLabel: 'Instrucciones Especiales',
+    instPlaceholder: 'Enfoque técnico, tutoriales y comparativas de arquitectura',
+  },
+  telegram_discord: {
+    icon: '💬',
+    name: 'Telegram & Discord',
+    handleLabel: 'Canal / Servidor',
+    handlePlaceholder: 't.me/mi_canal o discord.gg/...',
+    credLabel: 'Bot Token / Webhook',
+    credPlaceholder: 'https://discord.com/api/webhooks/...',
+    instLabel: 'Instrucciones Especiales',
+    instPlaceholder: 'Changelogs, avisos de despliegue y comunidad',
+  },
+  email_newsletter: {
+    icon: '📧',
+    name: 'Email / Newsletter',
+    handleLabel: 'Remitente / Lista',
+    handlePlaceholder: 'newsletter@misaas.com',
+    credLabel: 'API Key / Webhook',
+    credPlaceholder: 'API Key del gestor de envíos',
+    instLabel: 'Instrucciones Especiales',
+    instPlaceholder: 'Secuencias drip de bienvenida, valor y conversión',
+  },
+};
+
+const MARKETING_TOOLS_META = {
+  market_research_seo: {
+    icon: '🔍',
+    title: 'SEO & Investigación de Mercado',
+    desc: 'Búsqueda web profunda, análisis de competidores y selección de palabras clave con Tavily/Serper o scraping ligero.',
+  },
+  seo_landing_injector: {
+    icon: '🌐',
+    title: 'Landing Page & Píxeles de Tracking',
+    desc: 'Genera Landing Page HTML5 + Tailwind e inyecta píxeles (Google Analytics, GTM, Meta, TikTok) y archivos SEO (sitemap.xml, robots.txt).',
+  },
+  email_campaign_manager: {
+    icon: '✉️',
+    title: 'Gestor de Campañas de Email',
+    desc: 'Secuencias drip automatizadas con envío simulado o real mediante Resend, Brevo o SendGrid.',
+  },
+  social_ads_publisher: {
+    icon: '📢',
+    title: 'Social Ads & Publicación Automatizada',
+    desc: 'Diseño de anuncios publicitarios multiformato y publicación automatizada vía webhook (Make, Zapier, n8n).',
+  },
+};
+
+/** @type {any|null} Active project marketing profile */
+let _currentMarketingProfile = null;
+/** @type {boolean} Guard for event registration */
+let _marketingEventsInitialized = false;
+
+async function _loadMarketingTab() {
+  const container = $id('tab-marketing');
+  if (!container) return;
+
+  const projectSelect = /** @type {HTMLSelectElement|null} */ ($id('mkt-project-select'));
+  const effPid = _getEffectiveProjectId();
+  const feedback = $id('mkt-execution-feedback');
+
+  if (feedback) {
+    feedback.classList.add('hidden');
+    feedback.textContent = '';
+  }
+
+  try {
+    // 1. Fetch marketing projects and factory projects safely
+    let mktProjects = [];
+    try {
+      const res = await API.getMarketingProjects();
+      if (Array.isArray(res)) mktProjects = res;
+    } catch (e) {
+      console.warn('Could not load marketing projects:', e);
+    }
+
+    let factoryProjects = [];
+    try {
+      const res = await (API.listProjects ? API.listProjects() : API.getProjects());
+      if (Array.isArray(res)) {
+        factoryProjects = res;
+      } else if (res && Array.isArray(res.projects)) {
+        factoryProjects = res.projects;
+      }
+    } catch (e) {
+      console.warn('Could not load factory projects:', e);
+    }
+
+    // Merge into unique projects list
+    const projectMap = new Map();
+
+    for (const fp of factoryProjects) {
+      const pid = fp.project_id || fp.id;
+      if (!pid) continue;
+      projectMap.set(pid, {
+        project_id: pid,
+        project_name: fp.project_name || pid,
+        marketing_enabled: false,
+        marketing_type: 'none',
+      });
+    }
+
+    for (const mp of mktProjects) {
+      const pid = mp.project_id || mp.id;
+      if (!pid) continue;
+      if (projectMap.has(pid)) {
+        const existing = projectMap.get(pid);
+        projectMap.set(pid, { ...existing, ...mp });
+      } else {
+        projectMap.set(pid, mp);
+      }
+    }
+
+    const projects = Array.from(projectMap.values());
+
+    if (projects.length === 0) {
+      if (feedback) {
+        feedback.className = 'mkt-feedback-banner warning';
+        feedback.textContent = 'No hay proyectos en la fábrica todavía. Crea uno en la barra superior para activar su marketing.';
+        feedback.classList.remove('hidden');
+      }
+      return;
+    }
+
+    // Populate project select if empty or project list changed
+    if (projectSelect) {
+      const currentVal = projectSelect.value;
+      projectSelect.innerHTML = projects.map((p) => {
+        const pid = p.project_id || p.id;
+        const name = p.project_name || pid;
+        const mktStatus = p.marketing_enabled === false ? ' [Sin Mkt]' : ' [Mkt ON]';
+        return `<option value="${_esc(pid)}">${_esc(name)}${mktStatus}</option>`;
+      }).join('');
+
+      if (currentVal && projects.some((p) => (p.project_id || p.id) === currentVal)) {
+        projectSelect.value = currentVal;
+      } else if (effPid && projects.some((p) => (p.project_id || p.id) === effPid)) {
+        projectSelect.value = effPid;
+      } else if (projects[0]) {
+        projectSelect.value = projects[0].project_id || projects[0].id;
+      }
+    }
+
+    const activePid = projectSelect?.value || effPid || projects[0]?.project_id || projects[0]?.id;
+    if (!activePid) return;
+
+    _currentProjectId = activePid;
+
+    // 2. Fetch specific profile for active project
+    const profile = await API.getProjectMarketingConfig(activePid);
+    _currentMarketingProfile = profile;
+    _renderMarketingProfile(_currentMarketingProfile);
+
+  } catch (err) {
+    console.error('Error loading marketing tab:', err);
+    if (feedback) {
+      feedback.className = 'mkt-feedback-banner error';
+      feedback.textContent = `Error al cargar perfil de marketing: ${err.message || err}`;
+      feedback.classList.remove('hidden');
+    }
+  }
+}
+
+function _renderMarketingProfile(profile) {
+  if (!profile) return;
+
+  // 1. Master Status Button
+  const statusBtn = $id('btn-mkt-toggle-status');
+  if (statusBtn) {
+    if (profile.marketing_enabled) {
+      statusBtn.className = 'pixel-btn mkt-status-btn active';
+      statusBtn.textContent = '🟢 MARKETING ACTIVADO';
+      statusBtn.title = 'Haz clic para desactivar marketing en este proyecto';
+    } else {
+      statusBtn.className = 'pixel-btn mkt-status-btn disabled';
+      statusBtn.textContent = '🔴 MARKETING DESACTIVADO';
+      statusBtn.title = 'Haz clic para activar marketing en este proyecto';
+    }
+  }
+
+  // 2. Strategy & Identity Inputs
+  const presetSel = /** @type {HTMLSelectElement|null} */ ($id('mkt-strategy-preset'));
+  if (presetSel && profile.marketing_type) {
+    presetSel.value = profile.marketing_type;
+  }
+
+  const brandVoiceInput = /** @type {HTMLInputElement|null} */ ($id('mkt-brand-voice'));
+  if (brandVoiceInput) brandVoiceInput.value = profile.brand_voice || '';
+
+  const targetAudienceInput = /** @type {HTMLInputElement|null} */ ($id('mkt-target-audience'));
+  if (targetAudienceInput) targetAudienceInput.value = profile.target_audience || '';
+
+  const langSel = /** @type {HTMLSelectElement|null} */ ($id('mkt-language'));
+  if (langSel && profile.language) langSel.value = profile.language;
+
+  const growthCheck = /** @type {HTMLInputElement|null} */ ($id('mkt-include-growth'));
+  if (growthCheck) growthCheck.checked = profile.include_growth_agent ?? true;
+
+  const salesCheck = /** @type {HTMLInputElement|null} */ ($id('mkt-include-sales'));
+  if (salesCheck) salesCheck.checked = profile.include_sales_analytics_agent ?? true;
+
+  // 3. Channels Matrix
+  _renderMarketingChannels(profile.channels || []);
+
+  // 4. Tools Container
+  _renderMarketingTools(profile.tools || [], profile.project_id);
+
+  // Clear previous execution feedback if any
+  const feedback = $id('mkt-execution-feedback');
+  if (feedback && profile.last_executed_at) {
+    feedback.className = 'mkt-feedback-banner success';
+    feedback.innerHTML = `
+      <span>Última ejecución: <strong>${_esc(profile.last_executed_at)}</strong> (Estado: <strong>${_esc(profile.last_execution_status || 'OK')}</strong>)</span>
+    `;
+    feedback.classList.remove('hidden');
+  }
+}
+
+function _renderMarketingChannels(channels) {
+  const container = $id('mkt-channels-matrix');
+  if (!container) return;
+
+  const channelsMap = {};
+  channels.forEach((ch) => {
+    channelsMap[ch.channel_id] = ch;
+  });
+
+  const cardsHtml = Object.entries(MARKETING_CHANNELS_META).map(([chId, meta]) => {
+    const ch = channelsMap[chId] || {
+      channel_id: chId,
+      name: meta.name,
+      enabled: false,
+      account_handle_or_url: '',
+      credentials: {},
+      custom_instructions: '',
+    };
+    const isEnabled = Boolean(ch.enabled);
+    const credVal = ch.credentials?.webhook_url || ch.credentials?.token || ch.credentials?.api_key || '';
+
+    // Determine connection badge (Direct Native vs n8n Webhook vs Draft)
+    const creds = ch.credentials || {};
+    const hasDirect = Boolean(
+      creds.discord_webhook_url ||
+      (creds.telegram_bot_token && creds.telegram_chat_id) ||
+      creds.devto_api_key ||
+      creds.linkedin_token ||
+      creds.twitter_bearer_token ||
+      creds.access_token ||
+      creds.bearer_token
+    );
+    const hasWebhook = Boolean(creds.webhook_url);
+    let badgeHtml = '';
+    if (hasDirect) {
+      badgeHtml = '<span class="mkt-conn-badge direct" title="Envío directo usando API o Token del proyecto">⚡ Conexión Directa (API)</span>';
+    } else if (hasWebhook) {
+      badgeHtml = '<span class="mkt-conn-badge webhook" title="Envío delegado al webhook de n8n">🔗 Vía Webhook n8n</span>';
+    } else {
+      badgeHtml = '<span class="mkt-conn-badge local" title="Modo borrador / webhook general">⚪ Vía Webhook / Borrador</span>';
+    }
+
+    return `
+      <div class="mkt-channel-card ${isEnabled ? 'channel-active' : 'channel-disabled'}" data-channel-id="${_esc(chId)}">
+        <div class="mkt-channel-header">
+          <div class="mkt-channel-title">
+            <span>${meta.icon}</span>
+            <span>${_esc(meta.name)}</span>
+          </div>
+          <label class="pixel-checkbox-label">
+            <input type="checkbox" class="mkt-ch-enable" data-channel="${_esc(chId)}" ${isEnabled ? 'checked' : ''}>
+            <span>${isEnabled ? 'ACTIVO' : 'OFF'}</span>
+          </label>
+        </div>
+        <div class="mkt-channel-field">
+          <label>${_esc(meta.handleLabel)}</label>
+          <input type="text" class="mkt-ch-handle" data-channel="${_esc(chId)}"
+                 value="${_esc(ch.account_handle_or_url || '')}"
+                 placeholder="${_esc(meta.handlePlaceholder)}">
+        </div>
+        <div class="mkt-channel-field">
+          <label>${_esc(meta.credLabel)}</label>
+          <input type="text" class="mkt-ch-cred" data-channel="${_esc(chId)}"
+                 value="${_esc(credVal)}"
+                 placeholder="${_esc(meta.credPlaceholder)}">
+        </div>
+        <div class="mkt-channel-field">
+          <label>${_esc(meta.instLabel)}</label>
+          <textarea class="mkt-ch-inst" data-channel="${_esc(chId)}"
+                    placeholder="${_esc(meta.instPlaceholder)}" rows="2">${_esc(ch.custom_instructions || '')}</textarea>
+        </div>
+        <div class="mkt-channel-badge-wrap">
+          ${badgeHtml}
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = cardsHtml;
+
+  // Add change listeners to checkboxes to update visual state
+  container.querySelectorAll('.mkt-ch-enable').forEach((chk) => {
+    chk.addEventListener('change', (e) => {
+      const isChecked = /** @type {HTMLInputElement} */ (e.target).checked;
+      const card = /** @type {HTMLElement} */ (e.target).closest('.mkt-channel-card');
+      const span = card?.querySelector('.pixel-checkbox-label span');
+      if (card) {
+        card.classList.toggle('channel-active', isChecked);
+        card.classList.toggle('channel-disabled', !isChecked);
+      }
+      if (span) {
+        span.textContent = isChecked ? 'ACTIVO' : 'OFF';
+      }
+    });
+  });
+}
+
+function _renderMarketingTools(tools, projectId) {
+  const container = $id('mkt-tools-container');
+  if (!container) return;
+
+  const toolsMap = {};
+  tools.forEach((t) => {
+    toolsMap[t.tool_id] = t;
+  });
+
+  const cardsHtml = Object.entries(MARKETING_TOOLS_META).map(([toolId, meta]) => {
+    const t = toolsMap[toolId] || {
+      tool_id: toolId,
+      name: meta.title,
+      description: meta.desc,
+      enabled: true,
+      credentials: {},
+      settings: {},
+    };
+    const isEnabled = Boolean(t.enabled);
+    const creds = t.credentials || {};
+    const sets = t.settings || {};
+
+    let toolFieldsHtml = '';
+
+    if (toolId === 'market_research_seo') {
+      const seeds = Array.isArray(sets.seed_keywords) ? sets.seed_keywords.join(', ') : (sets.seed_keywords || '');
+      const comps = Array.isArray(sets.competitor_urls) ? sets.competitor_urls.join(', ') : (sets.competitor_urls || '');
+      toolFieldsHtml = `
+        <div class="mkt-tool-grid-2">
+          <div class="mkt-channel-field">
+            <label>API KEY BÚSQUEDA (TAVILY / SERPER):</label>
+            <input type="text" id="mkt-tool-cred-search-key" value="${_esc(creds.search_api_key || '')}" placeholder="tvly-xxxx o secret...">
+          </div>
+          <div class="mkt-channel-field">
+            <label>PALABRAS CLAVE SEMILLA (COMA):</label>
+            <input type="text" id="mkt-tool-set-seed-keywords" value="${_esc(seeds)}" placeholder="saas b2b, devtool, crm...">
+          </div>
+        </div>
+        <div class="mkt-channel-field">
+          <label>URLS DE COMPETIDORES DIRECTOS (COMA):</label>
+          <input type="text" id="mkt-tool-set-competitors" value="${_esc(comps)}" placeholder="https://competidor1.com, https://competidor2.io...">
+        </div>
+      `;
+    } else if (toolId === 'seo_landing_injector') {
+      const genLanding = sets.generate_landing_html !== false;
+      const genSitemap = sets.generate_sitemap_robots !== false;
+      toolFieldsHtml = `
+        <div class="mkt-tool-grid-2">
+          <div class="mkt-channel-field">
+            <label>DOMINIO PÚBLICO DEL PROYECTO:</label>
+            <input type="text" id="mkt-tool-set-domain" value="${_esc(sets.domain_url || '')}" placeholder="https://mi-proyecto.com">
+          </div>
+          <div class="mkt-agents-checks" style="margin-top:0;">
+            <label class="pixel-checkbox-label">
+              <input type="checkbox" id="mkt-tool-set-gen-landing" ${genLanding ? 'checked' : ''}>
+              <span>Generar landing_page.html con TailwindCSS</span>
+            </label>
+            <label class="pixel-checkbox-label">
+              <input type="checkbox" id="mkt-tool-set-gen-sitemap" ${genSitemap ? 'checked' : ''}>
+              <span>Generar sitemap.xml y robots.txt</span>
+            </label>
+          </div>
+        </div>
+        <div class="mkt-tool-grid-2">
+          <div class="mkt-channel-field">
+            <label>GOOGLE ANALYTICS ID (G-XXXX):</label>
+            <input type="text" id="mkt-tool-cred-ga" value="${_esc(creds.google_analytics_id || '')}" placeholder="G-XXXXXXXXXX">
+          </div>
+          <div class="mkt-channel-field">
+            <label>GOOGLE TAG MANAGER ID (GTM-XXXX):</label>
+            <input type="text" id="mkt-tool-cred-gtm" value="${_esc(creds.gtm_id || '')}" placeholder="GTM-XXXXXXX">
+          </div>
+        </div>
+        <div class="mkt-tool-grid-2">
+          <div class="mkt-channel-field">
+            <label>META / FACEBOOK PIXEL ID:</label>
+            <input type="text" id="mkt-tool-cred-meta" value="${_esc(creds.meta_pixel_id || '')}" placeholder="123456789012345">
+          </div>
+          <div class="mkt-channel-field">
+            <label>TIKTOK PIXEL ID:</label>
+            <input type="text" id="mkt-tool-cred-tiktok" value="${_esc(creds.tiktok_pixel_id || '')}" placeholder="CXXXXXXXXXXXXXX">
+          </div>
+        </div>
+      `;
+    } else if (toolId === 'email_campaign_manager') {
+      const provider = sets.email_provider || 'resend';
+      const sendMode = sets.send_mode || 'simulate';
+      const recipients = Array.isArray(sets.recipient_list) ? sets.recipient_list.join(', ') : (sets.recipient_list || '');
+      toolFieldsHtml = `
+        <div class="mkt-tool-grid-2">
+          <div class="mkt-channel-field">
+            <label>PROVEEDOR DE EMAIL:</label>
+            <select id="mkt-tool-set-email-provider" class="pixel-select">
+              <option value="resend" ${provider === 'resend' ? 'selected' : ''}>Resend API</option>
+              <option value="brevo" ${provider === 'brevo' ? 'selected' : ''}>Brevo (Sendinblue)</option>
+              <option value="sendgrid" ${provider === 'sendgrid' ? 'selected' : ''}>SendGrid</option>
+            </select>
+          </div>
+          <div class="mkt-channel-field">
+            <label>MODO DE ENVÍO:</label>
+            <select id="mkt-tool-set-send-mode" class="pixel-select">
+              <option value="simulate" ${sendMode === 'simulate' ? 'selected' : ''}>Simulación Segura (Guardar JSON)</option>
+              <option value="send_live" ${sendMode === 'send_live' ? 'selected' : ''}>Envío Real en Vivo (API)</option>
+            </select>
+          </div>
+        </div>
+        <div class="mkt-tool-grid-2">
+          <div class="mkt-channel-field">
+            <label>EMAIL REMITENTE:</label>
+            <input type="text" id="mkt-tool-set-sender-email" value="${_esc(sets.sender_email || '')}" placeholder="hola@mi-dominio.com">
+          </div>
+          <div class="mkt-channel-field">
+            <label>NOMBRE REMITENTE:</label>
+            <input type="text" id="mkt-tool-set-sender-name" value="${_esc(sets.sender_name || '')}" placeholder="Equipo Mi Proyecto">
+          </div>
+        </div>
+        <div class="mkt-tool-grid-2">
+          <div class="mkt-channel-field">
+            <label>API KEY DEL PROVEEDOR:</label>
+            <input type="text" id="mkt-tool-cred-email-key" value="${_esc(creds.email_api_key || '')}" placeholder="re_xxxx / xkeysib-xxxx...">
+          </div>
+          <div class="mkt-channel-field">
+            <label>LISTA DE PRUEBA (DESTINATARIOS COMA):</label>
+            <input type="text" id="mkt-tool-set-recipient-list" value="${_esc(recipients)}" placeholder="test@email.com, demo@empresa.com...">
+          </div>
+        </div>
+      `;
+    } else if (toolId === 'social_ads_publisher') {
+      const formats = Array.isArray(sets.formats) ? sets.formats.join(', ') : (sets.formats || 'carousel, single_image, thread, story');
+      const platforms = Array.isArray(sets.target_platforms) ? sets.target_platforms.join(', ') : (sets.target_platforms || 'linkedin, x, instagram');
+      toolFieldsHtml = `
+        <div class="mkt-tool-grid-2">
+          <div class="mkt-channel-field">
+            <label>FORMATOS DE ANUNCIO (COMA):</label>
+            <input type="text" id="mkt-tool-set-formats" value="${_esc(formats)}" placeholder="carousel, single_image, thread, story">
+          </div>
+          <div class="mkt-channel-field">
+            <label>PLATAFORMAS DESTINO (COMA):</label>
+            <input type="text" id="mkt-tool-set-platforms" value="${_esc(platforms)}" placeholder="linkedin, x, instagram">
+          </div>
+        </div>
+        <div class="mkt-channel-field">
+          <label>WEBHOOK DE PUBLICACIÓN (MAKE / ZAPIER / N8N):</label>
+          <input type="text" id="mkt-tool-cred-webhook" value="${_esc(creds.webhook_url || '')}" placeholder="https://hook.eu1.make.com/xxxxxx">
+        </div>
+        <div class="mkt-n8n-automation-box">
+          <div class="mkt-n8n-header">
+            <span>⚡ AUTOMATIZACIÓN CON N8N POR PROYECTO</span>
+            <span class="mkt-n8n-sub">Flujo dinámico y conector nativo generado para tus canales</span>
+          </div>
+          <div class="mkt-n8n-actions">
+            <button type="button" id="btn-mkt-n8n-download" class="pixel-btn secondary" title="Descargar workflow JSON listo para importar en n8n">
+              📥 DESCARGAR JSON PARA N8N
+            </button>
+            <button type="button" id="btn-mkt-n8n-provision" class="pixel-btn primary" title="Crear workflow automáticamente en n8n vía API y auto-asignar Webhook URL">
+              ⚙️ AUTOCONFIGURAR EN MI N8N (API)
+            </button>
+          </div>
+          <div id="mkt-n8n-feedback" class="mkt-feedback-banner hidden" style="margin-top:6px;font-size:9px;"></div>
+        </div>
+      `;
+    }
+
+    return `
+      <div class="mkt-tool-card ${isEnabled ? 'tool-active' : 'tool-disabled'}" data-tool-id="${_esc(toolId)}">
+        <div class="mkt-tool-header">
+          <div class="mkt-tool-title">
+            <span>${meta.icon}</span>
+            <span>${_esc(meta.title)}</span>
+          </div>
+          <label class="pixel-checkbox-label">
+            <input type="checkbox" class="mkt-tool-enable" data-tool="${_esc(toolId)}" ${isEnabled ? 'checked' : ''}>
+            <span>${isEnabled ? 'HABILITADA' : 'DESACTIVADA'}</span>
+          </label>
+        </div>
+        <div class="mkt-tool-desc">${_esc(meta.desc)}</div>
+        <div class="mkt-tool-body">
+          ${toolFieldsHtml}
+        </div>
+        <div class="mkt-tool-actions">
+          <button class="pixel-btn secondary btn-mkt-test-tool" data-tool="${_esc(toolId)}" title="Diagnosticar credenciales y conectividad">
+            ⚡ PROBAR HERRAMIENTA
+          </button>
+          <span class="mkt-tool-test-badge" id="mkt-test-badge-${_esc(toolId)}"></span>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  container.innerHTML = cardsHtml;
+
+  // Checkbox toggle handler
+  container.querySelectorAll('.mkt-tool-enable').forEach((chk) => {
+    chk.addEventListener('change', (e) => {
+      const isChecked = /** @type {HTMLInputElement} */ (e.target).checked;
+      const card = /** @type {HTMLElement} */ (e.target).closest('.mkt-tool-card');
+      const span = card?.querySelector('.pixel-checkbox-label span');
+      if (card) {
+        card.classList.toggle('tool-active', isChecked);
+        card.classList.toggle('tool-disabled', !isChecked);
+      }
+      if (span) {
+        span.textContent = isChecked ? 'HABILITADA' : 'DESACTIVADA';
+      }
+    });
+  });
+
+  // Diagnostic test buttons
+  container.querySelectorAll('.btn-mkt-test-tool').forEach((btn) => {
+    btn.addEventListener('click', async () => {
+      const toolId = /** @type {HTMLElement} */ (btn).dataset.tool;
+      if (!toolId || !projectId) return;
+
+      const badge = $id(`mkt-test-badge-${toolId}`);
+      if (badge) {
+        badge.className = 'mkt-tool-test-badge';
+        badge.innerHTML = '⏳ Probando...';
+      }
+
+      // Collect current credentials and settings for this tool
+      const payload = _collectToolData(toolId);
+
+      try {
+        const res = await API.testProjectMarketingTool(projectId, toolId, payload);
+        if (badge) {
+          if (res.status === 'ok') {
+            badge.className = 'mkt-tool-test-badge ping-badge ok';
+            badge.textContent = `🟢 OK (${res.latency_ms || 0}ms)`;
+          } else if (res.status === 'missing_credentials') {
+            badge.className = 'mkt-tool-test-badge ping-badge warning';
+            badge.textContent = `🟡 SIN CREDENCIALES (${res.message || 'Simulado'})`;
+          } else if (res.status === 'simulated') {
+            badge.className = 'mkt-tool-test-badge ping-badge ok';
+            badge.textContent = `🔵 SIMULADO (${res.latency_ms || 0}ms)`;
+          } else {
+            badge.className = 'mkt-tool-test-badge ping-badge error';
+            badge.textContent = `🔴 ${res.message || 'Error en prueba'}`;
+          }
+        }
+      } catch (err) {
+        if (badge) {
+          badge.className = 'mkt-tool-test-badge ping-badge error';
+          badge.textContent = `🔴 ${err.message || 'Error de red'}`;
+        }
+      }
+    });
+  });
+
+  // n8n Workflow Download button
+  const n8nDownloadBtn = $id('btn-mkt-n8n-download');
+  const n8nFeedback = $id('mkt-n8n-feedback');
+  n8nDownloadBtn?.addEventListener('click', async () => {
+    if (!projectId) return;
+    if (n8nDownloadBtn) {
+      n8nDownloadBtn.textContent = '⏳ GENERANDO...';
+      n8nDownloadBtn.setAttribute('disabled', 'true');
+    }
+    try {
+      const wf = await API.getProjectN8NWorkflow(projectId);
+      const blob = new Blob([JSON.stringify(wf, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `n8n_workflow_${projectId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+
+      if (n8nFeedback) {
+        n8nFeedback.className = 'mkt-feedback-banner success';
+        n8nFeedback.innerHTML = `✅ Workflow JSON descargado y guardado en <code>marketing/n8n_workflow_${_esc(projectId)}.json</code>`;
+        n8nFeedback.classList.remove('hidden');
+      }
+    } catch (err) {
+      if (n8nFeedback) {
+        n8nFeedback.className = 'mkt-feedback-banner error';
+        n8nFeedback.textContent = `Error al generar flujo n8n: ${err.message || err}`;
+        n8nFeedback.classList.remove('hidden');
+      }
+    } finally {
+      if (n8nDownloadBtn) {
+        n8nDownloadBtn.textContent = '📥 DESCARGAR JSON PARA N8N';
+        n8nDownloadBtn.removeAttribute('disabled');
+      }
+    }
+  });
+
+  // Auto-provision in n8n API button
+  const n8nProvisionBtn = $id('btn-mkt-n8n-provision');
+  n8nProvisionBtn?.addEventListener('click', async () => {
+    if (!projectId) return;
+    if (n8nProvisionBtn) {
+      n8nProvisionBtn.textContent = '⏳ CONECTANDO...';
+      n8nProvisionBtn.setAttribute('disabled', 'true');
+    }
+    try {
+      const res = await API.provisionProjectN8NWorkflow(projectId);
+      const webhookInput = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-cred-webhook'));
+      if (webhookInput && res.webhook_url) {
+        webhookInput.value = res.webhook_url;
+      }
+      if (n8nFeedback) {
+        n8nFeedback.className = res.live_n8n_connected ? 'mkt-feedback-banner success' : 'mkt-feedback-banner warning';
+        n8nFeedback.innerHTML = `
+          <strong>${res.live_n8n_connected ? '🟢 Aprovisionado en n8n' : '🔵 Webhook Local Asignado'}:</strong>
+          ${_esc(res.message || res.webhook_url)}<br>
+          URL: <code>${_esc(res.webhook_url)}</code>
+        `;
+        n8nFeedback.classList.remove('hidden');
+      }
+    } catch (err) {
+      if (n8nFeedback) {
+        n8nFeedback.className = 'mkt-feedback-banner error';
+        n8nFeedback.textContent = `Error al aprovisionar en n8n: ${err.message || err}`;
+        n8nFeedback.classList.remove('hidden');
+      }
+    } finally {
+      if (n8nProvisionBtn) {
+        n8nProvisionBtn.textContent = '⚙️ AUTOCONFIGURAR EN MI N8N (API)';
+        n8nProvisionBtn.removeAttribute('disabled');
+      }
+    }
+  });
+}
+
+function _collectToolData(toolId) {
+  const credentials = {};
+  const settings = {};
+
+  if (toolId === 'market_research_seo') {
+    const key = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-cred-search-key'))?.value.trim();
+    if (key) credentials.search_api_key = key;
+
+    const seeds = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-set-seed-keywords'))?.value.trim();
+    if (seeds) settings.seed_keywords = seeds.split(',').map((s) => s.trim()).filter(Boolean);
+
+    const comps = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-set-competitors'))?.value.trim();
+    if (comps) settings.competitor_urls = comps.split(',').map((s) => s.trim()).filter(Boolean);
+
+  } else if (toolId === 'seo_landing_injector') {
+    const domain = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-set-domain'))?.value.trim();
+    if (domain) settings.domain_url = domain;
+
+    settings.generate_landing_html = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-set-gen-landing'))?.checked ?? true;
+    settings.generate_sitemap_robots = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-set-gen-sitemap'))?.checked ?? true;
+
+    const ga = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-cred-ga'))?.value.trim();
+    if (ga) credentials.google_analytics_id = ga;
+
+    const gtm = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-cred-gtm'))?.value.trim();
+    if (gtm) credentials.gtm_id = gtm;
+
+    const meta = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-cred-meta'))?.value.trim();
+    if (meta) credentials.meta_pixel_id = meta;
+
+    const tiktok = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-cred-tiktok'))?.value.trim();
+    if (tiktok) credentials.tiktok_pixel_id = tiktok;
+
+  } else if (toolId === 'email_campaign_manager') {
+    const provider = /** @type {HTMLSelectElement|null} */ ($id('mkt-tool-set-email-provider'))?.value;
+    if (provider) settings.email_provider = provider;
+
+    const mode = /** @type {HTMLSelectElement|null} */ ($id('mkt-tool-set-send-mode'))?.value;
+    if (mode) settings.send_mode = mode;
+
+    const email = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-set-sender-email'))?.value.trim();
+    if (email) settings.sender_email = email;
+
+    const name = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-set-sender-name'))?.value.trim();
+    if (name) settings.sender_name = name;
+
+    const recs = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-set-recipient-list'))?.value.trim();
+    if (recs) settings.recipient_list = recs.split(',').map((s) => s.trim()).filter(Boolean);
+
+    const key = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-cred-email-key'))?.value.trim();
+    if (key) credentials.email_api_key = key;
+
+  } else if (toolId === 'social_ads_publisher') {
+    const fmts = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-set-formats'))?.value.trim();
+    if (fmts) settings.formats = fmts.split(',').map((s) => s.trim()).filter(Boolean);
+
+    const plats = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-set-platforms'))?.value.trim();
+    if (plats) settings.target_platforms = plats.split(',').map((s) => s.trim()).filter(Boolean);
+
+    const webhook = /** @type {HTMLInputElement|null} */ ($id('mkt-tool-cred-webhook'))?.value.trim();
+    if (webhook) credentials.webhook_url = webhook;
+  }
+
+  return { credentials, settings };
+}
+
+function _collectFullMarketingProfile() {
+  const pid = _currentProjectId || _getEffectiveProjectId();
+  if (!pid) return null;
+
+  const statusBtn = $id('btn-mkt-toggle-status');
+  const marketingEnabled = statusBtn ? statusBtn.classList.contains('active') : true;
+
+  const presetSel = /** @type {HTMLSelectElement|null} */ ($id('mkt-strategy-preset'));
+  const brandVoiceInput = /** @type {HTMLInputElement|null} */ ($id('mkt-brand-voice'));
+  const targetAudienceInput = /** @type {HTMLInputElement|null} */ ($id('mkt-target-audience'));
+  const langSel = /** @type {HTMLSelectElement|null} */ ($id('mkt-language'));
+  const growthCheck = /** @type {HTMLInputElement|null} */ ($id('mkt-include-growth'));
+  const salesCheck = /** @type {HTMLInputElement|null} */ ($id('mkt-include-sales'));
+
+  // Collect channels
+  const channels = [];
+  document.querySelectorAll('.mkt-channel-card').forEach((card) => {
+    const chId = /** @type {HTMLElement} */ (card).dataset.channelId;
+    if (!chId) return;
+
+    const chk = /** @type {HTMLInputElement|null} */ (card.querySelector('.mkt-ch-enable'));
+    const handleInput = /** @type {HTMLInputElement|null} */ (card.querySelector('.mkt-ch-handle'));
+    const credInput = /** @type {HTMLInputElement|null} */ (card.querySelector('.mkt-ch-cred'));
+    const instInput = /** @type {HTMLTextAreaElement|null} */ (card.querySelector('.mkt-ch-inst'));
+
+    const credVal = credInput?.value.trim() || '';
+    const credentials = {};
+    if (credVal) {
+      if (credVal.startsWith('http://') || credVal.startsWith('https://')) {
+        credentials.webhook_url = credVal;
+      } else {
+        credentials.token = credVal;
+      }
+    }
+
+    channels.push({
+      channel_id: chId,
+      name: MARKETING_CHANNELS_META[chId]?.name || chId,
+      enabled: chk ? chk.checked : false,
+      account_handle_or_url: handleInput?.value.trim() || '',
+      credentials,
+      custom_instructions: instInput?.value.trim() || '',
+    });
+  });
+
+  // Collect tools
+  const tools = [];
+  ['market_research_seo', 'seo_landing_injector', 'email_campaign_manager', 'social_ads_publisher'].forEach((toolId) => {
+    const card = document.querySelector(`.mkt-tool-card[data-tool-id="${toolId}"]`);
+    const isEnabled = card ? Boolean(/** @type {HTMLInputElement|null} */ (card.querySelector('.mkt-tool-enable'))?.checked) : true;
+    const { credentials, settings } = _collectToolData(toolId);
+
+    tools.push({
+      tool_id: toolId,
+      name: MARKETING_TOOLS_META[toolId]?.title || toolId,
+      description: MARKETING_TOOLS_META[toolId]?.desc || '',
+      enabled: isEnabled,
+      credentials,
+      settings,
+      is_configured: true,
+    });
+  });
+
+  return {
+    project_id: pid,
+    project_name: _currentMarketingProfile?.project_name || pid,
+    marketing_enabled: marketingEnabled,
+    include_growth_agent: growthCheck ? growthCheck.checked : true,
+    include_sales_analytics_agent: salesCheck ? salesCheck.checked : true,
+    marketing_type: presetSel?.value || 'saas_b2b',
+    brand_voice: brandVoiceInput?.value.trim() || 'persuasivo-profesional',
+    target_audience: targetAudienceInput?.value.trim() || '',
+    language: langSel?.value || 'es',
+    channels,
+    tools,
+  };
+}
+
+function _initMarketingTabEvents() {
+  if (_marketingEventsInitialized) return;
+  _marketingEventsInitialized = true;
+
+  // Project selector change
+  $id('mkt-project-select')?.addEventListener('change', (e) => {
+    const pid = /** @type {HTMLSelectElement} */ (e.target).value;
+    if (pid) {
+      _currentProjectId = pid;
+      _loadMarketingTab();
+    }
+  });
+
+  // Master switch toggle
+  $id('btn-mkt-toggle-status')?.addEventListener('click', () => {
+    const statusBtn = $id('btn-mkt-toggle-status');
+    if (!statusBtn) return;
+    const currentlyActive = statusBtn.classList.contains('active');
+    if (currentlyActive) {
+      statusBtn.className = 'pixel-btn mkt-status-btn disabled';
+      statusBtn.textContent = '🔴 MARKETING DESACTIVADO';
+      statusBtn.title = 'Haz clic para activar marketing en este proyecto';
+    } else {
+      statusBtn.className = 'pixel-btn mkt-status-btn active';
+      statusBtn.textContent = '🟢 MARKETING ACTIVADO';
+      statusBtn.title = 'Haz clic para desactivar marketing en este proyecto';
+    }
+  });
+
+  // Apply preset button
+  $id('btn-mkt-apply-preset')?.addEventListener('click', async () => {
+    const pid = _currentProjectId || _getEffectiveProjectId();
+    const presetSel = /** @type {HTMLSelectElement|null} */ ($id('mkt-strategy-preset'));
+    const preset = presetSel?.value || 'saas_b2b';
+    if (!pid) return;
+
+    const btn = $id('btn-mkt-apply-preset');
+    if (btn) btn.textContent = '⏳...';
+
+    try {
+      const updated = await API.applyProjectMarketingPreset(pid, preset);
+      _currentMarketingProfile = updated;
+      _renderMarketingProfile(_currentMarketingProfile);
+
+      const feedback = $id('mkt-execution-feedback');
+      if (feedback) {
+        feedback.className = 'mkt-feedback-banner success';
+        feedback.textContent = `✅ Preset "${preset}" aplicado con éxito a las herramientas y canales.`;
+        feedback.classList.remove('hidden');
+      }
+    } catch (err) {
+      const feedback = $id('mkt-execution-feedback');
+      if (feedback) {
+        feedback.className = 'mkt-feedback-banner error';
+        feedback.textContent = `Error al aplicar preset: ${err.message || err}`;
+        feedback.classList.remove('hidden');
+      }
+    } finally {
+      if (btn) btn.textContent = 'APLICAR';
+    }
+  });
+
+  // Execute marketing now button
+  $id('btn-mkt-execute-now')?.addEventListener('click', async () => {
+    const pid = _currentProjectId || _getEffectiveProjectId();
+    if (!pid) return;
+
+    const execBtn = /** @type {HTMLButtonElement|null} */ ($id('btn-mkt-execute-now'));
+    const feedback = $id('mkt-execution-feedback');
+
+    if (execBtn) {
+      execBtn.disabled = true;
+      execBtn.textContent = '⏳ EJECUTANDO MARKETING...';
+    }
+    if (feedback) {
+      feedback.className = 'mkt-feedback-banner warning';
+      feedback.innerHTML = '⚡ Ejecutando herramientas y canales configurados bajo demanda...';
+      feedback.classList.remove('hidden');
+    }
+
+    try {
+      // First save current form changes before executing
+      const payload = _collectFullMarketingProfile();
+      if (payload) {
+        await API.saveProjectMarketingConfig(pid, payload).catch(() => {});
+      }
+
+      const res = await API.executeProjectMarketingNow(pid);
+
+      if (feedback) {
+        const toolsCount = res.tools_executed?.length || 0;
+        const chansCount = res.channels_notified?.length || 0;
+        const filesCount = res.generated_files?.length || 0;
+
+        feedback.className = 'mkt-feedback-banner success';
+        feedback.innerHTML = `
+          <div class="mkt-feedback-title">🚀 ¡MARKETING EJECUTADO CON ÉXITO!</div>
+          <div class="mkt-feedback-details">
+            <span>🛠️ <strong>${toolsCount}</strong> herramientas ejecutadas</span>
+            <span>📡 <strong>${chansCount}</strong> canales configurados</span>
+            <span>📁 <strong>${filesCount}</strong> archivos generados</span>
+          </div>
+          ${filesCount > 0 ? `<div class="mkt-feedback-files">Entregables: ${res.generated_files.map((f) => `<code>${_esc(f)}</code>`).join(' ')}</div>` : ''}
+        `;
+      }
+
+      // Reload profile to refresh execution timestamp
+      _loadMarketingTab();
+    } catch (err) {
+      if (feedback) {
+        feedback.className = 'mkt-feedback-banner error';
+        feedback.textContent = `🔴 Error durante la ejecución de marketing: ${err.message || err}`;
+      }
+    } finally {
+      if (execBtn) {
+        execBtn.disabled = false;
+        execBtn.textContent = '⚡ EJECUTAR MARKETING AHORA';
+      }
+    }
+  });
+
+  // Save marketing profile button
+  $id('btn-save-marketing-profile')?.addEventListener('click', async () => {
+    const pid = _currentProjectId || _getEffectiveProjectId();
+    const saveFeedback = $id('mkt-save-feedback');
+    const saveBtn = /** @type {HTMLButtonElement|null} */ ($id('btn-save-marketing-profile'));
+
+    if (!pid) {
+      if (saveFeedback) {
+        saveFeedback.className = 'mkt-feedback-banner error';
+        saveFeedback.textContent = 'No hay un proyecto activo seleccionado.';
+        saveFeedback.classList.remove('hidden');
+      }
+      return;
+    }
+
+    const payload = _collectFullMarketingProfile();
+    if (!payload) return;
+
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = '⏳ GUARDANDO...';
+    }
+
+    try {
+      const updated = await API.saveProjectMarketingConfig(pid, payload);
+      _currentMarketingProfile = updated;
+
+      if (saveFeedback) {
+        saveFeedback.className = 'mkt-feedback-banner success';
+        saveFeedback.innerHTML = `✅ Configuración de marketing guardada para <strong>${_esc(pid)}</strong>.`;
+        saveFeedback.classList.remove('hidden');
+        setTimeout(() => {
+          saveFeedback.classList.add('hidden');
+        }, 4000);
+      }
+    } catch (err) {
+      if (saveFeedback) {
+        saveFeedback.className = 'mkt-feedback-banner error';
+        saveFeedback.textContent = `Error al guardar: ${err.message || err}`;
+        saveFeedback.classList.remove('hidden');
+      }
+    } finally {
+      if (saveBtn) {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '💾 GUARDAR CONFIGURACIÓN DE MARKETING';
+      }
+    }
+  });
+}
+
 // ── Command Dock & FAB Handlers ───────────────────────────────────────────
 
 function _initDockAndFAB() {
@@ -1661,18 +2692,23 @@ function _initDockAndFAB() {
     }
   });
 
-  // 3. Telemetry Drawer Button
+  // 3. Marketing Control Center Button
+  $id('dock-btn-marketing')?.addEventListener('click', () => {
+    _openGeneralPanel('marketing');
+  });
+
+  // 4. Telemetry Drawer Button
   $id('dock-btn-telemetry')?.addEventListener('click', () => {
     const drawer = $id('telemetry-drawer');
     if (drawer) drawer.classList.toggle('hidden');
   });
 
-  // 4. Close Telemetry Drawer
+  // 5. Close Telemetry Drawer
   $id('btn-close-telemetry')?.addEventListener('click', () => {
     $id('telemetry-drawer')?.classList.add('hidden');
   });
 
-  // 5. Brownfield Dock Button
+  // 6. Brownfield Dock Button
   $id('dock-btn-brownfield')?.addEventListener('click', () => {
     const bfModeBtn = document.querySelector('.mode-btn[data-mode="brownfield"]');
     if (bfModeBtn) {
@@ -1685,7 +2721,7 @@ function _initDockAndFAB() {
     }
   });
 
-  // 6. FAB Quick Chat
+  // 7. FAB Quick Chat
   $id('fab-chat')?.addEventListener('click', () => {
     if (_currentAgent) {
       _openPanel(_currentAgent, _getEffectiveProjectId());
@@ -1732,9 +2768,17 @@ export function initPanel() {
     }
   });
 
+  // Listen for marketing configure events dispatched by office.js
+  document.addEventListener('marketing:configure', (e) => {
+    const pid = /** @type {CustomEvent<{projectId: string|null}>} */ (e).detail?.projectId;
+    if (pid) _currentProjectId = pid;
+    _openGeneralPanel('marketing');
+  });
+
   _initChatInput();
   _initDockAndFAB();
   _initModelsTabEvents();
+  _initMarketingTabEvents();
 
   // URL Query Parameters support for quick deep linking / automated testing
   const urlParams = new URLSearchParams(window.location.search);
@@ -1742,6 +2786,8 @@ export function initPanel() {
     _openGeneralPanel('files');
   } else if (urlParams.get('open_logs') === '1') {
     _openGeneralPanel('logs');
+  } else if (urlParams.get('open_marketing') === '1') {
+    _openGeneralPanel('marketing');
   } else if (urlParams.get('open_agent')) {
     const agId = urlParams.get('open_agent');
     const ag = AGENTS.find((a) => a.id === agId);

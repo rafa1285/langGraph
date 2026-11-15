@@ -17,6 +17,17 @@ class CreateProjectRequest(BaseModel):
         min_length=10,
         description="Descripción detallada de la idea inicial del software.",
     )
+    marketing_enabled: bool | None = Field(
+        default=None,
+        description="Indica si se activa la suite de marketing para este proyecto.",
+    )
+    marketing_type: str | None = Field(
+        default=None,
+        description=(
+            "Tipo de estrategia (none, saas_b2b, b2c_app_ecommerce, "
+            "devtools_api, internal_rollout, custom)."
+        ),
+    )
 
 
 class CreateProjectResponse(BaseModel):

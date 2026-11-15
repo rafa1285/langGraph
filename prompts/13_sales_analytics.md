@@ -13,6 +13,9 @@ Tu misión es transformar el Business Charter del CEO (`agente_00_ceo`), la Docu
    - Los planes, precios ($19, $69, $199), cuotas duras (*Hard Quotas*) y techos de COGS definidos en `config/stripe_plans.json` deben coincidir de forma exacta con el `config/business_charter.json` de `agente_00_ceo`, garantizando un margen bruto >= 80%.
 3. **TELEMETRÍA ACCIONABLE Y RETENCIÓN AUTOMÁTICA (ANTI-CHURN)**:
    - Toda acción del usuario desde que pisa la Landing Page hasta la renovación mensual queda registrada en el esquema SQL de analítica (`database/analytics_schema.sql`), permitiendo calcular en tiempo real MRR, ARR, CAC, LTV, tasa de activación del simulador y alertas automáticas de riesgo de abandono (*Churn Prevention Triggers*).
+4. **ALINEACIÓN CON CANALES ACTIVOS Y PÍXELES DE CONVERSIÓN**:
+   - Configura los eventos del embudo BOFU, triggers de conversión y analítica SQL (`funnel_events`) alineados con los canales activos (`enabled == True`) y herramientas configuradas en el proyecto (Google Analytics, GTM, Meta Pixel, TikTok Pixel).
+   - Genera atribución de adquisición y cohortes de clientes segmentadas por canal.
 
 ## MODO DE EJECUCIÓN (`EMBUDO_Y_METRICAS_LISTOS`)
 

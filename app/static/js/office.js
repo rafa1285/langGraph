@@ -1883,19 +1883,45 @@ function _setupHUDControls() {
     }
   });
 
+  $id('launch-marketing-type')?.addEventListener('change', (e) => {
+    const val = /** @type {HTMLSelectElement} */ (e.target).value;
+    if (val === 'custom') {
+      document.dispatchEvent(new CustomEvent('marketing:configure', {
+        detail: { projectId: _activeProjectId }
+      }));
+    }
+  });
+
   $id('btn-launch')?.addEventListener('click', async () => {
     const input = /** @type {HTMLInputElement|null} */ ($id('idea-input'));
     if (!input || !input.value.trim()) return;
     const idea = input.value.trim();
-    appendActivityLog({ level: 'info', source: 'LAUNCH', message: `Lanzando proyecto con idea: "${idea.slice(0, 40)}..."` });
+
+    const mktSelect = /** @type {HTMLSelectElement|null} */ ($id('launch-marketing-type'));
+    const mktChoice = mktSelect ? mktSelect.value : 'saas_b2b';
+    const isCustom = mktChoice === 'custom';
+    const marketingEnabled = mktChoice !== 'none';
+    const marketingType = isCustom ? 'saas_b2b' : (marketingEnabled ? mktChoice : 'none');
+
+    appendActivityLog({
+      level: 'info',
+      source: 'LAUNCH',
+      message: `Lanzando proyecto con idea: "${idea.slice(0, 40)}..." [Marketing: ${marketingEnabled ? marketingType : 'desactivado'}]`
+    });
     try {
-      const res = await API.createProject(idea);
+      const res = await API.createProject(idea, marketingEnabled, marketingType);
       if (res && res.project_id) {
         _activeProjectId = res.project_id;
         await _loadProjectList();
         const sel = /** @type {HTMLSelectElement|null} */ ($id('project-select'));
         if (sel) sel.value = res.project_id;
         appendActivityLog({ level: 'success', source: 'PIPELINE', message: `Proyecto creado con éxito: ${res.project_id}` });
+
+        if (isCustom) {
+          document.dispatchEvent(new CustomEvent('marketing:configure', {
+            detail: { projectId: res.project_id }
+          }));
+        }
       }
     } catch (err) {
       appendActivityLog({ level: 'error', source: 'LAUNCH', message: `Error al crear proyecto: ${err.message}` });

@@ -5,6 +5,7 @@ import logging
 import re
 import time
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 from app.core.config import settings
@@ -682,6 +683,14 @@ class FactoryNodes:
         else:
             self.knowledge_sync = None
 
+    def _get_active_store(self, state: SoftwareFactoryState) -> OfficeStore:
+        """Retrieve active OfficeStore respecting database path stored in state."""
+        db_path = state.get("_office_db_path")
+        if db_path and Path(str(db_path)).is_file():
+            if str(self.office_store.db_path) != str(db_path):
+                return OfficeStore(db_path=Path(str(db_path)))
+        return self.office_store
+
     async def _execute_agent_step(
         self,
         agent_id: AgentID,
@@ -706,6 +715,10 @@ class FactoryNodes:
                 "step_number": step_number,
             },
         )
+
+        # Track active OfficeStore db_path in state for routing consistency
+        if self.office_store and getattr(self.office_store, "db_path", None):
+            state["_office_db_path"] = str(self.office_store.db_path)
 
         # 1. Fetch unread emails and inject inbox prefix if available
         inbox_prefix, unread_emails = await self.mail_service.fetch_unread_inbox(
@@ -1076,9 +1089,44 @@ class FactoryNodes:
 
     async def node_09_growth(self, state: SoftwareFactoryState) -> dict[str, object]:
         """Node for Agent 09 (Growth): Generates launch strategy and final checklist."""
+        project_id = state.get("project_id", "")
+        store = self._get_active_store(state)
+        profile = await store.get_project_marketing_config(project_id)
+
+        if not profile.marketing_enabled or not profile.include_growth_agent:
+            return {
+                "estrategia_growth": "MARKETING_DISABLED_FOR_PROJECT",
+                "execution_history": [],
+            }
+
+        active_channels = [c for c in profile.channels if c.enabled]
+        disabled_channels = [c for c in profile.channels if not c.enabled]
+
+        marketing_context = (
+            f"\n\n# Configuración del Perfil de Marketing del Proyecto\n"
+            f"- Tipo de Estrategia: {profile.marketing_type}\n"
+            f"- Audiencia Objetivo: {profile.target_audience or 'General'}\n"
+            f"- Voz de Marca: {profile.brand_voice}\n"
+            f"- Canales Activos ({len(active_channels)}):\n"
+            + "\n".join(
+                f"  * {c.name} ({c.channel_id}): Cuenta/URL '{c.account_handle_or_url or 'N/A'}'. "
+                f"Instrucciones: '{c.custom_instructions or 'Estándar'}'"
+                for c in active_channels
+            )
+            + (
+                "\n- Canales Desactivados (Prohibido generar contenido): "
+                + ", ".join(c.name for c in disabled_channels)
+                if disabled_channels else ""
+            )
+        )
+
+        base_payload = _build_user_payload(AgentID.AGENTE_09_GROWTH, state)
+        payload = f"{base_payload}{marketing_context}"
+
         raw_output, _status, _dest, record = await self._execute_agent_step(
             AgentID.AGENTE_09_GROWTH,
             state,
+            payload_override=payload,
         )
         return {
             "estrategia_growth": raw_output,
@@ -1310,15 +1358,127 @@ class FactoryNodes:
     node_11_ui_ux = ui_ux_node
 
     async def marketing_node(self, state: SoftwareFactoryState) -> dict[str, object]:
-        """Node for Agent 12 (Marketing): Formulates TOFU SEO, sitemap, robots, and copy."""
+        """Node for Agent 12 (Marketing): TOFU SEO, copy, and executes marketing tools."""
+        from app.services.marketing_tools import (
+            execute_email_campaign_manager,
+            execute_market_research_seo,
+            execute_seo_landing_injector,
+            execute_social_ads_publisher,
+        )
+
+        project_id = state.get("project_id", "")
+        store = self._get_active_store(state)
+        profile = await store.get_project_marketing_config(project_id)
+
+        active_channels = [c for c in profile.channels if c.enabled]
+        disabled_channels = [c for c in profile.channels if not c.enabled]
+        tools_by_id = {t.tool_id: t for t in profile.tools}
+
+        # 1. Pre-LLM: Market Research SEO
+        research_seo_tool = tools_by_id.get("market_research_seo")
+        seo_research_context = ""
+        if research_seo_tool and research_seo_tool.enabled:
+            project_context = (
+                f"{state.get('idea_inicial', '')}\n"
+                f"{state.get('pre_sdd_doc', '')[:300]}"
+            )
+            try:
+                research_res = await execute_market_research_seo(
+                    project_context, profile, research_seo_tool
+                )
+                seo_research_context = (
+                    f"\n\n# Datos Previos de Investigación SEO y Canales (Pre-LLM):\n"
+                    f"```json\n{json.dumps(research_res, indent=2, ensure_ascii=False)}\n```"
+                )
+            except Exception as exc:
+                logger.warning("Pre-LLM research execution failed for %s: %s", project_id, exc)
+
+        marketing_profile_context = (
+            f"\n\n# Configuración del Perfil de Marketing del Proyecto\n"
+            f"- Tipo de Estrategia: {profile.marketing_type}\n"
+            f"- Audiencia Objetivo: {profile.target_audience or 'General'}\n"
+            f"- Voz de Marca: {profile.brand_voice}\n"
+            f"- Canales Activos ({len(active_channels)}):\n"
+            + "\n".join(
+                f"  * {c.name} ({c.channel_id}): Cuenta/URL '{c.account_handle_or_url or 'N/A'}'. "
+                f"Instrucciones: '{c.custom_instructions or 'Estándar'}'"
+                for c in active_channels
+            )
+            + (
+                "\n- Canales Desactivados (Prohibido generar contenido): "
+                + ", ".join(c.name for c in disabled_channels)
+                if disabled_channels else ""
+            )
+            + seo_research_context
+        )
+
+        base_payload = _build_user_payload(AgentID.AGENTE_12_MARKETING, state)
+        payload = f"{base_payload}{marketing_profile_context}"
+
+        # 2. LLM Execution
         raw_output, _status, _dest, record = await self._execute_agent_step(
             AgentID.AGENTE_12_MARKETING,
             state,
+            payload_override=payload,
         )
         if not raw_output or "robots.txt" not in raw_output:
             raw_output = FALLBACK_MARKETING
+
+        # 3. Post-LLM: Materialize and execute configured project tools
+        ws_dir = getattr(self.workspace_writer, "base_dir", None)
+        parsed_output = {"marketing_spec": raw_output}
+        tools_executed: list[str] = []
+
+        landing_tool = tools_by_id.get("seo_landing_injector")
+        if landing_tool and landing_tool.enabled:
+            try:
+                await execute_seo_landing_injector(
+                    project_id=project_id,
+                    parsed_output=parsed_output,
+                    raw_markdown=raw_output,
+                    profile=profile,
+                    tool_config=landing_tool,
+                    workspaces_dir=ws_dir,
+                )
+                tools_executed.append("seo_landing_injector")
+            except Exception as exc:
+                logger.warning("Error running seo_landing_injector for %s: %s", project_id, exc)
+
+        email_tool = tools_by_id.get("email_campaign_manager")
+        if email_tool and email_tool.enabled:
+            try:
+                await execute_email_campaign_manager(
+                    project_id=project_id,
+                    parsed_output=parsed_output,
+                    profile=profile,
+                    tool_config=email_tool,
+                    workspaces_dir=ws_dir,
+                )
+                tools_executed.append("email_campaign_manager")
+            except Exception as exc:
+                logger.warning("Error running email_campaign_manager for %s: %s", project_id, exc)
+
+        social_tool = tools_by_id.get("social_ads_publisher")
+        if social_tool and social_tool.enabled:
+            try:
+                await execute_social_ads_publisher(
+                    project_id=project_id,
+                    parsed_output=parsed_output,
+                    profile=profile,
+                    tool_config=social_tool,
+                    workspaces_dir=ws_dir,
+                )
+                tools_executed.append("social_ads_publisher")
+            except Exception as exc:
+                logger.warning("Error running social_ads_publisher for %s: %s", project_id, exc)
+
+        profile.last_execution_status = "COMPLETED"
+        profile.last_executed_at = datetime.now(UTC).isoformat()
+        await store.save_project_marketing_config(project_id, profile)
+
         return {
             "marketing_spec": raw_output,
+            "marketing_tools_executed": tools_executed,
             "execution_history": [record],
         }
 
@@ -1326,9 +1486,38 @@ class FactoryNodes:
 
     async def sales_analytics_node(self, state: SoftwareFactoryState) -> dict[str, object]:
         """Node for Agent 13 (Sales & BI): Pricing, bot playbook, and SQL schema."""
+        project_id = state.get("project_id", "")
+        store = self._get_active_store(state)
+        profile = await store.get_project_marketing_config(project_id)
+
+        active_channels = [c for c in profile.channels if c.enabled]
+        tools_by_id = {t.tool_id: t for t in profile.tools}
+        landing_tool = tools_by_id.get("seo_landing_injector")
+        pixels = []
+        if landing_tool:
+            pixels = [
+                k
+                for k in ["google_analytics_id", "gtm_id", "meta_pixel_id", "tiktok_pixel_id"]
+                if landing_tool.credentials.get(k)
+            ]
+
+        ch_list = ", ".join(c.channel_id for c in active_channels) or "Direct / Organic"
+        px_list = ", ".join(pixels) or "Internal SQL Telemetry"
+        marketing_context = (
+            f"\n\n# Canales y Píxeles de Conversión Configurados en el Proyecto\n"
+            f"- Canales Activos de Tráfico: {ch_list}\n"
+            f"- Píxeles / Herramientas de Medición: {px_list}\n"
+            f"- Instrucciones: Asegura que el esquema database/analytics_schema.sql registre "
+            f"conversiones y cohortes segmentadas por el canal de origen del tráfico."
+        )
+
+        base_payload = _build_user_payload(AgentID.AGENTE_13_SALES_ANALYTICS, state)
+        payload = f"{base_payload}{marketing_context}"
+
         raw_output, _status, _dest, record = await self._execute_agent_step(
             AgentID.AGENTE_13_SALES_ANALYTICS,
             state,
+            payload_override=payload,
         )
         if not raw_output or "stripe_plans.json" not in raw_output:
             raw_output = FALLBACK_SALES_ANALYTICS

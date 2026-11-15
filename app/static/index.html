@@ -64,6 +64,17 @@
           <input type="text" id="idea-input" class="pixel-input"
                  placeholder="DESCRIBE TU IDEA DE NEGOCIO..." maxlength="500"
                  aria-label="Idea inicial del proyecto">
+          <div class="mkt-launch-group" title="Configurar si este proyecto llevará marketing y su estrategia">
+            <span class="mkt-launch-label">📣 MKT:</span>
+            <select id="launch-marketing-type" class="pixel-select compact-select" aria-label="Estrategia de marketing del proyecto">
+              <option value="none">🚫 Sin Marketing (Solo Dev / Interno)</option>
+              <option value="saas_b2b" selected>💼 SaaS B2B (SEO + Landing + LinkedIn + Email)</option>
+              <option value="b2c_app_ecommerce">🛍️ App B2C / E-com (Landing + Píxeles + Ads + Email)</option>
+              <option value="devtools_api">🛠️ API / DevTool (SEO Técnico + ProductHunt + Reddit + X)</option>
+              <option value="internal_rollout">🏢 Despliegue Interno (Onboarding Email + Notas)</option>
+              <option value="custom">⚙️ Personalizado... (Abrir configurador)</option>
+            </select>
+          </div>
           <button id="btn-launch" class="pixel-btn primary" aria-label="Lanzar proyecto">
             ▶ LANZAR
           </button>
@@ -180,6 +191,7 @@
           <button class="tab-btn" data-tab="logs" role="tab" aria-selected="false">📋 LOGS</button>
           <button class="tab-btn" data-tab="files" role="tab" aria-selected="false">📁 ARCHIVOS</button>
           <button class="tab-btn" data-tab="models" role="tab" aria-selected="false" title="Configuración de Modelos LLM y Enrutamiento">🧠 MODELOS</button>
+          <button class="tab-btn" id="tab-btn-marketing" data-tab="marketing" role="tab" aria-selected="false" title="Estrategia, Canales y Cuentas de Marketing">🎯 MARKETING</button>
         </div>
 
         <div id="panel-content">
@@ -324,6 +336,117 @@
 
           </div><!-- /#tab-models -->
 
+          <!-- Marketing Tab -->
+          <div class="tab-content" id="tab-marketing" role="tabpanel">
+            <div class="mkt-panel-container">
+
+              <!-- Cabecera de Proyecto y Control en Vivo -->
+              <div class="mkt-section-box mkt-header-box">
+                <div class="mkt-top-row">
+                  <div class="mkt-selector-wrap">
+                    <label for="mkt-project-select" class="pixel-label">PROYECTO:</label>
+                    <select id="mkt-project-select" class="pixel-select"></select>
+                  </div>
+                  <div class="mkt-status-wrap">
+                    <button id="btn-mkt-toggle-status" class="pixel-btn mkt-status-btn active" title="Alternar activación de marketing">
+                      🟢 MARKETING ACTIVADO
+                    </button>
+                  </div>
+                </div>
+
+                <div class="mkt-execute-bar">
+                  <button id="btn-mkt-execute-now" class="pixel-btn primary mkt-exec-btn" title="Ejecutar bajo demanda las herramientas y canales habilitados para este proyecto">
+                    ⚡ EJECUTAR MARKETING AHORA
+                  </button>
+                  <div id="mkt-execution-feedback" class="mkt-feedback-banner hidden"></div>
+                </div>
+              </div>
+
+              <!-- Estrategia & Identidad -->
+              <div class="mkt-section-box">
+                <div class="mkt-box-title">🎯 ESTRATEGIA &amp; IDENTIDAD</div>
+                <div class="mkt-strategy-grid">
+                  <div class="form-row">
+                    <label for="mkt-strategy-preset" class="pixel-label">PRESET DE ESTRATEGIA:</label>
+                    <div class="preset-action-group">
+                      <select id="mkt-strategy-preset" class="pixel-select">
+                        <option value="saas_b2b">💼 SaaS B2B (SEO + Landing + LinkedIn + Email + PH)</option>
+                        <option value="b2c_app_ecommerce">🛍️ App B2C / E-commerce (Landing + Ads + Email)</option>
+                        <option value="devtools_api">🛠️ DevTools / API (SEO Técnico + Reddit + PH + X)</option>
+                        <option value="internal_rollout">🏢 Despliegue Interno (Onboarding Email)</option>
+                        <option value="custom">⚙️ Personalizado</option>
+                      </select>
+                      <button id="btn-mkt-apply-preset" class="pixel-btn secondary" title="Aplicar configuración recomendada del preset">APLICAR</button>
+                    </div>
+                  </div>
+
+                  <div class="form-row">
+                    <label for="mkt-brand-voice" class="pixel-label">VOZ DE MARCA:</label>
+                    <input type="text" id="mkt-brand-voice" class="pixel-input" placeholder="ej. persuasivo-profesional, audaz, educativo...">
+                  </div>
+
+                  <div class="form-row">
+                    <label for="mkt-target-audience" class="pixel-label">AUDIENCIA OBJETIVO:</label>
+                    <input type="text" id="mkt-target-audience" class="pixel-input" placeholder="ej. CTOs, Startups B2B, Desarrolladores...">
+                  </div>
+
+                  <div class="form-row">
+                    <label for="mkt-language" class="pixel-label">IDIOMA PRINCIPAL:</label>
+                    <select id="mkt-language" class="pixel-select">
+                      <option value="es">Español (ES)</option>
+                      <option value="en">English (EN)</option>
+                      <option value="pt">Português (PT)</option>
+                      <option value="fr">Français (FR)</option>
+                      <option value="de">Deutsch (DE)</option>
+                    </select>
+                  </div>
+
+                  <div class="mkt-agents-checks">
+                    <label class="pixel-checkbox-label">
+                      <input type="checkbox" id="mkt-include-growth" checked>
+                      <span>📈 Activar 09_growth (Growth &amp; Adquisición)</span>
+                    </label>
+                    <label class="pixel-checkbox-label">
+                      <input type="checkbox" id="mkt-include-sales" checked>
+                      <span>💹 Activar 13_sales_analytics (Métricas &amp; Embudo)</span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Matriz de Canales Activos por Proyecto -->
+              <div class="mkt-section-box">
+                <div class="mkt-box-header">
+                  <div class="mkt-box-title">📡 MATRIZ DE CANALES ACTIVOS (PROPIOS DEL PROYECTO)</div>
+                  <span class="mkt-box-sub">Marca canales activos y define sus cuentas, URLs o webhooks</span>
+                </div>
+                <div id="mkt-channels-matrix" class="mkt-channels-grid">
+                  <!-- Rendered dynamically -->
+                </div>
+              </div>
+
+              <!-- Panel de Herramientas & Cuentas Propias -->
+              <div class="mkt-section-box">
+                <div class="mkt-box-header">
+                  <div class="mkt-box-title">🛠️ HERRAMIENTAS &amp; CREDENCIALES POR PROYECTO</div>
+                  <span class="mkt-box-sub">Configura credenciales API, píxeles y diagnósticos en tiempo real</span>
+                </div>
+                <div id="mkt-tools-container" class="mkt-tools-list">
+                  <!-- Rendered dynamically -->
+                </div>
+              </div>
+
+              <!-- Guardar y Acciones Finales -->
+              <div class="mkt-footer-actions">
+                <button id="btn-save-marketing-profile" class="pixel-btn primary mkt-save-btn">
+                  💾 GUARDAR CONFIGURACIÓN DE MARKETING
+                </button>
+                <div id="mkt-save-feedback" class="mkt-feedback-banner hidden"></div>
+              </div>
+
+            </div>
+          </div><!-- /#tab-marketing -->
+
         </div><!-- /#panel-content -->
 
       </aside><!-- /#side-panel -->
@@ -341,6 +464,9 @@
         </button>
         <button id="dock-btn-chat" class="pixel-btn secondary" title="Abrir conversación directa">
           💬 CHAT 1-A-1
+        </button>
+        <button id="dock-btn-marketing" class="pixel-btn secondary" title="Centro de control de Marketing configurable por proyecto">
+          🎯 MARKETING
         </button>
         <button id="dock-btn-telemetry" class="pixel-btn secondary" title="Ver telemetría detallada de tokens y latencias">
           📊 TELEMETRÍA

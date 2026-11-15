@@ -50,6 +50,8 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str | None = None
     FOUNDER_ALERT_EMAIL: str | None = None
     TAVILY_API_KEY: str | None = None
+    N8N_BASE_URL: str = "http://localhost:5678"
+    N8N_API_KEY: str | None = None
     NOTION_MCP_ENABLED: bool = False
     REAL_MAIL_ENABLED: bool = False
     SMTP_HOST: str = "smtp.strato.com"

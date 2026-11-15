@@ -9,6 +9,9 @@ services:
       - "8080:8080"
     env_file:
       - .env
+    environment:
+      - N8N_BASE_URL=http://n8n:5678
+      - N8N_API_KEY=n8n_api_agentoffice_master_key_2026
     volumes:
       - ./workspaces:/app/workspaces
       - ./prompts:/app/prompts:ro
@@ -19,3 +22,24 @@ services:
       timeout: 5s
       retries: 3
       start_period: 10s
+
+  # Optional n8n Workflow Automation Engine (start with: docker compose --profile automation up)
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: agentoffice_n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+      - NODE_ENV=production
+      - WEBHOOK_URL=http://localhost:5678/
+    volumes:
+      - n8n_data:/home/node/.n8n
+    profiles:
+      - automation
+
+volumes:
+  n8n_data:

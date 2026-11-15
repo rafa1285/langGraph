@@ -5,6 +5,17 @@ from langgraph.graph import END
 from app.core.config import settings
 from app.graph.state import SoftwareFactoryState
 from app.schemas.routing import AgentID, DeliverableStatus
+from app.services.office_store import OfficeStore
+
+NODE_CEO_SIGNOFF = "agente_00_ceo_signoff"
+
+
+def _get_office_store(state: SoftwareFactoryState) -> OfficeStore:
+    """Helper to instantiate OfficeStore using isolated DB path from state if present."""
+    db_path = state.get("_office_db_path")
+    if db_path:
+        return OfficeStore(db_path=db_path)
+    return OfficeStore()
 
 
 def route_after_architect(state: SoftwareFactoryState) -> list[str]:
@@ -100,6 +111,65 @@ def route_after_ciso(state: SoftwareFactoryState) -> str:
     return AgentID.AGENTE_08_DOCS.value
 
 
+def route_after_docs(state: SoftwareFactoryState) -> str:
+    """Route after Agent 08 (Docs & RAG) based on real-time marketing configuration in SQLite."""
+    project_id = state.get("project_id", "")
+    office_store = _get_office_store(state)
+    config = office_store.get_project_marketing_config_sync(project_id)
+
+    if not config.marketing_enabled:
+        return NODE_CEO_SIGNOFF
+
+    if config.include_growth_agent:
+        return AgentID.AGENTE_09_GROWTH.value
+
+    return AgentID.AGENTE_12_MARKETING.value
+
+
+def route_after_growth(state: SoftwareFactoryState) -> str:
+    """Route after Agent 09 (Growth) to Marketing or skip directly to CEO Signoff."""
+    project_id = state.get("project_id", "")
+    office_store = _get_office_store(state)
+    config = office_store.get_project_marketing_config_sync(project_id)
+
+    if not config.marketing_enabled:
+        return NODE_CEO_SIGNOFF
+
+    return AgentID.AGENTE_12_MARKETING.value
+
+
+def route_after_marketing(state: SoftwareFactoryState) -> str:
+    """Route after Agent 12 (Marketing) to Sales Analytics or skip directly to CEO Signoff."""
+    project_id = state.get("project_id", "")
+    office_store = _get_office_store(state)
+    config = office_store.get_project_marketing_config_sync(project_id)
+
+    if not config.marketing_enabled:
+        return NODE_CEO_SIGNOFF
+
+    if config.include_sales_analytics_agent:
+        return AgentID.AGENTE_13_SALES_ANALYTICS.value
+
+    return NODE_CEO_SIGNOFF
+
+
+def route_after_sales_analytics(state: SoftwareFactoryState) -> str:
+    """Route after Agent 13 (Sales Analytics) to CEO Signoff."""
+    return NODE_CEO_SIGNOFF
+
+
+def route_after_docs_legacy(state: SoftwareFactoryState) -> str:
+    """Route after Agent 08 in legacy 10-agent pipeline based on marketing config."""
+    project_id = state.get("project_id", "")
+    office_store = _get_office_store(state)
+    config = office_store.get_project_marketing_config_sync(project_id)
+
+    if not config.marketing_enabled or not config.include_growth_agent:
+        return END
+
+    return AgentID.AGENTE_09_GROWTH.value
+
+
 def route_after_ceo_signoff(state: SoftwareFactoryState) -> str:
     """Route CEO signoff: END on approval or iteration limit (>=3), else loop back to culprit."""
     if state.get("ceo_approved", False):
@@ -116,6 +186,27 @@ def route_after_ceo_signoff(state: SoftwareFactoryState) -> str:
         culprit = state.get("ceo_culprit")
         if culprit:
             val = culprit.value if isinstance(culprit, AgentID) else str(culprit)
+            # Verify if marketing agent rework is allowed under current project configuration
+            marketing_agents = (
+                AgentID.AGENTE_09_GROWTH.value,
+                AgentID.AGENTE_12_MARKETING.value,
+                AgentID.AGENTE_13_SALES_ANALYTICS.value,
+            )
+            if val in marketing_agents:
+                office_store = _get_office_store(state)
+                config = office_store.get_project_marketing_config_sync(
+                    state.get("project_id", "")
+                )
+                if not config.marketing_enabled:
+                    return END
+                if val == AgentID.AGENTE_09_GROWTH.value and not config.include_growth_agent:
+                    return END
+                if (
+                    val == AgentID.AGENTE_13_SALES_ANALYTICS.value
+                    and not config.include_sales_analytics_agent
+                ):
+                    return END
+
             for member in AgentID:
                 if member.value == val:
                     return member.value
