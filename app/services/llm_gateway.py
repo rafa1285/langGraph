@@ -362,11 +362,11 @@ class GeminiLLMGateway:
             if model.provider == "google":
                 url = f"https://generativelanguage.googleapis.com/v1beta/models/{model.model_id}:generateContent?key={api_key}"
                 headers = {"Content-Type": "application/json"}
-                payload = {
+                payload_google: dict[str, Any] = {
                     "contents": [{"parts": [{"text": "Responde solo: OK"}]}],
                     "generationConfig": {"maxOutputTokens": 5, "temperature": 0.0},
                 }
-                response = await client.post(url, json=payload, headers=headers)
+                response = await client.post(url, json=payload_google, headers=headers)
             elif model.provider == "anthropic":
                 base = model.base_url or "https://api.anthropic.com/v1"
                 url = f"{base.rstrip('/')}/messages"
@@ -375,12 +375,12 @@ class GeminiLLMGateway:
                     "anthropic-version": "2023-06-01",
                     "Content-Type": "application/json",
                 }
-                payload = {
+                payload_anthropic: dict[str, Any] = {
                     "model": model.model_id,
                     "messages": [{"role": "user", "content": "Responde solo: OK"}],
                     "max_tokens": 5,
                 }
-                response = await client.post(url, json=payload, headers=headers)
+                response = await client.post(url, json=payload_anthropic, headers=headers)
             else:
                 base = model.base_url or "https://api.openai.com/v1"
                 url = f"{base.rstrip('/')}/chat/completions"
@@ -388,13 +388,13 @@ class GeminiLLMGateway:
                     "Authorization": f"Bearer {api_key}",
                     "Content-Type": "application/json",
                 }
-                payload = {
+                payload_openai: dict[str, Any] = {
                     "model": model.model_id,
                     "messages": [{"role": "user", "content": "Responde solo: OK"}],
                     "max_tokens": 5,
                     "temperature": 0.0,
                 }
-                response = await client.post(url, json=payload, headers=headers)
+                response = await client.post(url, json=payload_openai, headers=headers)
 
             latency_ms = int((time.perf_counter() - t0) * 1000)
             return response.status_code, latency_ms, response.text

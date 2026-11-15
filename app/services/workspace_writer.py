@@ -25,17 +25,26 @@ class WorkspaceWriter:
         content: str,
     ) -> str:
         """Synchronous write routine intended to be called inside asyncio.to_thread."""
-        target_dir = self.base_dir / project_id
+        base_root = self.base_dir.resolve()
+        target_dir = (base_root / project_id).resolve()
+        if not target_dir.is_relative_to(base_root):
+            raise ValueError(
+                f"Path traversal detectado: el project_id '{project_id}' está fuera del workspace."
+            )
+
         target_dir.mkdir(parents=True, exist_ok=True)
 
-        deliverables_dir = target_dir / "deliverables"
+        deliverables_dir = (target_dir / "deliverables").resolve()
         deliverables_dir.mkdir(parents=True, exist_ok=True)
 
         filename = f"{step_number:02d}_{agent_id.value}.md"
-        file_path = target_dir / filename
+        file_path = (target_dir / filename).resolve()
+        if not file_path.is_relative_to(target_dir):
+            raise ValueError(f"Path traversal detectado en el nombre de archivo: '{filename}'")
+
         file_path.write_text(content, encoding="utf-8")
 
-        deliv_path = deliverables_dir / filename
+        deliv_path = (deliverables_dir / filename).resolve()
         deliv_path.write_text(content, encoding="utf-8")
 
         if file_path.is_absolute():

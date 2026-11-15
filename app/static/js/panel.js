@@ -1997,7 +1997,7 @@ function _renderMarketingChannels(channels) {
         </div>
         <div class="mkt-channel-field">
           <label>${_esc(meta.credLabel)}</label>
-          <input type="text" class="mkt-ch-cred" data-channel="${_esc(chId)}"
+          <input type="password" class="mkt-ch-cred" data-channel="${_esc(chId)}"
                  value="${_esc(credVal)}"
                  placeholder="${_esc(meta.credPlaceholder)}">
         </div>
@@ -2063,7 +2063,7 @@ function _renderMarketingTools(tools, projectId) {
         <div class="mkt-tool-grid-2">
           <div class="mkt-channel-field">
             <label>API KEY BÚSQUEDA (TAVILY / SERPER):</label>
-            <input type="text" id="mkt-tool-cred-search-key" value="${_esc(creds.search_api_key || '')}" placeholder="tvly-xxxx o secret...">
+            <input type="password" id="mkt-tool-cred-search-key" value="${_esc(creds.search_api_key || '')}" placeholder="tvly-xxxx o secret...">
           </div>
           <div class="mkt-channel-field">
             <label>PALABRAS CLAVE SEMILLA (COMA):</label>
@@ -2151,7 +2151,7 @@ function _renderMarketingTools(tools, projectId) {
         <div class="mkt-tool-grid-2">
           <div class="mkt-channel-field">
             <label>API KEY DEL PROVEEDOR:</label>
-            <input type="text" id="mkt-tool-cred-email-key" value="${_esc(creds.email_api_key || '')}" placeholder="re_xxxx / xkeysib-xxxx...">
+            <input type="password" id="mkt-tool-cred-email-key" value="${_esc(creds.email_api_key || '')}" placeholder="re_xxxx / xkeysib-xxxx...">
           </div>
           <div class="mkt-channel-field">
             <label>LISTA DE PRUEBA (DESTINATARIOS COMA):</label>

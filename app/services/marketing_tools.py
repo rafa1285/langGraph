@@ -473,8 +473,12 @@ async def execute_seo_landing_injector(
     workspaces_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     """Materialize marketing assets (landing, master plan, sitemap, robots, seo meta)."""
-    base_dir = Path(workspaces_dir or settings.WORKSPACES_DIR)
-    target_dir = base_dir / project_id / "marketing"
+    base_dir = Path(workspaces_dir or settings.WORKSPACES_DIR).resolve()
+    target_dir = (base_dir / project_id / "marketing").resolve()
+    if not target_dir.is_relative_to(base_dir):
+        raise ValueError(
+            f"Path traversal detectado: el project_id '{project_id}' está fuera del workspace."
+        )
     target_dir.mkdir(parents=True, exist_ok=True)
 
     domain_url = tool_config.settings.get("domain_url") or f"https://{project_id}.agentoffice.local"
@@ -623,8 +627,12 @@ async def execute_email_campaign_manager(
     workspaces_dir: Path | str | None = None,
 ) -> dict[str, Any]:
     """Format and save email sequences, and optionally dispatch live test emails."""
-    base_dir = Path(workspaces_dir or settings.WORKSPACES_DIR)
-    target_dir = base_dir / project_id / "marketing"
+    base_dir = Path(workspaces_dir or settings.WORKSPACES_DIR).resolve()
+    target_dir = (base_dir / project_id / "marketing").resolve()
+    if not target_dir.is_relative_to(base_dir):
+        raise ValueError(
+            f"Path traversal detectado: el project_id '{project_id}' está fuera del workspace."
+        )
     target_dir.mkdir(parents=True, exist_ok=True)
 
     provider = tool_config.settings.get("email_provider", "resend")
@@ -761,8 +769,12 @@ async def execute_social_ads_publisher(
     Supports both Native Direct Connectors (Discord webhook, Telegram Bot API, Dev.to REST API)
     and Webhook dispatch (n8n, Make, Zapier).
     """
-    base_dir = Path(workspaces_dir or settings.WORKSPACES_DIR)
-    target_dir = base_dir / project_id / "marketing"
+    base_dir = Path(workspaces_dir or settings.WORKSPACES_DIR).resolve()
+    target_dir = (base_dir / project_id / "marketing").resolve()
+    if not target_dir.is_relative_to(base_dir):
+        raise ValueError(
+            f"Path traversal detectado: el project_id '{project_id}' está fuera del workspace."
+        )
     target_dir.mkdir(parents=True, exist_ok=True)
 
     active_channels = [c for c in profile.channels if c.enabled]
@@ -811,6 +823,13 @@ async def execute_social_ads_publisher(
         }
         channels_data.append(entry)
 
+        draft_obj = entry.get("content_draft", {})
+        draft_dict: dict[str, Any] = draft_obj if isinstance(draft_obj, dict) else {}
+        headline = str(draft_dict.get("headline", ""))
+        body = str(draft_dict.get("body", ""))
+        raw_tags = draft_dict.get("hashtags", [])
+        hashtags: list[str] = [str(h) for h in raw_tags] if isinstance(raw_tags, list) else []
+
         # ── 1. Vía Nativa Directa (Sin n8n) ──────────────────────────────────
         direct_handled = False
         creds = ch.credentials
@@ -818,37 +837,43 @@ async def execute_social_ads_publisher(
         # A) Discord Native Webhook
         discord_webhook = creds.get("discord_webhook_url")
         if cid == "telegram_discord" and discord_webhook:
-            try:
-                async with httpx.AsyncClient(timeout=8.0) as client:
-                    resp = await client.post(
-                        discord_webhook,
-                        json={
-                            "content": (
-                                f"🚀 **{proj_name}** | {entry['content_draft']['headline']}\n"
-                                f"{entry['content_draft']['body']}\n"
-                                f"🔗 {entry['account_handle_or_url'] or landing_url}"
-                            ),
-                        },
-                    )
+            if not (discord_webhook.startswith("http://") or discord_webhook.startswith("https://")):
+                logger.warning(
+                    "URL de webhook Discord rechazada por esquema inválido: %s",
+                    discord_webhook[:30],
+                )
+            else:
+                try:
+                    async with httpx.AsyncClient(timeout=8.0) as client:
+                        resp = await client.post(
+                            discord_webhook,
+                            json={
+                                "content": (
+                                    f"🚀 **{proj_name}** | {headline}\n"
+                                    f"{body}\n"
+                                    f"🔗 {entry['account_handle_or_url'] or landing_url}"
+                                ),
+                            },
+                        )
+                        dispatched_direct.append(
+                            {
+                                "channel_id": cid,
+                                "connector": "discord_native",
+                                "success": resp.status_code < 300,
+                                "status_code": resp.status_code,
+                            }
+                        )
+                        direct_handled = True
+                except Exception as exc:
+                    logger.warning("Discord direct webhook error: %s", exc)
                     dispatched_direct.append(
                         {
                             "channel_id": cid,
                             "connector": "discord_native",
-                            "success": resp.status_code < 300,
-                            "status_code": resp.status_code,
+                            "success": False,
+                            "error": str(exc),
                         }
                     )
-                    direct_handled = True
-            except Exception as exc:
-                logger.warning("Discord direct webhook error: %s", exc)
-                dispatched_direct.append(
-                    {
-                        "channel_id": cid,
-                        "connector": "discord_native",
-                        "success": False,
-                        "error": str(exc),
-                    }
-                )
 
         # B) Telegram Bot Native API
         tg_token = creds.get("telegram_bot_token")
@@ -863,8 +888,8 @@ async def execute_social_ads_publisher(
                             "chat_id": tg_chat,
                             "text": (
                                 f"🚀 *{proj_name}*\n"
-                                f"{entry['content_draft']['headline']}\n\n"
-                                f"{entry['content_draft']['body']}"
+                                f"{headline}\n\n"
+                                f"{body}"
                             ),
                             "parse_mode": "Markdown",
                         },
@@ -899,11 +924,11 @@ async def execute_social_ads_publisher(
                         headers={"api-key": devto_key, "Content-Type": "application/json"},
                         json={
                             "article": {
-                                "title": entry["content_draft"]["headline"],
+                                "title": headline,
                                 "body_markdown": (
                                     f"# {proj_name}\n\n"
-                                    f"{entry['content_draft']['body']}\n\n"
-                                    f"Tags: {' '.join(entry['content_draft']['hashtags'])}"
+                                    f"{body}\n\n"
+                                    f"Tags: {' '.join(hashtags)}"
                                 ),
                                 "published": False,
                                 "tags": ["saas", "tech", "webdev"],
@@ -968,43 +993,49 @@ async def execute_social_ads_publisher(
         # ── 2. Vía Webhook n8n / Make / Zapier ───────────────────────────────
         target_webhook = ch.credentials.get("webhook_url") or general_webhook
         if target_webhook and not direct_handled:
-            try:
-                async with httpx.AsyncClient(timeout=8.0) as client:
-                    resp = await client.post(
-                        target_webhook,
-                        json={
-                            "event": "SOCIAL_PUBLISH_DISPATCH",
-                            "project_id": project_id,
-                            "project_name": proj_name,
-                            "marketing_type": profile.marketing_type,
-                            "channel": cid,
-                            "channels_content": {
-                                c["channel_id"]: c["content_draft"] for c in channels_data
+            if not (target_webhook.startswith("http://") or target_webhook.startswith("https://")):
+                logger.warning(
+                    "URL de webhook rechazada por esquema inseguro: %s",
+                    target_webhook[:30],
+                )
+            else:
+                try:
+                    async with httpx.AsyncClient(timeout=8.0) as client:
+                        resp = await client.post(
+                            target_webhook,
+                            json={
+                                "event": "SOCIAL_PUBLISH_DISPATCH",
+                                "project_id": project_id,
+                                "project_name": proj_name,
+                                "marketing_type": profile.marketing_type,
+                                "channel": cid,
+                                "channels_content": {
+                                    c["channel_id"]: c["content_draft"] for c in channels_data
+                                },
+                                "seo_meta": seo_meta,
+                                "landing_url": landing_url,
+                                "payload": entry,
+                                "timestamp": datetime.now(UTC).isoformat(),
                             },
-                            "seo_meta": seo_meta,
-                            "landing_url": landing_url,
-                            "payload": entry,
-                            "timestamp": datetime.now(UTC).isoformat(),
-                        },
-                    )
+                        )
+                        dispatched_webhooks.append(
+                            {
+                                "channel_id": cid,
+                                "webhook_url": target_webhook[:35] + "...",
+                                "success": resp.status_code < 300,
+                                "status_code": resp.status_code,
+                            }
+                        )
+                except Exception as exc:
+                    logger.warning("Webhook dispatch error for channel %s: %s", cid, exc)
                     dispatched_webhooks.append(
                         {
                             "channel_id": cid,
                             "webhook_url": target_webhook[:35] + "...",
-                            "success": resp.status_code < 300,
-                            "status_code": resp.status_code,
+                            "success": False,
+                            "error": str(exc),
                         }
                     )
-            except Exception as exc:
-                logger.warning("Webhook dispatch error for channel %s: %s", cid, exc)
-                dispatched_webhooks.append(
-                    {
-                        "channel_id": cid,
-                        "webhook_url": target_webhook[:35] + "...",
-                        "success": False,
-                        "error": str(exc),
-                    }
-                )
 
     payload_file = target_dir / "channels_payload.json"
     full_payload = {

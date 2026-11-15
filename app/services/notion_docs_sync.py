@@ -455,7 +455,7 @@ class NotionDocsSyncService:
         url = f"{NOTION_API_BASE_URL}/blocks/{pid}/children"
         total_appended = 0
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             for i in range(0, len(blocks), NOTION_MAX_BLOCKS_PER_BATCH):
                 batch = blocks[i : i + NOTION_MAX_BLOCKS_PER_BATCH]
                 res = await client.patch(url, headers=headers, json={"children": batch})
@@ -516,7 +516,7 @@ class NotionDocsSyncService:
         action = "updated"
         page_url = ""
 
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             if target_page_id:
                 # Update existing page
                 logger.info("Updating existing Notion page '%s' (ID: %s)", title, target_page_id)

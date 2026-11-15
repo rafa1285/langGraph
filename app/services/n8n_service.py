@@ -303,8 +303,12 @@ def generate_project_n8n_workflow(
     }
 
     # Save copy to project workspace
-    base_dir = Path(workspaces_dir or settings.WORKSPACES_DIR)
-    target_dir = base_dir / project_id / "marketing"
+    base_dir = Path(workspaces_dir or settings.WORKSPACES_DIR).resolve()
+    target_dir = (base_dir / project_id / "marketing").resolve()
+    if not target_dir.is_relative_to(base_dir):
+        raise ValueError(
+            f"Path traversal detectado: el project_id '{project_id}' está fuera del workspace."
+        )
     target_dir.mkdir(parents=True, exist_ok=True)
 
     wf_file_custom = target_dir / f"n8n_workflow_{project_id}.json"
@@ -330,6 +334,8 @@ async def provision_workflow_in_n8n(
     """
     project_id = profile.project_id
     base_url = (n8n_base_url or settings.N8N_BASE_URL or "http://localhost:5678").rstrip("/")
+    if not (base_url.startswith("http://") or base_url.startswith("https://")):
+        raise ValueError(f"Esquema de n8n_base_url no permitido: '{base_url}'")
     api_key = n8n_api_key or settings.N8N_API_KEY or ""
 
     workflow_json = generate_project_n8n_workflow(profile, workspaces_dir=workspaces_dir)

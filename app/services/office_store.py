@@ -1608,7 +1608,7 @@ class OfficeStore:
             }
             for item in config.assigned_models
         ]
-        new_assigned.sort(key=lambda x: x["priority"])
+        new_assigned.sort(key=lambda x: int(str(x["priority"])))
 
         temperature = config.temperature if config.temperature is not None else current.temperature
         max_tokens = config.max_tokens if config.max_tokens is not None else current.max_tokens
@@ -1830,11 +1830,11 @@ class OfficeStore:
         existing_tools = {t.tool_id: t for t in current.tools}
         for t in new_preset.tools:
             if t.tool_id in existing_tools:
-                old = existing_tools[t.tool_id]
-                if old.credentials:
-                    t.credentials = {**t.credentials, **old.credentials}
-                if old.settings:
-                    t.settings = {**t.settings, **old.settings}
+                old_tool = existing_tools[t.tool_id]
+                if old_tool.credentials:
+                    t.credentials = {**t.credentials, **old_tool.credentials}
+                if old_tool.settings:
+                    t.settings = {**t.settings, **old_tool.settings}
 
         if current.brand_voice:
             new_preset.brand_voice = current.brand_voice

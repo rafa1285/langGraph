@@ -222,7 +222,7 @@ MarketingType = Literal[
     "custom",
 ]
 
-MarketingToolStatus = Literal["ok", "missing_credentials", "error"]
+MarketingToolStatus = Literal["ok", "missing_credentials", "error", "simulated"]
 
 
 class MarketingChannelConfig(BaseModel):

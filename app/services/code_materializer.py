@@ -270,13 +270,20 @@ class CodeMaterializerService:
         init_git: bool = True,
     ) -> tuple[Path, dict[str, Any]]:
         """Materialize project source code into build/ preserving chronological overwrites."""
-        source_dir = self.workspaces_dir / project_id
+        ws_root = self.workspaces_dir.resolve()
+        source_dir = (ws_root / project_id).resolve()
+        if not source_dir.is_relative_to(ws_root):
+            raise ValueError(
+                f"Path traversal detectado: el project_id '{project_id}' está fuera del workspace."
+            )
         if not source_dir.exists() or not source_dir.is_dir():
             raise FileNotFoundError(
                 f"El directorio del proyecto no existe: {source_dir}"
             )
 
-        build_dir = source_dir / "build"
+        build_dir = (source_dir / "build").resolve()
+        if not build_dir.is_relative_to(source_dir):
+            raise ValueError("Path traversal detectado en build_dir")
         build_dir.mkdir(parents=True, exist_ok=True)
 
         md_files = sorted(

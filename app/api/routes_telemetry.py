@@ -963,8 +963,12 @@ async def query_database_table(
             if row:
                 total_rows = int(row[0])
 
-        query_sql = f"SELECT * FROM {table}" + where_clause + f" ORDER BY rowid DESC LIMIT {limit} OFFSET {offset}"
-        params = list(where_params)
+        query_sql = (
+            f"SELECT * FROM {table}"
+            + where_clause
+            + " ORDER BY rowid DESC LIMIT ? OFFSET ?"
+        )
+        params = list(where_params) + [limit, offset]
 
         rows: list[dict[str, Any]] = []
         async with db.execute(query_sql, params) as cur:
