@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from fastapi import APIRouter, HTTPException, Query, Request, status
 from pydantic import BaseModel, ConfigDict
@@ -415,7 +415,7 @@ def _get_office_store(request: Request) -> OfficeStore:
     """Dependency: retrieve active OfficeStore from application state."""
     orchestrator = getattr(request.app.state, "orchestrator", None)
     if orchestrator and hasattr(orchestrator, "office_store"):
-        return orchestrator.office_store
+        return cast(OfficeStore, orchestrator.office_store)
     return OfficeStore()
 
 
@@ -423,7 +423,7 @@ def _get_llm_gateway(request: Request) -> LLMGatewayProtocol:
     """Dependency: retrieve active LLMGateway from application state."""
     orchestrator = getattr(request.app.state, "orchestrator", None)
     if orchestrator and hasattr(orchestrator, "llm_gateway"):
-        return orchestrator.llm_gateway
+        return cast(LLMGatewayProtocol, orchestrator.llm_gateway)
     return GeminiLLMGateway(store=_get_office_store(request))
 
 
@@ -595,10 +595,22 @@ marketing_router = APIRouter(prefix="/marketing", tags=["Office Marketing"])
 )
 async def get_marketing_presets() -> MarketingPresetsResponse:
     """Devuelve los tipos de estrategia disponibles y el catálogo de canales y herramientas."""
-    from app.schemas.office import MarketingChannelConfig, ProjectMarketingToolConfig
+    from app.schemas.office import (
+        MarketingChannelConfig,
+        MarketingPresetsResponse,
+        MarketingType,
+        ProjectMarketingToolConfig,
+    )
     from app.services.office_store import MARKETING_CHANNELS_CATALOG, MARKETING_TOOLS_CATALOG
 
-    types = ["none", "saas_b2b", "b2c_app_ecommerce", "devtools_api", "internal_rollout", "custom"]
+    types: list[MarketingType] = [
+        "none",
+        "saas_b2b",
+        "b2c_app_ecommerce",
+        "devtools_api",
+        "internal_rollout",
+        "custom",
+    ]
     channels = [
         MarketingChannelConfig(
             channel_id=ch["channel_id"],

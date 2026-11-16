@@ -23,7 +23,7 @@ def append_execution_records(
     return list(current) + list(update)
 
 
-class SoftwareFactoryState(TypedDict):
+class SoftwareFactoryState(TypedDict, total=False):
     """Global typed state shared across all agents in the pipeline."""
 
     project_id: str

@@ -19,6 +19,7 @@ async def api_client(tmp_path: Path) -> AsyncIterator[AsyncClient]:
     """Provide an AsyncClient configured with mock LLM and temporary SQLite checkpoints."""
     settings.USE_MOCK_LLM = True
     settings.CHECKPOINT_DB_PATH = str(tmp_path / "checkpoints.sqlite")
+    settings.OFFICE_DB_PATH = str(tmp_path / "office_data.sqlite")
     settings.WORKSPACES_DIR = str(tmp_path / "workspaces")
     settings.PROMPTS_DIR = str(tmp_path / "prompts")
 
@@ -139,15 +140,16 @@ async def test_cli_resume_command_streaming(
     ws_dir = str(tmp_path / "workspaces")
 
     with patch("app.core.config.settings.CHECKPOINT_DB_PATH", db_file):
-        with patch("app.core.config.settings.WORKSPACES_DIR", ws_dir):
-            await run_command("Idea para prueba CLI resume", mock=True, project_id=pid)
-            captured_run = capsys.readouterr()
-            assert f"Proyecto {pid} finalizado con éxito" in captured_run.out
+        with patch("app.core.config.settings.OFFICE_DB_PATH", str(tmp_path / "cli_office.sqlite")):
+            with patch("app.core.config.settings.WORKSPACES_DIR", ws_dir):
+                await run_command("Idea para prueba CLI resume", mock=True, project_id=pid)
+                captured_run = capsys.readouterr()
+                assert f"Proyecto {pid} finalizado con éxito" in captured_run.out
 
-            await resume_command(pid, mock=True)
-            captured_resume = capsys.readouterr()
-            assert f"Reanudando proyecto: {pid}" in captured_resume.out
-            assert "finalizado tras reanudación" in captured_resume.out
+                await resume_command(pid, mock=True)
+                captured_resume = capsys.readouterr()
+                assert f"Reanudando proyecto: {pid}" in captured_resume.out
+                assert "finalizado tras reanudación" in captured_resume.out
 
 
 @pytest.mark.asyncio

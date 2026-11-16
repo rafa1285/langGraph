@@ -170,7 +170,7 @@
         <div class="flex-1 flex flex-col min-w-0 border-r border-[#1e293b] relative overflow-hidden">
           
           <!-- Sub-barra superior de controles (Reparto armónico: Modo a la izquierda, Prompt fluido al centro, Proyectos a la derecha) -->
-          <div id="office-sub-toolbar" class="bg-[#0a0f1d] border-b border-[#1e293b] flex-shrink-0 z-20" style="display: flex; align-items: center; justify-content: space-between; gap: 16px; width: 100%; padding: 10px 24px;" role="toolbar" aria-label="Controles de simulación y lanzamiento">
+          <div id="office-sub-toolbar" class="bg-[#0a0f1d] border-b border-[#1e293b] flex-shrink-0 z-20 flex flex-wrap items-center justify-between gap-2.5 px-3 py-2 w-full max-w-full box-border" role="toolbar" aria-label="Controles de simulación y lanzamiento">
 
             <!-- Izquierda: Mode Toggle (Tamaño Fijo) -->
             <nav id="mode-selector" class="flex-shrink-0" aria-label="Modo de trabajo">
@@ -179,17 +179,17 @@
             </nav>
 
             <!-- Centro: Action Launch Controls (Expansión Fluida y Centrada) -->
-            <div id="hud-action-controls" class="flex-1 flex justify-center items-center max-w-[700px] w-full mx-3">
+            <div id="hud-action-controls" class="flex-1 flex justify-center items-center min-w-0 max-w-[620px] mx-2">
               <!-- Greenfield Controls -->
-              <div id="greenfield-controls" class="project-controls active flex items-center gap-2 w-full justify-center" role="form" aria-label="Lanzar nuevo proyecto">
-                <input type="text" id="idea-input" class="pixel-input flex-1 max-w-[650px]"
+              <div id="greenfield-controls" class="project-controls active flex items-center gap-1.5 w-full justify-center min-w-0" role="form" aria-label="Lanzar nuevo proyecto">
+                <input type="text" id="idea-input" class="pixel-input flex-1 min-w-[120px] max-w-[360px]"
                        placeholder="DESCRIBE TU IDEA DE NEGOCIO..." maxlength="500"
                        aria-label="Idea inicial del proyecto">
 
                 <!-- Selector de Marketing Multi-Proyecto (Fase 3) -->
-                <div class="mkt-launch-group flex-shrink-0" title="Configuración de Marketing para este proyecto">
-                  <label for="launch-marketing-type" class="pixel-label" style="font-size: 8px; margin-right: 4px;">📣 MARKETING:</label>
-                  <select id="launch-marketing-type" class="pixel-select" aria-label="Estrategia y suite de marketing inicial">
+                <div class="mkt-launch-group flex items-center gap-1 flex-shrink min-w-0" title="Configuración de Marketing para este proyecto">
+                  <label for="launch-marketing-type" class="pixel-label" style="font-size: 8px; margin-right: 4px;">📣 MKT:</label>
+                  <select id="launch-marketing-type" class="pixel-select compact-select max-w-[170px] truncate" style="max-width: 170px;" aria-label="Estrategia y suite de marketing inicial">
                     <option value="saas_b2b" selected>💼 SaaS B2B (SEO + Landing + LinkedIn + Email + PH)</option>
                     <option value="b2c_app_ecommerce">🛍️ App B2C / E-commerce (Landing + Ads + Email)</option>
                     <option value="devtools_api">🛠️ API / DevTool (SEO Técnico + Reddit + PH + X)</option>
@@ -205,11 +205,11 @@
               </div>
 
               <!-- Brownfield Controls -->
-              <div id="brownfield-controls" class="project-controls items-center gap-2 w-full justify-center" role="form" aria-label="Auditar proyecto GitHub">
-                <input type="text" id="repo-url-input" class="pixel-input flex-1 max-w-[500px]"
+              <div id="brownfield-controls" class="project-controls items-center gap-2 w-full justify-center min-w-0" role="form" aria-label="Auditar proyecto GitHub">
+                <input type="text" id="repo-url-input" class="pixel-input flex-1 min-w-[120px] max-w-[360px]"
                        placeholder="https://github.com/owner/repo"
                        aria-label="URL del repositorio GitHub">
-                <select id="audit-depth" class="pixel-select flex-shrink-0" aria-label="Profundidad del análisis">
+                <select id="audit-depth" class="pixel-select flex-shrink-0 max-w-[120px]" aria-label="Profundidad del análisis">
                   <option value="surface">⚡ RÁPIDO</option>
                   <option value="deep" selected>🔬 PROFUNDO</option>
                 </select>
@@ -220,19 +220,19 @@
             </div>
 
             <!-- Derecha: Project Selector & Resume (Alineados al borde derecho con margen protegido) -->
-            <div id="project-selector" class="flex items-center gap-2.5 flex-shrink-0 relative">
+            <div id="project-selector" class="flex items-center gap-2 flex-shrink min-w-0 relative">
               <button id="btn-top-files" class="pixel-btn secondary flex-shrink-0 flex items-center gap-1.5" title="Abrir explorador de archivos y código del proyecto" style="border-color: #06b6d4; color: #a5f3fc;">
                 <span style="font-size: 13px;">📁</span> ARCHIVOS &amp; CÓDIGO
               </button>
 
               <span class="pixel-label">PROYECTO:</span>
 
-              <!-- Custom Cyber-Dropdown Container (Ancho Fijo Estable de 230px) -->
+              <!-- Custom Cyber-Dropdown Container (Ancho Flexible y Estable) -->
               <div class="relative" id="project-dropdown-container">
                 <button id="project-dropdown-trigger" 
                         type="button" 
-                        class="pixel-project-trigger flex items-center justify-between px-3 py-1.5 bg-[#070b14] border border-[#223554] hover:border-cyan-400 rounded text-slate-200 text-xs font-mono"
-                        style="width: 230px; min-width: 230px; max-width: 230px; height: 32px;"
+                        class="pixel-project-trigger flex items-center justify-between px-2.5 py-1.5 bg-[#070b14] border border-[#223554] hover:border-cyan-400 rounded text-slate-200 text-xs font-mono"
+                        style="width: 180px; min-width: 130px; max-width: 200px; height: 32px;"
                         aria-haspopup="true"
                         aria-expanded="false"
                         title="Seleccionar proyecto activo">

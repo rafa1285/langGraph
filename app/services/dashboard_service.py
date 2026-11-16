@@ -589,9 +589,9 @@ class DashboardStreamService:
                 pid = list(self._project_states.keys())[-1]
             else:
                 # Check DB for visible projects
-                projects = await OfficeStore().list_projects()
-                if projects:
-                    pid = projects[-1]["project_id"]
+                projects_summary = await OfficeStore().get_all_projects_summary()
+                if projects_summary:
+                    pid = list(projects_summary.keys())[-1]
 
         if not pid:
             return {
@@ -655,9 +655,12 @@ class DashboardStreamService:
             stage_id = "stage-ceo-signoff"
             stage_name = "CEO Signoff"
         else:
-            stage_idx = st.get("stage_index")
-            stage_id = st.get("stage_id")
-            stage_name = st.get("stage_name")
+            raw_idx = st.get("stage_index")
+            stage_idx = int(raw_idx) if raw_idx is not None else 0
+            raw_id = st.get("stage_id")
+            stage_id = str(raw_id) if raw_id is not None else "stage-received"
+            raw_name = st.get("stage_name")
+            stage_name = str(raw_name) if raw_name is not None else "Received"
 
             if stage_idx is None:
                 if events:

@@ -422,7 +422,7 @@ async def get_agent_stats(
                 f"FROM agent_conversations {where_clause} ORDER BY created_at ASC, step_number ASC"
             )
             async with db.execute(query_all, params) as cur:
-                rows = await cur.fetchall()
+                rows = list(await cur.fetchall())
                 total_nodes_executed = len(rows)
                 for r in rows:
                     ag_id, st, vd, dur, tok, raw_resp = r[0], r[1], r[2], r[3], r[4], r[5]
