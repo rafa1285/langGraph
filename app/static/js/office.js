@@ -1562,9 +1562,7 @@ export function initOffice() {
 
 async function _pollLiveTelemetry() {
   try {
-    const res = await fetch('/api/v1/telemetry/kpis');
-    if (!res.ok) return;
-    const data = await res.json();
+    const data = await API.getTelemetryKPIs();
     const tokensEl = $id('kpi-tokens-val');
     if (tokensEl) tokensEl.textContent = data.total_tokens.toLocaleString();
     const costEl = $id('kpi-cost-val');

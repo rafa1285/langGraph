@@ -1766,6 +1766,7 @@
   const waTokenStatusLabel = document.getElementById('wa-token-status-label');
   const waCfgVerify = document.getElementById('wa-cfg-verify');
   const waCfgSecret = document.getElementById('wa-cfg-secret');
+  const waBtnToggleSecret = document.getElementById('wa-btn-toggle-secret');
   const waCfgAllowed = document.getElementById('wa-cfg-allowed');
   const waBtnSaveCfg = document.getElementById('wa-btn-save-cfg');
   const waSaveStatus = document.getElementById('wa-save-status');
@@ -1945,6 +1946,19 @@
       } else {
         waCfgToken.type = 'password';
         waBtnToggleToken.textContent = '👁️';
+      }
+    });
+  }
+
+  // Toggle show/hide app secret
+  if (waBtnToggleSecret && waCfgSecret) {
+    waBtnToggleSecret.addEventListener('click', () => {
+      if (waCfgSecret.type === 'password') {
+        waCfgSecret.type = 'text';
+        waBtnToggleSecret.textContent = '🔒';
+      } else {
+        waCfgSecret.type = 'password';
+        waBtnToggleSecret.textContent = '👁️';
       }
     });
   }

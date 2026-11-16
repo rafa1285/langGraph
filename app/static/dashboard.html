@@ -1493,7 +1493,10 @@
                 <label for="wa-cfg-secret" class="font-medium text-slate-300 block mb-1">
                   App Secret (Firma HMAC-SHA256)
                 </label>
-                <input type="password" id="wa-cfg-secret" placeholder="Opcional en dev / Clave en Meta" class="w-full px-3 py-2 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-white font-mono focus:border-cyan-500 focus:outline-none">
+                <div class="relative">
+                  <input type="password" id="wa-cfg-secret" placeholder="Opcional en dev / Clave en Meta" class="w-full px-3 py-2 pr-10 rounded-lg bg-[#0b0f19] border border-[#1f2937] text-white font-mono focus:border-cyan-500 focus:outline-none">
+                  <button type="button" id="wa-btn-toggle-secret" class="absolute right-2.5 top-2 text-slate-400 hover:text-white" title="Mostrar/ocultar secret">👁️</button>
+                </div>
                 <span class="text-[10px] text-slate-500 mt-0.5 block">Verifica la cabecera X-Hub-Signature-256.</span>
               </div>
             </div>

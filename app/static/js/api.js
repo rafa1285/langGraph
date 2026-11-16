@@ -645,6 +645,19 @@ const API = {
     }
     return r.json();
   },
+
+  /**
+   * Obtiene los KPIs de telemetría agregada del sistema.
+   * @returns {Promise<{total_tokens: number, estimated_cost_usd: number, health_score: number, agents_ready: number, agents_total: number}>}
+   */
+  async getTelemetryKPIs() {
+    const r = await fetch(`${BASE}/api/v1/telemetry/kpis`);
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({}));
+      throw new Error(err.detail || `getTelemetryKPIs: HTTP ${r.status}`);
+    }
+    return r.json();
+  },
 };
 
 export default API;

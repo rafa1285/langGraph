@@ -581,7 +581,7 @@ function _renderFilesList() {
     // Section 1A: Deliverables owned by this agent
     const agSec = document.createElement('div');
     agSec.style.cssText = 'padding:6px 8px;font-size:7px;color:var(--panel-accent);font-weight:bold;border-bottom:1px solid #1e293b;margin-bottom:4px;';
-    agSec.innerHTML = `── ENTREGABLES DE ${_currentAgent.name.toUpperCase()} (${agentDelivs.length}) ──`;
+    agSec.innerHTML = `── ENTREGABLES DE ${_esc(_currentAgent.name.toUpperCase())} (${agentDelivs.length}) ──`;
     filesTree.appendChild(agSec);
 
     if (agentDelivs.length === 0) {
@@ -599,7 +599,7 @@ function _renderFilesList() {
         item.className = 'file-item active';
         item.style.cssText = 'border-left: 3px solid var(--panel-accent);';
         const kb = (content.length / 1024).toFixed(1);
-        item.innerHTML = `<span>${d.label}</span><span class="file-size">${kb} KB</span>`;
+        item.innerHTML = `<span>${_esc(d.label)}</span><span class="file-size">${kb} KB</span>`;
         item.addEventListener('click', () => {
           document.querySelectorAll('.file-item').forEach((el) => el.classList.remove('active'));
           item.classList.add('active');
@@ -625,7 +625,7 @@ function _renderFilesList() {
         item.className = 'file-item';
         const kb = (content.length / 1024).toFixed(1);
         item.innerHTML = `
-          <span>${d.label}</span>
+          <span>${_esc(d.label)}</span>
           <span style="font-size:6px;color:#64748b;margin-left:auto;margin-right:8px;">[${_esc(d.agentName)}]</span>
           <span class="file-size">${kb} KB</span>`;
         item.addEventListener('click', () => {
@@ -653,7 +653,7 @@ function _renderFilesList() {
       item.className = 'file-item';
       const kb = (content.length / 1024).toFixed(1);
       item.innerHTML = `
-        <span>${d.label}</span>
+        <span>${_esc(d.label)}</span>
         <span style="font-size:6px;color:#06b6d4;opacity:0.8;margin-left:auto;margin-right:8px;">[${_esc(d.agentName)}]</span>
         <span class="file-size">${kb} KB</span>`;
       item.addEventListener('click', () => {
@@ -1222,6 +1222,7 @@ function _renderModelsTab() {
 
     const upDisabled = idx === 0 ? 'disabled' : '';
     const downDisabled = idx === assigned.length - 1 ? 'disabled' : '';
+    const isPingLoading = Boolean(_pingStatuses[item.model_id]?.loading);
 
     return `
       <div class="${cardClass}" data-model="${_esc(item.model_id)}" data-idx="${idx}">
@@ -1250,8 +1251,8 @@ function _renderModelsTab() {
           </div>
           <div class="model-ping-group">
             ${pingBadgeHtml}
-            <button class="pixel-btn secondary btn-ping-model" data-model="${_esc(item.model_id)}" style="font-size:7px;padding:2px 6px;">
-              ⚡ Ping
+            <button class="pixel-btn secondary btn-ping-model" data-model="${_esc(item.model_id)}" ${isPingLoading ? 'disabled' : ''} style="font-size:7px;padding:2px 6px;">
+              ${isPingLoading ? '⏳...' : '⚡ Ping'}
             </button>
           </div>
         </div>
@@ -1332,7 +1333,12 @@ function _renderModelsTab() {
   });
 }
 
+let _modelsEventsInitialized = false;
+
 function _initModelsTabEvents() {
+  if (_modelsEventsInitialized) return;
+  _modelsEventsInitialized = true;
+
   // Temperature slider real-time label update
   $id('param-temperature')?.addEventListener('input', (e) => {
     const valEl = $id('val-temperature');
@@ -1464,6 +1470,12 @@ function _initModelsTabEvents() {
     if (!_currentAgent) return;
     if (!confirm(`¿Restablecer la cadena de ${_currentAgent.name} a los valores recomendados de fábrica?`)) return;
 
+    const btn = /** @type {HTMLButtonElement|null} */ ($id('btn-reset-llm-config'));
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ RESTABLECIENDO...';
+    }
+
     try {
       const def = await API.resetAgentLLMConfig(_currentAgent.id);
       _currentAgentLLMConfig = def;
@@ -1478,6 +1490,11 @@ function _initModelsTabEvents() {
       }
     } catch (err) {
       alert(`Error al restablecer: ${err.message || err}`);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '↺ VALORES POR DEFECTO';
+      }
     }
   });
 
@@ -1495,9 +1512,15 @@ function _initModelsTabEvents() {
   $id('btn-ping-new-model')?.addEventListener('click', async () => {
     const modelId = /** @type {HTMLInputElement|null} */ ($id('new-model-id'))?.value.trim();
     const resultSpan = $id('new-model-ping-result');
+    const btn = /** @type {HTMLButtonElement|null} */ ($id('btn-ping-new-model'));
     if (!modelId) {
       alert('Introduce un Model ID primero.');
       return;
+    }
+
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ PROBANDO...';
     }
 
     if (resultSpan) {
@@ -1524,6 +1547,11 @@ function _initModelsTabEvents() {
         resultSpan.className = 'ping-result-badge error';
         resultSpan.textContent = '🔴 Fallo de conexión';
       }
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = '⚡ PROBAR CONEXIÓN';
+      }
     }
   });
 
@@ -1535,6 +1563,7 @@ function _initModelsTabEvents() {
     const urlInput = /** @type {HTMLInputElement|null} */ ($id('new-model-base-url'));
     const envInput = /** @type {HTMLInputElement|null} */ ($id('new-model-env'));
     const tierSelect = /** @type {HTMLSelectElement|null} */ ($id('new-model-tier'));
+    const btn = /** @type {HTMLButtonElement|null} */ ($id('btn-create-catalog-model'));
 
     if (!idInput || !idInput.value.trim() || !nameInput || !nameInput.value.trim() || !envInput || !envInput.value.trim()) {
       alert('Por favor completa Model ID, Nombre y Env API Key.');
@@ -1553,6 +1582,11 @@ function _initModelsTabEvents() {
       is_active: true,
     };
 
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳ REGISTRANDO...';
+    }
+
     try {
       const created = await API.createLLMModel(payload);
       _globalCatalog.push(created);
@@ -1564,6 +1598,11 @@ function _initModelsTabEvents() {
       _renderModelsTab();
     } catch (err) {
       alert(`Error al crear modelo: ${err.message || err}`);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'REGISTRAR MODELO EN CATÁLOGO';
+      }
     }
   });
 }
@@ -1997,9 +2036,12 @@ function _renderMarketingChannels(channels) {
         </div>
         <div class="mkt-channel-field">
           <label>${_esc(meta.credLabel)}</label>
-          <input type="password" class="mkt-ch-cred" data-channel="${_esc(chId)}"
-                 value="${_esc(credVal)}"
-                 placeholder="${_esc(meta.credPlaceholder)}">
+          <div class="pixel-password-wrap">
+            <input type="password" class="mkt-ch-cred" data-channel="${_esc(chId)}"
+                   value="${_esc(credVal)}"
+                   placeholder="${_esc(meta.credPlaceholder)}">
+            <button type="button" class="pixel-password-toggle" title="Mostrar/ocultar credencial">👁️</button>
+          </div>
         </div>
         <div class="mkt-channel-field">
           <label>${_esc(meta.instLabel)}</label>
@@ -2014,6 +2056,23 @@ function _renderMarketingChannels(channels) {
   }).join('');
 
   container.innerHTML = cardsHtml;
+
+  // Password toggle listeners
+  container.querySelectorAll('.pixel-password-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const input = /** @type {HTMLInputElement|null} */ (btn.parentElement?.querySelector('input'));
+      if (!input) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = '🔒';
+        btn.setAttribute('title', 'Ocultar credencial');
+      } else {
+        input.type = 'password';
+        btn.textContent = '👁️';
+        btn.setAttribute('title', 'Mostrar credencial');
+      }
+    });
+  });
 
   // Add change listeners to checkboxes to update visual state
   container.querySelectorAll('.mkt-ch-enable').forEach((chk) => {
@@ -2063,7 +2122,10 @@ function _renderMarketingTools(tools, projectId) {
         <div class="mkt-tool-grid-2">
           <div class="mkt-channel-field">
             <label>API KEY BÚSQUEDA (TAVILY / SERPER):</label>
-            <input type="password" id="mkt-tool-cred-search-key" value="${_esc(creds.search_api_key || '')}" placeholder="tvly-xxxx o secret...">
+            <div class="pixel-password-wrap">
+              <input type="password" id="mkt-tool-cred-search-key" value="${_esc(creds.search_api_key || '')}" placeholder="tvly-xxxx o secret...">
+              <button type="button" class="pixel-password-toggle" title="Mostrar/ocultar API Key">👁️</button>
+            </div>
           </div>
           <div class="mkt-channel-field">
             <label>PALABRAS CLAVE SEMILLA (COMA):</label>
@@ -2151,7 +2213,10 @@ function _renderMarketingTools(tools, projectId) {
         <div class="mkt-tool-grid-2">
           <div class="mkt-channel-field">
             <label>API KEY DEL PROVEEDOR:</label>
-            <input type="password" id="mkt-tool-cred-email-key" value="${_esc(creds.email_api_key || '')}" placeholder="re_xxxx / xkeysib-xxxx...">
+            <div class="pixel-password-wrap">
+              <input type="password" id="mkt-tool-cred-email-key" value="${_esc(creds.email_api_key || '')}" placeholder="re_xxxx / xkeysib-xxxx...">
+              <button type="button" class="pixel-password-toggle" title="Mostrar/ocultar API Key">👁️</button>
+            </div>
           </div>
           <div class="mkt-channel-field">
             <label>LISTA DE PRUEBA (DESTINATARIOS COMA):</label>
@@ -2223,6 +2288,23 @@ function _renderMarketingTools(tools, projectId) {
 
   container.innerHTML = cardsHtml;
 
+  // Password toggle listeners for marketing tools
+  container.querySelectorAll('.pixel-password-toggle').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const input = /** @type {HTMLInputElement|null} */ (btn.parentElement?.querySelector('input'));
+      if (!input) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.textContent = '🔒';
+        btn.setAttribute('title', 'Ocultar API Key');
+      } else {
+        input.type = 'password';
+        btn.textContent = '👁️';
+        btn.setAttribute('title', 'Mostrar API Key');
+      }
+    });
+  });
+
   // Checkbox toggle handler
   container.querySelectorAll('.mkt-tool-enable').forEach((chk) => {
     chk.addEventListener('change', (e) => {
@@ -2242,8 +2324,13 @@ function _renderMarketingTools(tools, projectId) {
   // Diagnostic test buttons
   container.querySelectorAll('.btn-mkt-test-tool').forEach((btn) => {
     btn.addEventListener('click', async () => {
-      const toolId = /** @type {HTMLElement} */ (btn).dataset.tool;
+      const btnEl = /** @type {HTMLButtonElement} */ (btn);
+      const toolId = btnEl.dataset.tool;
       if (!toolId || !projectId) return;
+
+      btnEl.disabled = true;
+      const originalText = btnEl.textContent;
+      btnEl.textContent = '⏳ PROBANDO...';
 
       const badge = $id(`mkt-test-badge-${toolId}`);
       if (badge) {
@@ -2276,6 +2363,9 @@ function _renderMarketingTools(tools, projectId) {
           badge.className = 'mkt-tool-test-badge ping-badge error';
           badge.textContent = `🔴 ${err.message || 'Error de red'}`;
         }
+      } finally {
+        btnEl.disabled = false;
+        btnEl.textContent = originalText || '⚡ PROBAR HERRAMIENTA';
       }
     });
   });
@@ -2538,8 +2628,11 @@ function _initMarketingTabEvents() {
     const preset = presetSel?.value || 'saas_b2b';
     if (!pid) return;
 
-    const btn = $id('btn-mkt-apply-preset');
-    if (btn) btn.textContent = '⏳...';
+    const btn = /** @type {HTMLButtonElement|null} */ ($id('btn-mkt-apply-preset'));
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = '⏳...';
+    }
 
     try {
       const updated = await API.applyProjectMarketingPreset(pid, preset);
@@ -2560,7 +2653,10 @@ function _initMarketingTabEvents() {
         feedback.classList.remove('hidden');
       }
     } finally {
-      if (btn) btn.textContent = 'APLICAR';
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'APLICAR';
+      }
     }
   });
 

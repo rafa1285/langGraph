@@ -1747,6 +1747,7 @@ html, body {
   display: none;
   padding: 12px;
   overflow-y: auto;
+  overflow-x: hidden;
   flex-direction: column;
   gap: 12px;
 }
@@ -2143,6 +2144,7 @@ html, body {
   display: none;
   padding: 12px;
   overflow-y: auto;
+  overflow-x: hidden;
   flex-direction: column;
   gap: 12px;
 }
@@ -2512,6 +2514,7 @@ html, body {
 
 .mkt-tool-card.tool-disabled {
   opacity: 0.55;
+  filter: grayscale(40%);
 }
 
 .mkt-tool-header {
@@ -2692,6 +2695,47 @@ html, body {
 .mkt-n8n-actions button {
   font-size: 8px;
   padding: 4px 8px;
+}
+
+/* Password Input with Toggle Eye */
+.pixel-password-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.pixel-password-wrap input {
+  width: 100%;
+  padding-right: 32px !important;
+  box-sizing: border-box;
+}
+
+.pixel-password-toggle {
+  position: absolute;
+  right: 6px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 11px;
+  line-height: 1;
+  color: #94a3b8;
+  opacity: 0.75;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pixel-password-toggle:hover {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
+.pixel-password-toggle:active {
+  transform: scale(0.95);
 }
 
 
