@@ -492,26 +492,42 @@ class NotionDocsSyncService:
         child_pages = existing_child_pages or await self.list_child_pages(pid)
         target_page_id: str | None = None
 
-        # Look for exact or normalized title match
-        norm_target = title.strip().lower()
-        for existing_title, existing_id in child_pages.items():
-            norm_existing = existing_title.strip().lower()
-            if norm_existing == norm_target:
-                target_page_id = existing_id
-                break
-            # Match by chapter indicator only if key topic terms also match
-            ch_match = re.search(r"cap[ií]tulo\s+(\d+)", norm_target)
-            if ch_match:
-                ch_num = ch_match.group(1)
-                ch_label = f"capítulo {ch_num}"
-                alt_label = f"capitulo {ch_num}"
-                if ch_label in norm_existing or alt_label in norm_existing:
-                    ignore_words = {"capitulo", "manual", "usuario", "agentoffice"}
-                    target_words = set(re.findall(r"\w{4,}", norm_target)) - ignore_words
-                    existing_words = set(re.findall(r"\w{4,}", norm_existing)) - ignore_words
-                    if target_words & existing_words:
-                        target_page_id = existing_id
-                        break
+        # Check if markdown content explicitly contains an existing Notion page ID
+        doc_notion_id_match = re.search(
+            r"https?://(?:app\.notion\.com/p/|www\.notion\.so/|notion\.so/)([a-f0-9]{32}|[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})",
+            markdown_content,
+            re.IGNORECASE,
+        )
+        if doc_notion_id_match:
+            raw_matched_id = doc_notion_id_match.group(1).replace("-", "").lower()
+            for existing_id in child_pages.values():
+                if existing_id.replace("-", "").lower() == raw_matched_id:
+                    target_page_id = existing_id
+                    break
+            if not target_page_id:
+                target_page_id = raw_matched_id
+
+        # Look for exact or normalized title match if not found by explicit ID
+        if not target_page_id:
+            norm_target = title.strip().lower()
+            for existing_title, existing_id in child_pages.items():
+                norm_existing = existing_title.strip().lower()
+                if norm_existing == norm_target:
+                    target_page_id = existing_id
+                    break
+                # Match by chapter indicator only if key topic terms also match
+                ch_match = re.search(r"cap[ií]tulo\s+(\d+)", norm_target)
+                if ch_match:
+                    ch_num = ch_match.group(1)
+                    ch_label = f"capítulo {ch_num}"
+                    alt_label = f"capitulo {ch_num}"
+                    if ch_label in norm_existing or alt_label in norm_existing:
+                        ignore_words = {"capitulo", "manual", "usuario", "agentoffice"}
+                        target_words = set(re.findall(r"\w{4,}", norm_target)) - ignore_words
+                        existing_words = set(re.findall(r"\w{4,}", norm_existing)) - ignore_words
+                        if target_words & existing_words:
+                            target_page_id = existing_id
+                            break
 
         action = "updated"
         page_url = ""
@@ -520,6 +536,24 @@ class NotionDocsSyncService:
             if target_page_id:
                 # Update existing page
                 logger.info("Updating existing Notion page '%s' (ID: %s)", title, target_page_id)
+                # Update page title if needed
+                patch_title_res = await client.patch(
+                    f"{NOTION_API_BASE_URL}/pages/{target_page_id.replace('-', '')}",
+                    headers=headers,
+                    json={
+                        "properties": {
+                            "title": {
+                                "title": [{"type": "text", "text": {"content": title}}]
+                            }
+                        }
+                    },
+                )
+                if patch_title_res.status_code not in (200, 201):
+                    logger.warning(
+                        "Could not update title for Notion page %s: %s",
+                        target_page_id,
+                        patch_title_res.status_code,
+                    )
                 await self.clear_page_blocks(target_page_id)
                 await self.append_blocks_in_batches(target_page_id, blocks)
                 clean_id = target_page_id.replace('-', '')

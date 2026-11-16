@@ -91,31 +91,45 @@ flowchart LR
 
 ## 5. Integración n8n: Conectores Directos vs. Contenedor Docker
 
-Agent Office ofrece flexibilidad operativa dual:
+Agent Office ofrece flexibilidad operativa dual para adaptarse tanto a entornos contenerizados como a despliegues locales:
 
-### Opción A: Contenedor Docker Oficial de n8n
-- En `docker-compose.yml`, el servicio `n8n` corre la imagen `n8nio/n8n:latest` en el puerto `5678`.
-- Se inicia fácilmente activando el perfil:
+### Opción A: Contenedor Docker Oficial de n8n con Perfil `automation`
+- En `docker-compose.yml`, el servicio `n8n` corre la imagen oficial `n8nio/n8n:latest` en el puerto `5678`.
+- Se inicia fácilmente junto con el backend mediante el comando:
   ```powershell
-  docker compose --profile automation up -d
+  docker compose --profile automation up -d --build
   ```
-- **Persistencia:** Mantiene el volumen nombrado `n8n_data:/home/node/.n8n` para conservar flujos y estados entre reinicios.
+- **Persistencia de Datos:** Mantiene el volumen nombrado `n8n_data:/home/node/.n8n` para conservar flujos, credenciales y ejecuciones entre reinicios de contenedor.
+- **Healthchecks Activos:** Ambos servicios implementan directivas de salud no bloqueantes con arranque progresivo (*start_period*):
+  - **`agentoffice` (Puerto 8080):** `curl -f http://127.0.0.1:8080/health` (intervalo: 15s, timeout: 5s, start-period: 10s).
+  - **`n8n` (Puerto 5678):** `wget -q --spider http://127.0.0.1:5678/healthz || exit 1` (intervalo: 15s, timeout: 5s, start-period: 15s).
+- **Topología de Red Dual (Bridge vs. Host):**
+  - **Llamadas Backend-to-Backend:** El backend de FastAPI resuelve a n8n mediante DNS interno: `N8N_BASE_URL=http://n8n:5678`.
+  - **Llamadas Browser/Host:** Los webhooks se exponen al navegador o servicios externos bajo `WEBHOOK_URL=http://localhost:5678/`, resolviendo automáticamente la URL pública sin colisiones de red.
 
-### Opción B: Conectores Directos y Modo Local
-- Si n8n no está disponible o el usuario no configuró `N8N_API_KEY`, el servicio genera de forma transparente la URL de webhook local (`http://localhost:5678/webhook/marketing-{project_id}`) y exporta el workflow como archivo JSON importable sin interrumpir el flujo.
+### Opción B: Conectores Directos y Modo Local Resiliente
+- Si n8n no está disponible, el servicio genera de forma transparente la URL de webhook local (`http://localhost:5678/webhook/marketing-{project_id}`) y exporta el workflow como archivo JSON importable sin interrumpir el flujo.
 
 ---
 
-## 6. Generación de Workflows (`CreateWorkflowPublicDto`) y Materialización
+## 6. Generación de Workflows (`CreateWorkflowPublicDto`), Aprovisionamiento y Fallback
 
-El módulo `app/services/n8n_service.py` genera programáticamente flujos de n8n con tipado estricto:
+El módulo `app/services/n8n_service.py` genera y aprovisiona flujos de n8n de manera asíncrona y resiliente:
 
 1. **Cumplimiento DTO de n8n:**  
-   Garantiza que la carga útil enviada a `POST /api/v1/workflows` solo contenga campos soportados por n8n (`name`, `nodes`, `connections`, `settings`, `tags`).
+   Garantiza que la carga útil enviada a `POST /api/v1/workflows` solo contenga campos admitidos por la API REST v1/v2 de n8n (`name`, `nodes`, `connections`, `settings`, `nodeGroups`, `staticData`, `pinData`, `projectId`, `parentFolderId`, `shared`, `description`).
 2. **Nodo Disparador Aislado:**  
-   Define un nodo de tipo `n8n-nodes-base.webhook` con ruta única:
-   `path: f"marketing-{project_id}"` y `responseMode: "onReceived"`.
-3. **Materialización Segura en Disco:**  
+   Define un nodo de tipo `n8n-nodes-base.webhook` con identificador y ruta únicos por proyecto:
+   `webhookId: f"marketing-{project_id}"` y `path: f"marketing-{project_id}"` con `responseMode: "onReceived"`.
+3. **Flujo de Publicación Automática con Fallback Resiliente:**  
+   Tras la creación exitosa del flujo, el servicio emite una petición para activarlo:
+   `POST {base_url}/api/v1/workflows/{workflow_id}/publish`
+   Si la instancia de n8n corre una versión previa que no implementa `/publish` y retorna un error 404, el servicio conmuta automáticamente a:
+   `POST {base_url}/api/v1/workflows/{workflow_id}/activate`
+   garantizando la activación inmediata del webhook en cualquier versión de n8n.
+4. **Manejo de Excepciones sin Bloqueo:**  
+   Si n8n no está accesible o se agota el timeout (`httpx.AsyncClient(timeout=6.0)`), el servicio captura el fallo, registra una advertencia en logs y retorna `live_n8n_connected: false` junto con la configuración local, sin degradar el backend ni emitir errores 500.
+5. **Materialización Segura en Disco:**  
    El flujo completo se guarda en `workspaces/{project_id}/marketing/n8n_workflow_{project_id}.json` utilizando `Path.resolve()` y validación contra Path Traversal con `is_relative_to(workspace_root)`.
 
 ---

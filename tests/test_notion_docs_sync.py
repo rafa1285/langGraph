@@ -166,3 +166,18 @@ async def test_notion_docs_sync_service_create_and_update(monkeypatch: pytest.Mo
         assert res_update["status"] == "updated"
         assert res_update["page_id"] == "existing-page-id-8888"
         mock_patch.assert_called()
+
+        # 3. Test update when page has embedded Notion URL in markdown
+        md_with_notion_url = (
+            "# Capítulo Especial\n\n"
+            "> [Ver página en Notion](https://app.notion.com/p/419be4dde97381a69a4cdd5cfdb670db?pvs=204)\n\n"
+            "Texto explicativo..."
+        )
+        existing_pages_by_id = {"Otro Título": "419be4dd-e973-81a6-9a4c-dd5cfdb670db"}
+        res_embedded = await service.sync_document(
+            title="Capítulo Especial",
+            markdown_content=md_with_notion_url,
+            existing_child_pages=existing_pages_by_id,
+        )
+        assert res_embedded["status"] == "updated"
+        assert "419be4dd" in res_embedded["page_id"]

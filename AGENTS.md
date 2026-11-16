@@ -2,7 +2,8 @@
 
 > **Factoría de Software Autónomo con LangGraph, FastAPI y Google Antigravity**  
 > **Versión del Sistema:** Agent Office v2.5 (Cyber-Loft Engine)  
-> **Ámbito de Aplicación:** Raíz del proyecto y subdirectorio `langGraph/`
+> **Ámbito de Aplicación:** Raíz del proyecto y subdirectorio `langGraph/`  
+> **Enlace directo en Notion:** [Ver página en Notion](https://app.notion.com/p/419be4dde9738165af66ee337d7474b2?pvs=204)
 
 Este documento constituye el **índice de arquitectura maestro** y el reglamento de ingeniería de **Agent Office**. Define el mapa integral de módulos, las directrices innegociables de desarrollo, la matriz de activación para el catálogo completo de **7 Skills de Google Antigravity** alojadas en `.agent/skills/` y los **6 Agentes Ejecutores (Workflows Operativos)** alojados en `.agent/workflows/`.
 

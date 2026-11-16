@@ -17,7 +17,8 @@
 4. [Panel Izquierdo: Monitoreo de Proyectos y Estado de Cortafuegos (Circuit Breakers)](#4-panel-izquierdo-monitoreo-de-proyectos-y-estado-de-cortafuegos-circuit-breakers)
 5. [Panel Derecho: Pista de Auditoría Forense (Audit Trail de Seguridad CISO & QA)](#5-panel-derecho-pista-de-auditoría-forense-audit-trail-de-seguridad-ciso--qa)
 6. [Caso Práctico Real: Cómo se Resolvieron los 5 Vetos en `validator-hq-saas`](#6-caso-práctico-real-cómo-se-resolvieron-los-5-vetos-en-validator-hq-saas)
-7. [Preguntas Frecuentes y Guía de Decisiones para Negocio](#7-preguntas-frecuentes-y-guía-de-decisiones-para-negocio)
+7. [Blindaje Integral AppSec & DevSecOps (Directivas SEC-01 a SEC-04)](#7-blindaje-integral-appsec--devsecops-directivas-sec-01-a-sec-04)
+8. [Preguntas Frecuentes y Guía de Decisiones para Negocio](#8-preguntas-frecuentes-y-guía-de-decisiones-para-negocio)
 
 ---
 
@@ -162,7 +163,60 @@ flowchart TD
 
 ---
 
-## 7. Preguntas Frecuentes y Guía de Decisiones para Negocio
+## 7. Blindaje Integral AppSec & DevSecOps (Directivas SEC-01 a SEC-04)
+
+Como resultado de la auditoría técnica profunda ejecutada por el **Workflow de Ciberseguridad (`/sec-audit`)** y el guardián de calidad AppSec, Agent Office ha incorporado 4 directivas maestras de seguridad defensiva en profundidad (*Defense-in-Depth*):
+
+```mermaid
+flowchart TD
+    subgraph AppSec_Shield["🛡️ Matriz de Blindaje AppSec (SEC-01 a SEC-04)"]
+        direction TB
+        S1["SEC-01: Anti-Path Traversal\n(is_relative_to & Path.resolve)"]
+        S2["SEC-02: Blindaje Anti-SSRF\n(Validación HTTP/HTTPS en Webhooks)"]
+        S3["SEC-03: Confinamiento DOM\n(.pixel-password-wrap + Toggle 👁️)"]
+        S4["SEC-04: Parametrización SQL\n(Whitelist _ALLOWED_DB_TABLES)"]
+    end
+    
+    S1 --> G["Guardian Suite: tests/test_sec_audit_guardian.py\n(13 Tests 100% Offline)"]
+    S2 --> G
+    S3 --> G
+    S4 --> G
+    G --> R["✅ Cero Regresiones Certificadas"]
+```
+
+### Directiva SEC-01: Confinamiento de Disco y Prevención Anti-Path Traversal (CWE-22)
+- **Vulnerabilidad Prevenida:** Intentos de escape de directorio mediante secuencias arbitrarias tipo `../../` o rutas absolutas destinadas a sobreescribir o leer archivos críticos del host o del sistema operativo (`/etc/passwd`, variables `.env`).
+- **Implementación Técnica:**
+  - Resolución canónica obligatoria con `Path(target).resolve()`.
+  - Verificación innegociable de confinamiento jerárquico mediante `.is_relative_to(workspace_root)`.
+  - Desplegado en: `workspace_writer.py`, `code_materializer.py`, `file_edit_service.py`, `brownfield_service.py`, `marketing_tools.py` y `n8n_service.py`.
+
+### Directiva SEC-02: Blindaje de Red y Prevención Anti-SSRF (CWE-918)
+- **Vulnerabilidad Prevenida:** Peticiones HTTP salientes forzadas hacia esquemas locales inseguros (`file://`, `ftp://`, `gopher://`, `dict://`) o servicios internos de metadatos de nube (`http://169.254.169.254`).
+- **Implementación Técnica:**
+  - Validación de esquema estricta: únicamente se procesan URLs que inicien explícitamente con `http://` o `https://`.
+  - Conexiones con clientes asíncronos no bloqueantes `httpx.AsyncClient` protegidos con timeouts estrictos (6 a 8 segundos).
+  - Manejo de excepciones controlado en `marketing_tools.py` y `n8n_service.py`, registrando el incidente en telemetría sin degradar el backend ni detener el pipeline.
+
+### Directiva SEC-03: Ocultación de Credenciales en el DOM y UX de Seguridad (`.pixel-password-wrap`)
+- **Vulnerabilidad Prevenida:** Exposición visual accidental de claves secretas, webhooks o tokens de API en pantallas compartidas, grabaciones de auditoría o ataques de *shoulder surfing*.
+- **Implementación Técnica:**
+  - Todos los inputs sensibles en `panel.js` (`mkt-ch-cred`, `mkt-tool-cred-search-key`, `mkt-tool-cred-email-key`) y `dashboard.html` (`wa-cfg-secret`, `wa-cfg-token`) se renderizan con atributo nativo `type="password"`.
+  - Componente CSS `.pixel-password-wrap` con botón interactivo `.pixel-password-toggle` (`👁️` / `🔒`), permitiendo al operador verificar la clave introducida bajo demanda.
+  - Sanitización contextual de todo texto inyectado en el DOM con `_esc(s)`, neutralizando vectores de DOM XSS.
+
+### Directiva SEC-04: Parametrización SQL Absoluta y Whitelist de Tablas (CWE-89)
+- **Vulnerabilidad Prevenida:** Inyección de sentencias SQL maliciosas en consultas dinámicas de observabilidad y telemetría forense.
+- **Implementación Técnica:**
+  - 100% de las consultas en `office_store.py` y `routes_telemetry.py` utilizan consultas preparadas con parámetros vinculados (`?`).
+  - Validación de nombres de tabla contra la lista blanca inmutable `_ALLOWED_DB_TABLES`, impidiendo la inspección o volcado de tablas no autorizadas.
+
+### Certificación con la Suite `test_sec_audit_guardian.py`
+El cumplimiento continuo de estas directivas está respaldado por el archivo de pruebas `tests/test_sec_audit_guardian.py`, compuesto por 13 tests automatizados de caja negra y blanca que validan el rechazo de Path Traversal, la mitigación de SSRF, la no-exposición de credenciales en endpoints REST y la solidez ante fallos de conexión.
+
+---
+
+## 8. Preguntas Frecuentes y Guía de Decisiones para Negocio
 
 ### ¿Tener eventos rojos en el *Audit Trail* significa que el software es de mala calidad?
 **Al contrario.** En auditoría de software, un sistema que siempre aprueba todo al 100% en la primera pasada suele sufrir de "falsa complacencia" (pruebas superficiales que ignoran vulnerabilidades graves). Que el CISO y los QAs hayan rechazado y bloqueado 5 entregas demuestra que **los inspectores son rigurosos e incorruptibles**. Lo relevante es que al final el proyecto figure en **`RESOLVED`**, lo que certifica que todos los riesgos fueron subsanados.
