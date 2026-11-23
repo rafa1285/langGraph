@@ -54,7 +54,16 @@ class AgentEmailRecord(BaseModel):
 
 
 LLMProvider = Literal[
-    "google", "groq", "mistral", "openrouter", "openai", "anthropic", "deepseek", "custom"
+    "google",
+    "groq",
+    "mistral",
+    "openrouter",
+    "openai",
+    "anthropic",
+    "deepseek",
+    "nvidia",
+    "cohere",
+    "custom",
 ]
 LLMTier = Literal["free", "paid"]
 LLMPingStatus = Literal[

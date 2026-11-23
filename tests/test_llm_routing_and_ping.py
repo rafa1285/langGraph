@@ -396,3 +396,65 @@ async def test_gateway_automatic_fallback_on_429(tmp_path: Path) -> None:
             assert gateway.last_model_used["agente_01_pm"] == "mock-model-fallback"
             assert gateway.last_fallback_event["agente_01_pm"]["fallback_used"] is True
             assert gateway.last_fallback_event["agente_01_pm"]["attempt_index"] == 1
+
+
+@pytest.mark.asyncio
+async def test_universal_safety_net_fallback_when_all_assigned_fail(tmp_path: Path) -> None:
+    """Verify that when all configured candidate models fail, the universal safety net activates."""
+    db_path = tmp_path / "test_safety_net.sqlite"
+    store = OfficeStore(db_path=db_path)
+    await store.init_db()
+
+    # Create failing model
+    await store.create_llm_model(
+        LLMModelCatalogCreate(
+            model_id="failing-model",
+            display_name="Failing Model",
+            provider="groq",
+            base_url="https://api.mock.test/v1",
+            api_key_env="MOCK_TEST_KEY",
+            tier="free",
+        )
+    )
+
+    with patch.dict("os.environ", {"MOCK_TEST_KEY": "dummy-token", "GROQ_API_KEY": "dummy-token"}):
+        await store.save_agent_llm_config(
+            "agente_10_ciso",
+            AgentLLMConfigUpdate(
+                assigned_models=[
+                    AssignedModelItem(model_id="failing-model", enabled=True, priority=1),
+                ],
+                temperature=0.1,
+                max_tokens=1000,
+                timeout=10,
+                max_retries=1,
+            ),
+        )
+
+        gateway = GeminiLLMGateway(store=store)
+
+        # 1st call (failing-model) returns 404
+        resp_404 = MagicMock()
+        resp_404.status_code = 404
+        resp_404.text = "Model not found"
+
+        # 2nd call (safety net model e.g. qwen/qwen3.8-27b) returns 200
+        resp_200 = MagicMock()
+        resp_200.status_code = 200
+        resp_200.json.return_value = {
+            "choices": [
+                {"message": {"content": "---\norigen: 'agente_10_ciso'\n---\nSAFETY_NET_RECOVERED"}}
+            ]
+        }
+
+        with patch.object(
+            httpx.AsyncClient, "post", new_callable=AsyncMock, side_effect=[resp_404, resp_200]
+        ):
+            output = await gateway.invoke_agent(
+                agent_id=AgentID.AGENTE_10_CISO,
+                system_prompt="system",
+                user_payload="payload",
+            )
+            assert "SAFETY_NET_RECOVERED" in output
+            assert gateway.last_fallback_event["agente_10_ciso"]["emergency_safety_net"] is True
+

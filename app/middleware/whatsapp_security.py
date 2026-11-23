@@ -18,7 +18,7 @@ async def verify_whatsapp_signature(request: Request) -> None:
     raises :class:`~fastapi.HTTPException` with status 401.
     """
     secret: str | None = settings.WHATSAPP_APP_SECRET
-    if secret is None:
+    if not secret or not str(secret).strip():
         return
 
     signature_header: str | None = request.headers.get("X-Hub-Signature-256")

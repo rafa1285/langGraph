@@ -13,6 +13,7 @@ import httpx
 
 from app.core.config import settings
 from app.schemas.office import AgentEmailRecord
+from app.services.code_materializer import CodeMaterializerService
 from app.services.notion_mcp_service import get_knowledge_sync_adapter
 from app.services.office_store import OfficeStore
 from app.services.real_mail_bridge import RealMailBridge
@@ -190,27 +191,260 @@ class VercelDeployerService:
         self.templates_dir = Path(__file__).parent.parent / "templates" / "vercel"
 
     def extract_rag_chunks(self, project_id: str) -> list[dict[str, Any]]:
-        """Extract RAG chunks from 21_agente_08_docs.md or fallback to defaults."""
-        docs_file = self.workspaces_dir / project_id / "21_agente_08_docs.md"
-        if docs_file.exists():
+        """Extract RAG chunks from any docs markdown deliverable or fallback to defaults."""
+        proj_dir = self.workspaces_dir / project_id
+        candidates = [proj_dir / "21_agente_08_docs.md"]
+        candidates.extend(sorted(proj_dir.glob("*agente_08_docs.md")))
+        candidates.extend(sorted(proj_dir.glob("*docs*.md")))
+
+        seen: set[Path] = set()
+        for docs_file in candidates:
+            if docs_file in seen or not docs_file.exists():
+                continue
+            seen.add(docs_file)
             try:
                 content = docs_file.read_text(encoding="utf-8")
-                match = re.search(r"```json\s*(\[\s*\{\s*\"id_chunk\"[\s\S]*?\])\s*```", content)
+                match = re.search(
+                    r"```json\s*(\[\s*\{\s*\"(?:id_chunk|chunk_id)\"[\s\S]*?\])\s*```",
+                    content,
+                )
                 if match:
                     parsed: list[dict[str, Any]] = json.loads(match.group(1))
                     if isinstance(parsed, list) and len(parsed) > 0:
-                        return parsed
+                        normalized: list[dict[str, Any]] = []
+                        for item in parsed:
+                            if not isinstance(item, dict):
+                                continue
+                            norm_item = dict(item)
+                            if "chunk_id" in norm_item and "id_chunk" not in norm_item:
+                                norm_item["id_chunk"] = norm_item["chunk_id"]
+                            if "topic" in norm_item and "categoria" not in norm_item:
+                                norm_item["categoria"] = norm_item["topic"]
+                            if "content" in norm_item and "respuesta_resolutiva" not in norm_item:
+                                norm_item["respuesta_resolutiva"] = norm_item["content"]
+                                norm_item["contexto_autocontenido"] = norm_item["content"]
+                            if "keywords" in norm_item and "intencion_usuario" not in norm_item:
+                                norm_item["intencion_usuario"] = norm_item["keywords"]
+                            normalized.append(norm_item)
+                        return normalized
             except Exception as exc:
                 logger.warning("No se pudo parsear bloques RAG de %s: %s", docs_file, exc)
 
         return list(FALLBACK_RAG_CHUNKS)
 
+    def _detect_project_title(self, project_id: str) -> str:
+        """Detect human-readable project title from deliverables or return default."""
+        proj_dir = self.workspaces_dir / project_id
+        candidates = (
+            "02_agente_01_pm.md",
+            "01_agente_00_ceo.md",
+            "04_agente_11_ui_ux.md",
+            "05_agente_04_fastapi.md",
+            "12_agente_08_docs.md",
+        )
+        for name in candidates:
+            cand_path = proj_dir / name
+            if cand_path.exists():
+                try:
+                    text = cand_path.read_text(encoding="utf-8")
+                    m = re.search(r"##\s*Proyecto:\s*([^—–\n\r]+)", text)
+                    if m:
+                        title = m.group(1).strip()
+                        if title and len(title) > 2:
+                            return title
+                except Exception:
+                    pass
+        return "ValidatorHQ Serverless Engine"
+
+    def _compile_custom_frontend(self, project_id: str, dist_dir: Path, public_dir: Path) -> bool:
+        """Compile materialized Blade templates or custom HTML into standalone frontend assets."""
+        build_dir = self.workspaces_dir / project_id / "build"
+        views_dir = build_dir / "resources" / "views"
+        layout_path = views_dir / "layouts" / "app.blade.php"
+        hero_path = views_dir / "landing" / "hero_simulator.blade.php"
+
+        if layout_path.exists() and hero_path.exists():
+            try:
+                layout = layout_path.read_text(encoding="utf-8")
+                hero = hero_path.read_text(encoding="utf-8")
+
+                index_html = self._render_blade(layout, hero)
+                (dist_dir / "index.html").write_text(index_html, encoding="utf-8")
+                (public_dir / "index.html").write_text(index_html, encoding="utf-8")
+
+                # Compile confirmation view if present
+                confirm_path = views_dir / "booking" / "confirmation.blade.php"
+                if confirm_path.exists():
+                    confirm_raw = confirm_path.read_text(encoding="utf-8")
+                    confirm_html = self._render_blade(layout, confirm_raw)
+                    (dist_dir / "confirmation.html").write_text(confirm_html, encoding="utf-8")
+                    (public_dir / "confirmation.html").write_text(confirm_html, encoding="utf-8")
+
+                # Compile admin dashboard if present
+                admin_path = views_dir / "admin" / "dashboard.blade.php"
+                if admin_path.exists():
+                    admin_raw = admin_path.read_text(encoding="utf-8")
+                    admin_html = self._render_blade(layout, admin_raw)
+                    (dist_dir / "admin.html").write_text(admin_html, encoding="utf-8")
+                    (public_dir / "admin.html").write_text(admin_html, encoding="utf-8")
+
+                return True
+            except Exception as exc:
+                logger.warning("Fallo al compilar vistas Blade para %s: %s", project_id, exc)
+
+        # Check for static HTML generated by marketing
+        mkt_html = self.workspaces_dir / project_id / "marketing" / "landing_page.html"
+        if mkt_html.exists():
+            content = mkt_html.read_text(encoding="utf-8")
+            if len(content.strip()) > 100:
+                (dist_dir / "index.html").write_text(content, encoding="utf-8")
+                (public_dir / "index.html").write_text(content, encoding="utf-8")
+                return True
+
+        return False
+
+    @staticmethod
+    def _render_blade(layout_str: str, view_str: str) -> str:
+        """Render a child Blade view into its parent layout and clean template syntax."""
+        sec_m = re.search(r"@section\(['\"]content['\"]\)([\s\S]*?)@endsection", view_str)
+        content = sec_m.group(1) if sec_m else view_str
+        rendered = re.sub(r"@yield\(['\"]content['\"]\)", content, layout_str)
+        rendered = re.sub(r"@csrf", "", rendered)
+        rendered = re.sub(r"@stack\(['\"].*?['\"]\)", "", rendered)
+        rendered = re.sub(r"@extends\(['\"].*?['\"]\)", "", rendered)
+        rendered = re.sub(r"@section\(['\"].*?['\"]\)", "", rendered)
+        rendered = re.sub(r"@endsection", "", rendered)
+        rendered = re.sub(r"\{\{\s*date\(['\"]Y['\"]\)\s*\}\}", "2026", rendered)
+        return rendered
+
+    def _build_docs_html(self, project_id: str, project_title: str) -> str:
+        """Build documentation portal HTML from Agent 08 deliverable or template."""
+        proj_dir = self.workspaces_dir / project_id
+        docs_files = sorted(proj_dir.glob("*agente_08_docs.md"))
+        if not docs_files:
+            docs_files = sorted(proj_dir.glob("*docs*.md"))
+
+        if not docs_files or "ValidatorHQ" in project_title:
+            docs_template = self.templates_dir / "docs.html"
+            if docs_template.exists():
+                return docs_template.read_text(encoding="utf-8")
+            return f"<!DOCTYPE html><html><body><h1>{project_title} Docs</h1></body></html>"
+
+        rag_chunks = self.extract_rag_chunks(project_id)
+        faq_items_html = ""
+        badge_cls = (
+            "text-xs font-semibold px-2 py-0.5 rounded "
+            "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
+        )
+        for chunk in rag_chunks[:8]:
+            cat = chunk.get("categoria") or chunk.get("topic") or "General"
+            q = chunk.get("intencion_usuario", ["Consulta"])
+            q_str = q[0] if isinstance(q, list) and q else str(q)
+            ans = chunk.get("respuesta_resolutiva") or chunk.get("content") or ""
+            faq_items_html += (
+                f'<div class="p-4 rounded-xl border border-slate-800 bg-slate-900/60 mb-4">\n'
+                f'  <span class="{badge_cls}">{cat}</span>\n'
+                f'  <h4 class="text-sm font-bold text-white mt-2">{q_str}</h4>\n'
+                f'  <p class="text-xs text-slate-300 mt-1 leading-relaxed">{ans}</p>\n'
+                f"</div>\n"
+            )
+
+        font_link = (
+            '<link href="https://fonts.googleapis.com/css2?'
+            'family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">'
+        )
+        return (
+            "<!DOCTYPE html>\n"
+            '<html lang="es" class="dark bg-slate-950 text-slate-100">\n<head>\n'
+            '  <meta charset="UTF-8">\n'
+            '  <meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+            f"  <title>{project_title} — Documentación Técnica &amp; API</title>\n"
+            '  <script src="https://cdn.tailwindcss.com"></script>\n'
+            f"  {font_link}\n"
+            "  <style>body { font-family: 'Plus Jakarta Sans', sans-serif; }</style>\n"
+            "</head>\n"
+            '<body class="min-h-screen bg-slate-950 antialiased">\n'
+            '  <header class="sticky top-0 z-40 border-b border-slate-800 bg-slate-950/80">\n'
+            '    <div class="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">\n'
+            '      <a href="/" class="flex items-center gap-3">\n'
+            '        <div class="h-9 w-9 rounded-lg bg-emerald-500 flex items-center '
+            'justify-center font-bold text-slate-950">A</div>\n'
+            f'        <span class="text-lg font-bold text-white">{project_title}</span>\n'
+            "      </a>\n"
+            '      <div class="flex items-center gap-4">\n'
+            '        <a href="/" class="text-xs font-semibold px-3 py-1.5 rounded-lg '
+            'border border-slate-700 text-slate-300 hover:text-white">Reservar Cita</a>\n'
+            '        <a href="/admin" class="text-xs font-semibold px-3 py-1.5 rounded-lg '
+            'bg-emerald-500 text-slate-950">Panel CRM</a>\n'
+            "      </div>\n"
+            "    </div>\n"
+            "  </header>\n"
+            '  <main class="max-w-5xl mx-auto px-4 py-12">\n'
+            '    <div class="mb-12">\n'
+            '      <span class="text-xs font-semibold text-emerald-400 bg-emerald-500/10 '
+            'px-3 py-1 rounded-full border border-emerald-500/20">Portal Técnico Oficial</span>\n'
+            f'      <h1 class="text-3xl font-extrabold text-white mt-4">{project_title} '
+            "— API Reference</h1>\n"
+            '      <p class="text-slate-400 text-sm mt-2">Especificación técnica, endpoints '
+            "RESTful, webhooks y base de conocimiento RAG 24/7.</p>\n"
+            "    </div>\n"
+            '    <section class="mb-12">\n'
+            '      <h2 class="text-xl font-bold text-white mb-4">Endpoints Principales</h2>\n'
+            '      <div class="space-y-3">\n'
+            '        <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/50 '
+            'flex items-center justify-between">\n'
+            '          <span class="font-mono text-xs text-emerald-400">'
+            "GET /api/v1/availability</span>\n"
+            '          <span class="text-xs text-slate-400">'
+            "Consulta de turnos disponibles</span>\n"
+            "        </div>\n"
+            '        <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/50 '
+            'flex items-center justify-between">\n'
+            '          <span class="font-mono text-xs text-indigo-400">'
+            "POST /api/v1/checkout/create-session</span>\n"
+            '          <span class="text-xs text-slate-400">'
+            "Creación de reserva y pago instantáneo</span>\n"
+            "        </div>\n"
+            '        <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/50 '
+            'flex items-center justify-between">\n'
+            '          <span class="font-mono text-xs text-indigo-400">'
+            "POST /api/v1/ai/rag/query</span>\n"
+            '          <span class="text-xs text-slate-400">'
+            "Consulta RAG IA autónoma</span>\n"
+            "        </div>\n"
+            '        <div class="p-4 rounded-xl border border-slate-800 bg-slate-900/50 '
+            'flex items-center justify-between">\n'
+            '          <span class="font-mono text-xs text-emerald-400">GET /api/health</span>\n'
+            '          <span class="text-xs text-slate-400">Healthcheck serverless</span>\n'
+            "        </div>\n"
+            "      </div>\n"
+            "    </section>\n"
+            '    <section class="mb-12">\n'
+            '      <h2 class="text-xl font-bold text-white mb-4">Base de Conocimiento RAG</h2>\n'
+            f'      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">\n{faq_items_html}\n</div>\n'
+            "    </section>\n"
+            "  </main>\n"
+            f'  <footer class="border-t border-slate-800 py-6 text-center text-xs text-slate-500">'
+            f"&copy; 2026 {project_title}. Generado por AgentOffice.</footer>\n"
+            "</body>\n</html>"
+        )
+
+
     def build_vercel_bundle(self, project_id: str) -> Path:
         """Build the full serverless distribution directory for Vercel."""
+        # 0. Ensure project deliverables are materialized into build/
+        try:
+            materializer = CodeMaterializerService(self.workspaces_dir)
+            materializer.materialize_project(project_id, init_git=False)
+        except Exception as mat_err:
+            logger.warning("Materialización previa omitida para %s: %s", project_id, mat_err)
+
         dist_dir = self.workspaces_dir / project_id / "vercel_dist"
         api_dir = dist_dir / "api"
+        public_dir = dist_dir / "public"
         dist_dir.mkdir(parents=True, exist_ok=True)
         api_dir.mkdir(parents=True, exist_ok=True)
+        public_dir.mkdir(parents=True, exist_ok=True)
 
         rag_chunks = self.extract_rag_chunks(project_id)
         rag_json = json.dumps(rag_chunks, indent=2, ensure_ascii=False)
@@ -219,15 +453,18 @@ class VercelDeployerService:
         (api_dir / "rag_chunks.json").write_text(rag_json, encoding="utf-8")
         (dist_dir / "rag_chunks.json").write_text(rag_json, encoding="utf-8")
 
-        # 2. Save api/index.py
+        # 2. Save api/index.py with project metadata
+        project_title = self._detect_project_title(project_id)
         api_template = self.templates_dir / "api_index.py"
         if api_template.exists():
-            api_py_content = api_template.read_text(encoding="utf-8").replace(
-                "{{project_id}}", project_id
+            api_py_content = (
+                api_template.read_text(encoding="utf-8")
+                .replace("{{project_id}}", project_id)
+                .replace("{{project_title}}", project_title)
             )
         else:
             api_py_content = (
-                f'from fastapi import FastAPI\napp = FastAPI()\n'
+                f'from fastapi import FastAPI\napp = FastAPI(title="{project_title}")\n'
                 f'@app.get("/api/health")\ndef h(): return {{"project_id": "{project_id}"}}\n'
             )
         (api_dir / "index.py").write_text(api_py_content, encoding="utf-8")
@@ -236,7 +473,7 @@ class VercelDeployerService:
         requirements_txt = "fastapi>=0.110.0\npydantic>=2.6.0\n"
         (dist_dir / "requirements.txt").write_text(requirements_txt, encoding="utf-8")
 
-        # 4. Save vercel.json
+        # 4. Save vercel.json with clean rewrites
         vercel_json = json.dumps(
             {
                 "version": 2,
@@ -244,35 +481,47 @@ class VercelDeployerService:
                     {
                         "source": "/api/(.*)",
                         "destination": "/api/index.py",
-                    }
+                    },
+                    {
+                        "source": "/booking/confirmation",
+                        "destination": "/confirmation.html",
+                    },
+                    {
+                        "source": "/admin/dashboard",
+                        "destination": "/admin.html",
+                    },
+                    {
+                        "source": "/admin",
+                        "destination": "/admin.html",
+                    },
+                    {
+                        "source": "/docs",
+                        "destination": "/docs.html",
+                    },
                 ],
             },
             indent=2,
         )
         (dist_dir / "vercel.json").write_text(vercel_json, encoding="utf-8")
 
-        # 5. Save index.html (both root and public/ for maximum Vercel compatibility)
-        public_dir = dist_dir / "public"
-        public_dir.mkdir(parents=True, exist_ok=True)
+        # 5. Save index.html (custom compiled Blade/marketing or fallback to template)
+        compiled_custom = self._compile_custom_frontend(project_id, dist_dir, public_dir)
+        if not compiled_custom:
+            index_template = self.templates_dir / "index.html"
+            if index_template.exists():
+                index_html = index_template.read_text(encoding="utf-8")
+            else:
+                index_html = "<!DOCTYPE html><html><body><h1>ValidatorHQ Demo</h1></body></html>"
+            (dist_dir / "index.html").write_text(index_html, encoding="utf-8")
+            (public_dir / "index.html").write_text(index_html, encoding="utf-8")
 
-        index_template = self.templates_dir / "index.html"
-        if index_template.exists():
-            index_html = index_template.read_text(encoding="utf-8")
-        else:
-            index_html = "<!DOCTYPE html><html><body><h1>ValidatorHQ Demo</h1></body></html>"
-        (dist_dir / "index.html").write_text(index_html, encoding="utf-8")
-        (public_dir / "index.html").write_text(index_html, encoding="utf-8")
-
-        # 6. Save docs.html (both root and public/ for maximum Vercel compatibility)
-        docs_template = self.templates_dir / "docs.html"
-        if docs_template.exists():
-            docs_html = docs_template.read_text(encoding="utf-8")
-        else:
-            docs_html = "<!DOCTYPE html><html><body><h1>ValidatorHQ Docs</h1></body></html>"
+        # 6. Save docs.html (custom project portal or fallback template)
+        docs_html = self._build_docs_html(project_id, project_title)
         (dist_dir / "docs.html").write_text(docs_html, encoding="utf-8")
         (public_dir / "docs.html").write_text(docs_html, encoding="utf-8")
 
         return dist_dir
+
 
     async def deploy_to_vercel(
         self,

@@ -14,6 +14,7 @@ from app.core.config import settings
 from app.schemas.office import (
     AgentChainLinkPing,
     AgentLLMChainPingResponse,
+    AgentLLMConfig,
     LLMModelCatalogItem,
     LLMModelPingResponse,
 )
@@ -124,34 +125,15 @@ class GeminiLLMGateway:
             for idx, (model_id, cat_model) in enumerate(candidates):
                 is_fallback = idx > 0
                 try:
-                    if cat_model.provider == "google":
-                        res = await self._invoke_gemini(
-                            model_name=model_id,
-                            temperature=config.temperature if config else 0.2,
-                            system_prompt=system_prompt,
-                            user_payload=user_payload,
-                            agent_id=agent_id,
-                            max_retries=config.max_retries if config and len(candidates) > 1 else 5,
-                        )
-                    elif cat_model.provider == "anthropic":
-                        res = await self._invoke_anthropic(
-                            cat_model=cat_model,
-                            temperature=config.temperature if config else 0.2,
-                            max_tokens=config.max_tokens if config else 4096,
-                            timeout=config.timeout if config else 60,
-                            system_prompt=system_prompt,
-                            user_payload=user_payload,
-                        )
-                    else:
-                        res = await self._invoke_openai_compatible(
-                            cat_model=cat_model,
-                            temperature=config.temperature if config else 0.2,
-                            max_tokens=config.max_tokens if config else 4096,
-                            timeout=config.timeout if config else 60,
-                            system_prompt=system_prompt,
-                            user_payload=user_payload,
-                        )
-
+                    res = await self._dispatch_model(
+                        cat_model=cat_model,
+                        model_id=model_id,
+                        config=config,
+                        system_prompt=system_prompt,
+                        user_payload=user_payload,
+                        agent_id=agent_id,
+                        max_retries=config.max_retries if config and len(candidates) > 1 else 3,
+                    )
                     self.last_model_used[norm_id] = model_id
                     self.last_fallback_event[norm_id] = {
                         "responded_model": model_id,
@@ -178,9 +160,133 @@ class GeminiLLMGateway:
                     )
                     continue
 
+            # 5. Universal Safety-Net Fallback: If all agent-assigned models failed,
+            # dynamically try any healthy, verified model in catalog with valid credentials.
+            logger.warning(
+                "[LLM Gateway] All %d candidates failed for %s. Engaging safety net...",
+                len(candidates),
+                norm_id,
+            )
+            tried_ids = {m_id for m_id, _ in candidates}
+            emergency_preferences = [
+                "gemini-3.6-flash",
+                "gemini-3.5-flash-lite",
+                "qwen/qwen3.8-27b",
+                "openai/gpt-oss-120b",
+                "mistralai/mistral-large-4-1t-a52b",
+                "command-r-plus-08-2024",
+            ]
+            for em_id in emergency_preferences:
+                if em_id in tried_ids or em_id not in catalog:
+                    continue
+                em_cat = catalog[em_id]
+                if not em_cat.is_active:
+                    continue
+                if em_cat.provider == "google":
+                    has_key = bool(self.api_key and str(self.api_key).strip()) or (
+                        has_env_key(em_cat.api_key_env)
+                    )
+                else:
+                    has_key = has_env_key(em_cat.api_key_env)
+                if not has_key:
+                    continue
+
+                try:
+                    logger.info(
+                        "[LLM Gateway] Safety net: Trying %s for %s",
+                        em_id,
+                        norm_id,
+                    )
+                    res = await self._dispatch_model(
+                        cat_model=em_cat,
+                        model_id=em_id,
+                        config=config,
+                        system_prompt=system_prompt,
+                        user_payload=user_payload,
+                        agent_id=agent_id,
+                        max_retries=2,
+                    )
+                    self.last_model_used[norm_id] = em_id
+                    self.last_fallback_event[norm_id] = {
+                        "responded_model": em_id,
+                        "provider": em_cat.provider,
+                        "fallback_used": True,
+                        "emergency_safety_net": True,
+                    }
+                    logger.info(
+                        "[LLM Gateway] Safety net SUCCESS: %s recovered using %s",
+                        norm_id,
+                        em_id,
+                    )
+                    return res
+                except Exception as exc:
+                    last_err = exc
+                    logger.warning(
+                        "[LLM Gateway] Safety net model %s failed for %s (%s). Continuing pool...",
+                        em_id,
+                        norm_id,
+                        exc,
+                    )
+                    continue
+
             if last_err:
                 raise last_err
-            raise RuntimeError(f"All LLM candidate models failed for agent {agent_id}.")
+            raise RuntimeError(
+                f"All LLM candidate models and safety-net fallbacks failed for agent {agent_id}."
+            )
+
+    async def _dispatch_model(
+        self,
+        cat_model: LLMModelCatalogItem,
+        model_id: str,
+        config: AgentLLMConfig | None,
+        system_prompt: str,
+        user_payload: str,
+        agent_id: AgentID,
+        max_retries: int | None = None,
+    ) -> str:
+        """Dispatch invocation according to model provider."""
+        temp = config.temperature if config else 0.2
+        tokens = config.max_tokens if config else 4096
+        timeout = config.timeout if config else 60
+        retries = max_retries if max_retries is not None else (config.max_retries if config else 3)
+
+        if cat_model.provider == "google":
+            return await self._invoke_gemini(
+                model_name=model_id,
+                temperature=temp,
+                system_prompt=system_prompt,
+                user_payload=user_payload,
+                agent_id=agent_id,
+                max_retries=retries,
+            )
+        elif cat_model.provider == "anthropic":
+            return await self._invoke_anthropic(
+                cat_model=cat_model,
+                temperature=temp,
+                max_tokens=tokens,
+                timeout=timeout,
+                system_prompt=system_prompt,
+                user_payload=user_payload,
+            )
+        elif cat_model.provider == "cohere":
+            return await self._invoke_cohere(
+                cat_model=cat_model,
+                temperature=temp,
+                max_tokens=tokens,
+                timeout=timeout,
+                system_prompt=system_prompt,
+                user_payload=user_payload,
+            )
+        else:
+            return await self._invoke_openai_compatible(
+                cat_model=cat_model,
+                temperature=temp,
+                max_tokens=tokens,
+                timeout=timeout,
+                system_prompt=system_prompt,
+                user_payload=user_payload,
+            )
 
     async def _invoke_gemini(
         self,
@@ -353,6 +459,53 @@ class GeminiLLMGateway:
                     f"HTTP {response.status_code} Anthropic error: {response.text[:200]}"
                 )
 
+    async def _invoke_cohere(
+        self,
+        cat_model: LLMModelCatalogItem,
+        temperature: float,
+        max_tokens: int,
+        timeout: int,
+        system_prompt: str,
+        user_payload: str,
+    ) -> str:
+        """Invoke Cohere v2 Chat API."""
+        api_key = os.environ.get(cat_model.api_key_env) or getattr(
+            settings, cat_model.api_key_env, None
+        )
+        base = cat_model.base_url or "https://api.cohere.com/v2"
+        url = f"{base.rstrip('/')}/chat"
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        }
+        payload = {
+            "model": cat_model.model_id,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_payload},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+        }
+
+        async with httpx.AsyncClient(timeout=float(timeout)) as client:
+            response = await client.post(url, json=payload, headers=headers)
+            if response.status_code in (200, 201):
+                data = response.json()
+                parts = [
+                    p.get("text", "")
+                    for p in data.get("message", {}).get("content", [])
+                    if p.get("type") == "text"
+                ]
+                return "".join(parts)
+            elif response.status_code == 429:
+                raise RuntimeError(f"HTTP 429 Rate limit on model {cat_model.model_id}")
+            else:
+                raise RuntimeError(
+                    f"HTTP {response.status_code} Cohere error: {response.text[:200]}"
+                )
+
     async def _execute_diagnostic_http(
         self, model: LLMModelCatalogItem, api_key: str
     ) -> tuple[int, int, str]:
@@ -381,6 +534,19 @@ class GeminiLLMGateway:
                     "max_tokens": 5,
                 }
                 response = await client.post(url, json=payload_anthropic, headers=headers)
+            elif model.provider == "cohere":
+                base = model.base_url or "https://api.cohere.com/v2"
+                url = f"{base.rstrip('/')}/chat"
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                }
+                payload_cohere: dict[str, Any] = {
+                    "model": model.model_id,
+                    "messages": [{"role": "user", "content": "Responde solo: OK"}],
+                    "max_tokens": 5,
+                }
+                response = await client.post(url, json=payload_cohere, headers=headers)
             else:
                 base = model.base_url or "https://api.openai.com/v1"
                 url = f"{base.rstrip('/')}/chat/completions"

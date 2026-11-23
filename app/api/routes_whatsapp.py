@@ -6,6 +6,7 @@ import asyncio
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from app.core.config import settings
@@ -49,22 +50,22 @@ class WhatsAppSimulateRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-@router.get("/webhook/whatsapp")
+@router.get("/webhook/whatsapp", response_class=PlainTextResponse)
 async def verify_webhook(
     hub_mode: str | None = Query(default=None, alias="hub.mode"),
     hub_verify_token: str | None = Query(default=None, alias="hub.verify_token"),
     hub_challenge: str | None = Query(default=None, alias="hub.challenge"),
-) -> int:
+) -> str:
     """Handle the Meta webhook verification handshake (GET).
 
     Meta sends ``hub.mode``, ``hub.verify_token`` and ``hub.challenge`` as
-    query parameters. Returns the challenge as an integer when the token matches;
+    query parameters. Returns the challenge when the token matches;
     raises 403 otherwise.
     """
     if hub_mode == "subscribe" and hub_verify_token == settings.WHATSAPP_VERIFY_TOKEN:
         if hub_challenge is None:
             raise HTTPException(status_code=400, detail="Missing hub.challenge")
-        return int(hub_challenge)
+        return str(hub_challenge)
     raise HTTPException(status_code=403, detail="Verification token mismatch")
 
 

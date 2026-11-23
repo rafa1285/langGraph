@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str | None = None
     ANTHROPIC_API_KEY: str | None = None
     DEEPSEEK_API_KEY: str | None = None
+    NVIDIA_API_KEY: str | None = None
+    COHERE_API_KEY: str | None = None
     USE_MOCK_LLM: bool = False
     DEFAULT_LLM_MODEL: str = "gemini-3.5-flash"
     LLM_INPUT_COST_PER_MILLION: float = 0.35

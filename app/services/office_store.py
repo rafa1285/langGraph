@@ -84,6 +84,17 @@ def has_env_key(api_key_env: str) -> bool:
 
 DEFAULT_CATALOG_MODELS: list[dict[str, Any]] = [
     {
+        "model_id": "gemini-3.8-flash",
+        "display_name": "Gemini 3.8 Flash",
+        "provider": "google",
+        "base_url": None,
+        "api_key_env": "GEMINI_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 8192,
+        "is_active": True,
+    },
+    {
         "model_id": "gemini-3.5-pro",
         "display_name": "Gemini 3.5 Pro",
         "provider": "google",
@@ -245,6 +256,61 @@ DEFAULT_CATALOG_MODELS: list[dict[str, Any]] = [
         "api_key_env": "DEEPSEEK_API_KEY",
         "tier": "paid",
         "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "qwen/qwen3.8-27b",
+        "display_name": "Qwen 3.8 27B (Groq)",
+        "provider": "groq",
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key_env": "GROQ_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "openai/gpt-oss-120b",
+        "display_name": "GPT-OSS 120B (Groq)",
+        "provider": "groq",
+        "base_url": "https://api.groq.com/openai/v1",
+        "api_key_env": "GROQ_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "inclusionai/ling-3.2-flash:free",
+        "display_name": "Ling 3.2 Flash (OpenRouter)",
+        "provider": "openrouter",
+        "base_url": "https://openrouter.ai/api/v1",
+        "api_key_env": "OPENROUTER_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "mistralai/mistral-large-4-1t-a52b",
+        "display_name": "Mistral Large 4 1T (Nvidia NIM)",
+        "provider": "nvidia",
+        "base_url": "https://integrate.api.nvidia.com/v1",
+        "api_key_env": "NVIDIA_API_KEY",
+        "tier": "free",
+        "default_temperature": 0.2,
+        "default_max_tokens": 4096,
+        "is_active": True,
+    },
+    {
+        "model_id": "command-r-plus-08-2024",
+        "display_name": "Command R+ (Cohere)",
+        "provider": "cohere",
+        "base_url": "https://api.cohere.com/v2",
+        "api_key_env": "COHERE_API_KEY",
+        "tier": "paid",
+        "default_temperature": 0.3,
         "default_max_tokens": 4096,
         "is_active": True,
     },
@@ -876,11 +942,8 @@ class OfficeStore:
                 "CREATE INDEX IF NOT EXISTS idx_marketing_updated "
                 "ON project_marketing_configs(updated_at);"
             )
-            # Auto-seed catalog if empty
-            async with db.execute("SELECT COUNT(*) FROM llm_models_catalog;") as cur:
-                row = await cur.fetchone()
-                if row and row[0] == 0:
-                    await self._seed_catalog(db)
+            # Seed catalog with any missing default models (INSERT OR IGNORE)
+            await self._seed_catalog(db)
 
             # Auto-seed agent configs if empty
             async with db.execute("SELECT COUNT(*) FROM agent_llm_configs;") as cur:
